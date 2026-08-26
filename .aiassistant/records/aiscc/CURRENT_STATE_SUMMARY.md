@@ -14,12 +14,22 @@
 | P0-2 Product Thesis / Prior-Art / Public Runtime Baseline | `ACCEPTED / CLOSED` |
 | P0-3 Browser Project Bootstrap | `HUMAN_CONFIRMED / CLOSED` |
 | P0-4 Repository Bootstrap / Canonical Authority / Git Policy | `ACCEPTED / CLOSED` |
-| P0-5 First Project Source Mirror v1 | `NOT_STARTED / NEXT` |
+| P0-5 First Project Source Mirror v1 | `EXECUTOR_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING` |
+| P1-1 Core Domain / State Machine Design | `NOT_STARTED` |
 
 P0-4 predecessor의 active canonical metadata conflict는 additive corrective rework로 정규화되었고, Human/Command Center final acceptance Cycle로 P0-4가 `ACCEPTED / CLOSED`되었다.
 
 - accepted corrective commit: `4bfe824dd9a9ff51d2701a2ac37ba5e65586a62a`
 - accepted Cycle: `.aiassistant/records/aiscc/cycles/20260826_1655_aiscc-p0-4-repository-bootstrap-final-acceptance-1.cycle.md`
+
+P0-5 executor candidate는 accepted P0-4 snapshot만 사용해 first mirror v1을 생성·검증했으며 Command Center review와 Human complete replacement를 기다린다.
+
+- mirror snapshot canonical commit: `c2187378857c0b13a372235e90cb279ca4b826fa`
+- first tracked mirror manifest: `GENERATED_CANDIDATE`
+- first generated mirror bundle: `GENERATED_CANDIDATE`
+- generated candidate active files: `18`
+- source mirror sync status: `COMMAND_CENTER_REVIEW_PENDING`
+- Human complete replacement: `NOT_EXECUTED / HUMAN_PENDING`
 
 ## authority state
 
@@ -39,8 +49,10 @@ P0-4 predecessor의 active canonical metadata conflict는 additive corrective re
 
 - executor-side blocker: `none`
 - P0-4 closure: `ACCEPTED / CLOSED`; final judgment admitted by the accepted Cycle
-- next: `P0-5 First Project Source Mirror v1` (`NOT_STARTED / NEXT`)
+- P0-5 candidate: `EXECUTOR_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING`
+- Browser complete active-set replacement: `NOT_EXECUTED / HUMAN_PENDING`
+- P1-1: `NOT_STARTED`; P0-5 terminal closure 전에 실행하지 않는다.
 
 ## non-substitution statement
 
-P0-4가 canonical repository와 local commit을 만들었다는 사실은 product runtime, state-machine implementation, security safeguard, public deployment, provider resource, API key, billing/spend guard, public URL 또는 P0-5 mirror sync가 존재한다는 증거가 아니다. 해당 구현과 검증은 모두 `NOT_EXECUTED` 또는 future owner Task에 남아 있다.
+P0-5 tracked manifest와 generated mirror candidate가 존재한다는 사실은 Browser Project Source complete replacement, P0-5 acceptance/closure, product runtime, state-machine implementation, security safeguard, public deployment, provider resource, API key, billing/spend guard 또는 public URL이 존재한다는 증거가 아니다. Browser sync는 `HUMAN_PENDING`이며 나머지 구현과 검증은 `NOT_EXECUTED` 또는 future owner Task에 남아 있다.
