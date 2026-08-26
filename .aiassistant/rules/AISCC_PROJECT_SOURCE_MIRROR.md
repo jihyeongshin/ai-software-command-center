@@ -1,12 +1,9 @@
-# AISCC Bootstrap Seed Metadata
+# AISCC Repository Canonical Metadata
 
-- seed_id: `AISCC-BOOTSTRAP-SEED-V1`
-- generated_at: `2026-08-26 00:07 KST`
-- seed_role: `PRE_REPOSITORY_BROWSER_PROJECT_BOOTSTRAP`
-- authority: `TEMPORARY_BOOTSTRAP_AUTHORITY`
-- immutable_after_upload: `true`
-- retirement_condition: `FIRST_AISCC_REPOSITORY_CANONICAL_MIRROR_V1_SYNC_CONFIRMED`
-- domain_leakage_policy: `NO_SOURCE_PROJECT_PRODUCT_OR_DOMAIN_POLICY`
+- canonical_owner: `AISCC_REPOSITORY`
+- authority: `REPOSITORY_LOCAL_CANONICAL`
+- bootstrap_origin: `AISCC-BOOTSTRAP-SEED-V1`
+- canonicalized_by_task: `20260826_1108_aiscc-p0-4-canonical-authority-metadata-and-post-bootstrap-state-normalization-rework-2`
 
 ---
 
@@ -19,16 +16,16 @@ Local repository canonical을 Browser GPT Project Source에 제공하기 위한 
 
 ## 2. Bootstrap Seed lifecycle
 
-현재 Seed v1은 repository 이전의 임시 source set이다.
+repository local canonical candidate는 P0-4에서 생성되었다. Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` `14/14`를 active temporary source로 유지한다. P0-5 이후 Seed는 historical genesis artifact로 retire한다.
 
 ```text
-Seed v1 upload
-→ Browser Project에서 repository/bootstrap 설계
-→ local repository canonical 생성
-→ first mirror v1 생성/판정
-→ Browser Project Seed 14개 전체 제거
-→ mirror v1 active set 전체 업로드
-→ Seed v1 historical retirement
+[COMPLETED] Seed v1 upload / Browser Project bootstrap
+→ [COMPLETED_CANDIDATE] local repository canonical 생성
+→ [CURRENT] P0-4 narrow correction / Human verification pending
+→ [NEXT_AFTER_P0_4_ACCEPTANCE] P0-5 first mirror v1 생성·판정
+→ [HUMAN_OWNED] Browser Project Seed 14개 전체 제거
+→ [HUMAN_OWNED] mirror v1 active set 전체 업로드
+→ [AFTER_SYNC_CONFIRMATION] Seed v1 historical retirement
 ```
 
 금지:
@@ -39,7 +36,7 @@ Seed v1 upload
 
 ## 3. canonical / mirror 권위
 
-repository 생성 후:
+현재 repository-local canonical / mirror 권위:
 
 - canonical: `.aiassistant/rules/`, `.aiassistant/records/`, `.aiassistant/reports/aiscc/`의 tracked 정본
 - manifest: `.aiassistant/project-sources/manifests/`의 tracked active-set definition
@@ -167,7 +164,7 @@ scripts/generate_project_source_bundle.py
 
 ## 10. sync judgment
 
-local canonical/manifest/bundle은 준비됐지만 사람이 Browser Source를 교체하지 않았다면:
+향후 P0-5에서 local canonical/manifest/bundle 준비가 완료됐지만 사람이 Browser Source를 교체하지 않았다면:
 
 ```text
 ACCEPTED_PENDING_SOURCE_MIRROR_SYNC

@@ -1,12 +1,9 @@
-# AISCC Bootstrap Seed Metadata
+# AISCC Repository Canonical Metadata
 
-- seed_id: `AISCC-BOOTSTRAP-SEED-V1`
-- generated_at: `2026-08-26 00:07 KST`
-- seed_role: `PRE_REPOSITORY_BROWSER_PROJECT_BOOTSTRAP`
-- authority: `TEMPORARY_BOOTSTRAP_AUTHORITY`
-- immutable_after_upload: `true`
-- retirement_condition: `FIRST_AISCC_REPOSITORY_CANONICAL_MIRROR_V1_SYNC_CONFIRMED`
-- domain_leakage_policy: `NO_SOURCE_PROJECT_PRODUCT_OR_DOMAIN_POLICY`
+- canonical_owner: `AISCC_REPOSITORY`
+- authority: `REPOSITORY_LOCAL_CANONICAL`
+- bootstrap_origin: `AISCC-BOOTSTRAP-SEED-V1`
+- canonicalized_by_task: `20260826_1108_aiscc-p0-4-canonical-authority-metadata-and-post-bootstrap-state-normalization-rework-2`
 
 ---
 
@@ -131,12 +128,11 @@ next_action:
 - public_provenance_expected:
 ```
 
-## 8. 현재 bootstrap 다음 순서
+## 8. current post-P0-4 queue entry
 
 ```text
-P0-2 Product Thesis / Prior-Art Boundary Baseline
-→ P0-3 Browser Project Bootstrap confirmation
-→ P0-4 Repository Bootstrap / Canonical Authority / Git policy
-→ P0-5 First Project Source Mirror v1
+P0-5 First Project Source Mirror v1
 → P1-1 Core Domain / State Machine Design
+→ P1-2 Security / Sandbox / Runtime Boundary Design
+→ P1-3 Security / Runtime Safeguard Implementation and Verification
 ```

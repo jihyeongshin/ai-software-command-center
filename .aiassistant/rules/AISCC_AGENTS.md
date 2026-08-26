@@ -1,12 +1,9 @@
-# AISCC Bootstrap Seed Metadata
+# AISCC Repository Canonical Metadata
 
-- seed_id: `AISCC-BOOTSTRAP-SEED-V1`
-- generated_at: `2026-08-26 00:07 KST`
-- seed_role: `PRE_REPOSITORY_BROWSER_PROJECT_BOOTSTRAP`
-- authority: `TEMPORARY_BOOTSTRAP_AUTHORITY`
-- immutable_after_upload: `true`
-- retirement_condition: `FIRST_AISCC_REPOSITORY_CANONICAL_MIRROR_V1_SYNC_CONFIRMED`
-- domain_leakage_policy: `NO_SOURCE_PROJECT_PRODUCT_OR_DOMAIN_POLICY`
+- canonical_owner: `AISCC_REPOSITORY`
+- authority: `REPOSITORY_LOCAL_CANONICAL`
+- bootstrap_origin: `AISCC-BOOTSTRAP-SEED-V1`
+- canonicalized_by_task: `20260826_1108_aiscc-p0-4-canonical-authority-metadata-and-post-bootstrap-state-normalization-rework-2`
 
 ---
 
@@ -44,10 +41,10 @@ repository-root `AGENTS.md`는 thin transport bootstrap이다.
 - policy authority가 아니다.
 - canonical rule의 장문 복제본이 아니다.
 - active Task File과 task-listed canonical source를 읽게 하는 entrypoint다.
-- Git tracked/ignored 여부는 P0-4 repository bootstrap에서 명시적으로 결정한다.
-- tracking decision 전에는 executor가 임의로 생성하거나 `.gitignore`를 수정하지 않는다.
+- Git에서 TRACK되는 thin transport bootstrap이다.
+- root `.gitignore`와 canonical Git policy는 repository policy owner가 관리한다. Executor는 active Task의 explicit authorization 없이 이를 수정하지 않는다.
 
-향후 canonical template 후보:
+현재 root `AGENTS.md` transport contract:
 
 ```markdown
 # AISCC IDE Executor Bootstrap
@@ -70,19 +67,22 @@ Before analysis, source inspection, or file changes:
 
 ## 4. authority map
 
-repository 생성 후 권위는 의미별 canonical path로 분리한다.
+repository authority는 의미별 canonical path로 분리되어 있다.
 
-예상 owner:
+현재 owner:
 
 - project thesis: `.aiassistant/reports/aiscc/AISCC_PRODUCT_THESIS.md`
-- architecture: `.aiassistant/rules/AISCC_ARCHITECTURE.md`
-- orchestration/state transition: `.aiassistant/rules/AISCC_ORCHESTRATION.md`
-- security/sandbox/tool permissions: `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
 - report/export: `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`
 - Git/asset/encoding: `.aiassistant/rules/IDE_EXECUTOR_ASSET_GIT_AND_ENCODING_POLICY.md`
 - command-center workflow: `.aiassistant/records/command-center/*`
 - stable project queue: `.aiassistant/records/aiscc/NEXT_ACTIONS.md`
 - task-specific exact scope and evidence contract: current active Task File
+
+아직 생성되지 않은 future target owner:
+
+- architecture: `.aiassistant/rules/AISCC_ARCHITECTURE.md`
+- orchestration/state transition: `.aiassistant/rules/AISCC_ORCHESTRATION.md`
+- security/sandbox/tool permissions: `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
 
 현재 active Task File은 task-specific exact paths, allowed scope, forbidden actions, evidence contract를 소유한다. 그러나 canonical authority 순서를 prompt 한 번으로 변경할 권한은 없다.
 

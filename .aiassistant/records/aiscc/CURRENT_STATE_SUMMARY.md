@@ -13,16 +13,17 @@
 | P0-1 Bootstrap Ruleset Extraction | `ACCEPTED / CLOSED` |
 | P0-2 Product Thesis / Prior-Art / Public Runtime Baseline | `ACCEPTED / CLOSED` |
 | P0-3 Browser Project Bootstrap | `HUMAN_CONFIRMED / CLOSED` |
-| P0-4 Repository Bootstrap rework | `ACCEPTED_CANDIDATE / HUMAN_VERIFICATION_PENDING` |
+| P0-4 predecessor candidate `9e4b100` | `HOLD_REWORK_REQUIRED / POLICY_BASELINE_CONFLICT` |
+| P0-4 narrow corrective rework | `ACCEPTED_CANDIDATE / HUMAN_VERIFICATION_PENDING` |
 | P0-5 First Project Source Mirror v1 | `NOT_STARTED` |
 
-P0-4는 Human이 만든 empty public Git remote clone을 canonical repository로 bootstrap하는 executor 작업을 완료한 후보 상태다. Command Center/Human judgment 전에는 P0-4를 `ACCEPTED`로 간주하지 않는다.
+P0-4 predecessor는 repository/environment bootstrap을 완료했지만 active canonical metadata conflict로 Command Center에서 HOLD되었다. 이번 narrow corrective rework는 그 conflict를 정규화한 executor candidate이며, Command Center/Human judgment 전에는 P0-4를 `ACCEPTED`로 간주하지 않는다.
 
 ## authority state
 
 - accepted repository root: `C:\Users\oracl\IdeaProjects\ai-software-command-center`
 - repository origin was Human-created before P0-4: `https://github.com/jihyeongshin/ai-software-command-center.git`
-- local repository canonical은 P0-4 acceptance 후 유일한 editable source owner가 된다.
+- repository local canonical candidate가 존재하며 이번 corrective rework의 editable source owner다. P0-4 project state의 최종 acceptance는 Human/Command Center에 남아 있다.
 - Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` 14/14를 유지한다.
 - Browser Project Source와 repository canonical은 아직 동기화되지 않았다.
 - `.aiassistant/bootstrap-input/`은 ignored temporary staging이며 canonical authority가 아니다.
@@ -35,8 +36,8 @@ P0-4는 Human이 만든 empty public Git remote clone을 canonical repository로
 ## blockers and next action
 
 - executor-side blocker: `none`
-- human-owned gate: P0-4 target bundle과 initial local commit에 대한 Command Center/Human verification
-- next after acceptance: `P0-5 First Project Source Mirror v1`
+- human-owned gate: P0-4 corrective target bundle과 predecessor/corrective commit chain에 대한 Command Center/Human verification
+- next after acceptance: `P0-5 First Project Source Mirror v1`; P0-4 Human acceptance 전에는 실행 불가
 
 ## non-substitution statement
 

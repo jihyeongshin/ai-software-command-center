@@ -1,12 +1,9 @@
-# AISCC Bootstrap Seed Metadata
+# AISCC Repository Canonical Metadata
 
-- seed_id: `AISCC-BOOTSTRAP-SEED-V1`
-- generated_at: `2026-08-26 00:07 KST`
-- seed_role: `PRE_REPOSITORY_BROWSER_PROJECT_BOOTSTRAP`
-- authority: `TEMPORARY_BOOTSTRAP_AUTHORITY`
-- immutable_after_upload: `true`
-- retirement_condition: `FIRST_AISCC_REPOSITORY_CANONICAL_MIRROR_V1_SYNC_CONFIRMED`
-- domain_leakage_policy: `NO_SOURCE_PROJECT_PRODUCT_OR_DOMAIN_POLICY`
+- canonical_owner: `AISCC_REPOSITORY`
+- authority: `REPOSITORY_LOCAL_CANONICAL`
+- bootstrap_origin: `AISCC-BOOTSTRAP-SEED-V1`
+- canonicalized_by_task: `20260826_1108_aiscc-p0-4-canonical-authority-metadata-and-post-bootstrap-state-normalization-rework-2`
 
 ---
 
@@ -45,9 +42,9 @@ AISCC repository의 product source, tracked governance/provenance, ignored tempo
 
 추후 runtime이 생성하는 sandbox/worktree/log/cache path는 security/runtime design에서 추가한다.
 
-### 별도 결정
+### repository-root transport 결정
 
-repository-root `AGENTS.md`의 tracked/ignored 정책은 P0-4 repository bootstrap에서 결정한다. Executor가 선행 결정 없이 `.gitignore`를 수정하지 않는다.
+repository-root `AGENTS.md`는 TRACK되는 thin transport bootstrap이며 policy authority가 아니다. Executor는 active Task의 explicit authorization 없이 root `.gitignore` 또는 canonical Git policy를 수정하지 않는다.
 
 ## 3. 의미 경계
 
@@ -111,9 +108,11 @@ Executor는 최소한 다음을 구분한다.
 
 Task가 exact pattern과 이유를 승인한 경우에만 수정한다.
 
-초기 repository bootstrap 후보:
+현재 repository ignore baseline:
 
 ```gitignore
+.idea/
+.aiassistant/bootstrap-input/
 .aiassistant/tasks/active/
 .aiassistant/reports/target/
 .aiassistant/project-sources/bundles/
