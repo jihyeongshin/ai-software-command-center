@@ -13,10 +13,11 @@ $ErrorActionPreference = 'Stop'
 $ExpectedBundleId = 'AISCC-PROJECT-SOURCE-MIRROR-V1'
 $ExpectedTargetProject = 'AI Software Command Center'
 $ExpectedProjectScope = 'AISCC Browser Command Center canonical read-only mirror'
-$ExpectedCanonicalCommit = 'c2187378857c0b13a372235e90cb279ca4b826fa'
-$ExpectedTaskId = '20260826_1750_aiscc-first-project-source-mirror-v1-1'
+$ExpectedCanonicalCommit = '0dc4e19a6da31c22e08d144eaba24209a4476b4d'
+$ExpectedTaskId = '20260826_2005_aiscc-p0-5-mirror-snapshot-and-metadata-alignment-rework-1'
+$ExpectedGeneratedAt = '2026-08-26T20:05:00+09:00'
 $ExpectedActiveCount = 18
-$ExpectedSyncStatus = 'PENDING_HUMAN_COMPLETE_REPLACEMENT'
+$ExpectedSyncStatus = 'PENDING_COMMAND_CENTER_REVIEW'
 $ManifestRelativePath = '.aiassistant/project-sources/manifests/aiscc-project-source-mirror-v1.json'
 $OutputRelativePath = '.aiassistant/project-sources/bundles/aiscc/AISCC-PROJECT-SOURCE-MIRROR-V1'
 $Utf8Strict = [System.Text.UTF8Encoding]::new($false, $true)
@@ -134,9 +135,18 @@ if ($manifest.bundle_id -ne $ExpectedBundleId -or
     $manifest.project_scope -ne $ExpectedProjectScope -or
     $manifest.canonical_commit -ne $ExpectedCanonicalCommit -or
     $manifest.generated_by_task -ne $ExpectedTaskId -or
+    $manifest.generated_at -ne $ExpectedGeneratedAt -or
     $manifest.expected_active_count -ne $ExpectedActiveCount -or
     $manifest.source_mirror_sync_status -ne $ExpectedSyncStatus) {
     throw 'Manifest identity or state field mismatch.'
+}
+$parsedGeneratedAt = [System.DateTimeOffset]::ParseExact(
+    $manifest.generated_at,
+    'yyyy-MM-ddTHH:mm:sszzz',
+    [System.Globalization.CultureInfo]::InvariantCulture
+)
+if ($parsedGeneratedAt.ToString('yyyy-MM-ddTHH:mm:sszzz') -ne $ExpectedGeneratedAt) {
+    throw 'Manifest generated_at must be the exact fixed offset-aware timestamp.'
 }
 if (@($manifest.optional_mapping).Count -ne 0) {
     throw 'optional_mapping must be empty for mirror v1.'
@@ -183,7 +193,7 @@ foreach ($entry in $manifest.mapping) {
     if ($entry.canonical_sha256 -notmatch '^[0-9a-f]{64}$') {
         throw "Invalid canonical SHA-256: $canonicalPath"
     }
-    if ($entry.upload_status -ne 'GENERATED_CANDIDATE') {
+    if ($entry.upload_status -ne 'REGENERATED_CANDIDATE') {
         throw "Invalid upload status: $canonicalPath"
     }
 
@@ -242,6 +252,7 @@ foreach ($entry in $manifest.mapping) {
         '- canonical_owner: `AISCC repository`',
         '- mirror_owner: `AI Software Command Center Browser Project`',
         "- mirror_generated_by_task: ``$ExpectedTaskId``",
+        "- mirrored_at: ``$($manifest.generated_at)``",
         "- canonical_commit: ``$ExpectedCanonicalCommit``",
         "- canonical_sha256: ``$($entry.canonical_sha256)``",
         '- authority: `READ_ONLY_MIRROR`',
