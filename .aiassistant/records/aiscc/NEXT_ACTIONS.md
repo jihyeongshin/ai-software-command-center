@@ -58,13 +58,16 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 ## current next action
 
 ```text
-task_id: P0-5
-title: First Project Source Mirror v1
-status: READY_AFTER_P0_4_HUMAN_ACCEPTANCE
-owner: future P0-5 Task Contract
+phase: P0-5
+current_action:
+Command Center candidate review
+→ if accepted, Human complete Browser Project Source replacement
+status: MIRROR_REWORK_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING
+P1-1: BLOCKED_UNTIL_P0_5_TERMINAL_CLOSURE
+owner: current P0-5 rework Task Contract / Command Center / Human sync gate
 ```
 
-P0-5는 tracked manifest, ignored generated mirror bundle, canonical/body hash mapping, Human complete Browser Project Source replacement를 소유한다. P0-4는 이를 실행하지 않았다.
+P0-5는 tracked manifest, ignored generated mirror bundle, canonical/body hash mapping, Human complete Browser Project Source replacement를 소유한다. Browser mirror에서 이 pre-sync snapshot을 읽는 경우 snapshot의 상태만 근거로 P0-5 generation을 다시 실행하지 않으며, latest Human-provided source-sync evidence와 terminal Cycle을 먼저 확인한다.
 
 ## deployment decision handoff
 

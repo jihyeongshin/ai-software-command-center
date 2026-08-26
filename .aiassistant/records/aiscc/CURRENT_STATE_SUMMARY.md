@@ -14,7 +14,7 @@
 | P0-2 Product Thesis / Prior-Art / Public Runtime Baseline | `ACCEPTED / CLOSED` |
 | P0-3 Browser Project Bootstrap | `HUMAN_CONFIRMED / CLOSED` |
 | P0-4 Repository Bootstrap / Canonical Authority / Git Policy | `ACCEPTED / CLOSED` |
-| P0-5 First Project Source Mirror v1 | `EXECUTOR_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING` |
+| P0-5 First Project Source Mirror v1 | `MIRROR_REWORK_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING` |
 | P1-1 Core Domain / State Machine Design | `NOT_STARTED` |
 
 P0-4 predecessor의 active canonical metadata conflict는 additive corrective rework로 정규화되었고, Human/Command Center final acceptance Cycle로 P0-4가 `ACCEPTED / CLOSED`되었다.
@@ -22,14 +22,14 @@ P0-4 predecessor의 active canonical metadata conflict는 additive corrective re
 - accepted corrective commit: `4bfe824dd9a9ff51d2701a2ac37ba5e65586a62a`
 - accepted Cycle: `.aiassistant/records/aiscc/cycles/20260826_1655_aiscc-p0-4-repository-bootstrap-final-acceptance-1.cycle.md`
 
-P0-5 executor candidate는 accepted P0-4 snapshot만 사용해 first mirror v1을 생성·검증했으며 Command Center review와 Human complete replacement를 기다린다.
+P0-5 predecessor mirror candidate는 byte/hash integrity를 통과했지만 pre-P0-5 state snapshot과 `mirrored_at` 누락으로 HOLD되었다. 현재 narrow rework는 sync-ready active canonical snapshot을 만들고 regenerated mirror candidate의 Command Center review를 준비한다.
 
-- mirror snapshot canonical commit: `c2187378857c0b13a372235e90cb279ca4b826fa`
-- first tracked mirror manifest: `GENERATED_CANDIDATE`
-- first generated mirror bundle: `GENERATED_CANDIDATE`
-- generated candidate active files: `18`
+- mirror generation: `IN_PROGRESS / REGENERATED_CANDIDATE_REQUIRED`
+- exact active set: `18`
 - source mirror sync status: `COMMAND_CENTER_REVIEW_PENDING`
 - Human complete replacement: `NOT_EXECUTED / HUMAN_PENDING`
+
+이 Current State Summary는 Browser Project Source mirror 생성에 사용하는 repository snapshot이다. 이후 Browser Project Source에서 이 문서를 읽을 때 snapshot이 최신 Human sync 결과보다 앞선다는 이유만으로 P0-5 generation을 다시 실행하지 않는다. 다음 행동을 선택하기 전에 latest Human-provided source-sync evidence와 terminal Cycle을 확인한다.
 
 ## authority state
 
@@ -49,9 +49,10 @@ P0-5 executor candidate는 accepted P0-4 snapshot만 사용해 first mirror v1�
 
 - executor-side blocker: `none`
 - P0-4 closure: `ACCEPTED / CLOSED`; final judgment admitted by the accepted Cycle
-- P0-5 candidate: `EXECUTOR_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING`
-- Browser complete active-set replacement: `NOT_EXECUTED / HUMAN_PENDING`
-- P1-1: `NOT_STARTED`; P0-5 terminal closure 전에 실행하지 않는다.
+- P0-5 current: `MIRROR_REWORK_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING`
+- next after Command Center acceptance: Human complete Browser Project Source replacement (`NOT_EXECUTED / HUMAN_PENDING`)
+- next implementation: `P1-1 Core Domain / State Machine Design` (`NOT_STARTED`)
+- implementation gate: P1-1은 P0-5 terminal closure 이후에만 시작한다.
 
 ## non-substitution statement
 

@@ -21,10 +21,9 @@ repository local canonical은 P0-4에서 `ACCEPTED / CLOSED`되었다. Browser P
 ```text
 [COMPLETED] Seed v1 upload / Browser Project bootstrap
 → [COMPLETED] P0-4 repository canonical accepted / closed
-→ [NEXT] P0-5 first mirror v1 generation and judgment
-→ [HUMAN_OWNED] Browser Project Seed 14개 전체 제거
-→ [HUMAN_OWNED] mirror v1 active set 전체 업로드
-→ [AFTER_SYNC_CONFIRMATION] Seed v1 historical retirement
+→ [CURRENT] P0-5 mirror v1 candidate generation / Command Center review
+→ [HUMAN_OWNED AFTER ACCEPTANCE] Seed 14 remove + mirror 18 upload
+→ [AFTER HUMAN CONFIRMATION] Seed historical retirement / P0-5 terminal judgment
 ```
 
 금지:
