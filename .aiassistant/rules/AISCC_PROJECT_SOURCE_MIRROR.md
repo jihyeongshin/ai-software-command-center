@@ -16,13 +16,12 @@ Local repository canonical을 Browser GPT Project Source에 제공하기 위한 
 
 ## 2. Bootstrap Seed lifecycle
 
-repository local canonical candidate는 P0-4에서 생성되었다. Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` `14/14`를 active temporary source로 유지한다. P0-5 이후 Seed는 historical genesis artifact로 retire한다.
+repository local canonical은 P0-4에서 `ACCEPTED / CLOSED`되었다. Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` `14/14`를 active temporary source로 유지한다. P0-5 이후 Seed는 historical genesis artifact로 retire한다.
 
 ```text
 [COMPLETED] Seed v1 upload / Browser Project bootstrap
-→ [COMPLETED_CANDIDATE] local repository canonical 생성
-→ [CURRENT] P0-4 narrow correction / Human verification pending
-→ [NEXT_AFTER_P0_4_ACCEPTANCE] P0-5 first mirror v1 생성·판정
+→ [COMPLETED] P0-4 repository canonical accepted / closed
+→ [NEXT] P0-5 first mirror v1 generation and judgment
 → [HUMAN_OWNED] Browser Project Seed 14개 전체 제거
 → [HUMAN_OWNED] mirror v1 active set 전체 업로드
 → [AFTER_SYNC_CONFIRMATION] Seed v1 historical retirement

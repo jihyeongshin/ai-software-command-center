@@ -13,18 +13,20 @@
 | P0-1 Bootstrap Ruleset Extraction | `ACCEPTED / CLOSED` |
 | P0-2 Product Thesis / Prior-Art / Public Runtime Baseline | `ACCEPTED / CLOSED` |
 | P0-3 Browser Project Bootstrap | `HUMAN_CONFIRMED / CLOSED` |
-| P0-4 predecessor candidate `9e4b100` | `HOLD_REWORK_REQUIRED / POLICY_BASELINE_CONFLICT` |
-| P0-4 narrow corrective rework | `ACCEPTED_CANDIDATE / HUMAN_VERIFICATION_PENDING` |
-| P0-5 First Project Source Mirror v1 | `NOT_STARTED` |
+| P0-4 Repository Bootstrap / Canonical Authority / Git Policy | `ACCEPTED / CLOSED` |
+| P0-5 First Project Source Mirror v1 | `NOT_STARTED / NEXT` |
 
-P0-4 predecessor는 repository/environment bootstrap을 완료했지만 active canonical metadata conflict로 Command Center에서 HOLD되었다. 이번 narrow corrective rework는 그 conflict를 정규화한 executor candidate이며, Command Center/Human judgment 전에는 P0-4를 `ACCEPTED`로 간주하지 않는다.
+P0-4 predecessor의 active canonical metadata conflict는 additive corrective rework로 정규화되었고, Human/Command Center final acceptance Cycle로 P0-4가 `ACCEPTED / CLOSED`되었다.
+
+- accepted corrective commit: `4bfe824dd9a9ff51d2701a2ac37ba5e65586a62a`
+- accepted Cycle: `.aiassistant/records/aiscc/cycles/20260826_1655_aiscc-p0-4-repository-bootstrap-final-acceptance-1.cycle.md`
 
 ## authority state
 
 - accepted repository root: `C:\Users\oracl\IdeaProjects\ai-software-command-center`
 - repository origin was Human-created before P0-4: `https://github.com/jihyeongshin/ai-software-command-center.git`
-- repository local canonical candidate가 존재하며 이번 corrective rework의 editable source owner다. P0-4 project state의 최종 acceptance는 Human/Command Center에 남아 있다.
-- Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` 14/14를 유지한다.
+- repository local canonical은 P0-4에서 accepted된 editable source owner다.
+- Browser Project Source는 P0-5 complete replacement가 Human-confirmed될 때까지 immutable `AISCC-BOOTSTRAP-SEED-V1` `14/14`를 active temporary source로 유지한다.
 - Browser Project Source와 repository canonical은 아직 동기화되지 않았다.
 - `.aiassistant/bootstrap-input/`은 ignored temporary staging이며 canonical authority가 아니다.
 
@@ -36,8 +38,8 @@ P0-4 predecessor는 repository/environment bootstrap을 완료했지만 active c
 ## blockers and next action
 
 - executor-side blocker: `none`
-- human-owned gate: P0-4 corrective target bundle과 predecessor/corrective commit chain에 대한 Command Center/Human verification
-- next after acceptance: `P0-5 First Project Source Mirror v1`; P0-4 Human acceptance 전에는 실행 불가
+- P0-4 closure: `ACCEPTED / CLOSED`; final judgment admitted by the accepted Cycle
+- next: `P0-5 First Project Source Mirror v1` (`NOT_STARTED / NEXT`)
 
 ## non-substitution statement
 
