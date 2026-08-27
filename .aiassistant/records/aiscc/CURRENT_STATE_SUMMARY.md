@@ -121,14 +121,34 @@ Terminal Cycle:
 
 P1-2 implementation/runtime proof remains `NOT_EXECUTED`. Public bounded Live release remains `BLOCKED` until P1-3 safeguard implementation and applicable verification are Human-accepted.
 
+## accepted P1-3 runtime substrate baseline
+
+Human final review:
+
+```text
+AISCC-P1-3-RUNTIME-SUBSTRATE-V1
+HUMAN_PROVIDED / ACCEPTED
+```
+
+Canonical owner:
+
+- `.aiassistant/rules/AISCC_RUNTIME_SUBSTRATE.md`
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260827_1513_aiscc-p1-3-runtime-substrate-baseline-final-acceptance-1.cycle.md`
+
+The runtime-substrate blocker is resolved. P1-3 safeguard implementation is `READY / NOT_STARTED`; runtime proof is `NOT_EXECUTED`. P1-4 remains `NOT_STARTED`.
+
 ## blockers and next action
 
 - P0 blocker: `none`
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
-- P1-3: `READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED`
-- previous P1-3 preflight attempt: `BLOCKED_P1_2_CLOSURE_SET_MISMATCH`; no implementation occurred
-- current execution authority: `20260827_1421_aiscc-p1-3-security-runtime-safeguard-implementation-with-closure-repair-commit-1`
+- P1-3 runtime substrate: `HUMAN_PROVIDED / ACCEPTED`
+- P1-3 safeguard implementation: `READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED`
+- previous runtime-substrate blocker: `RESOLVED`; safeguard implementation did not start in the blocked attempt
+- current execution authority: `20260827_1513_aiscc-p1-3-security-runtime-safeguard-implementation-with-substrate-closure-and-environment-preparation-1`
 - public bounded Live release: `BLOCKED` until P1-3 safeguard implementation and applicable verification are accepted
 
 ## non-substitution statement

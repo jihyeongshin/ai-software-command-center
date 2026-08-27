@@ -56,8 +56,9 @@ phase: P1-3
 current_action: Security / Runtime Safeguard Implementation and Verification
 status: READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED
 predecessor: P1-2 ACCEPTED / CLOSED
-previous_attempt: BLOCKED_P1_2_CLOSURE_SET_MISMATCH / no implementation occurred
-current_execution_authority: 20260827_1421_aiscc-p1-3-security-runtime-safeguard-implementation-with-closure-repair-commit-1
+runtime_substrate: AISCC-P1-3-RUNTIME-SUBSTRATE-V1 / HUMAN_PROVIDED / ACCEPTED
+runtime_substrate_blocker: RESOLVED
+current_execution_authority: 20260827_1513_aiscc-p1-3-security-runtime-safeguard-implementation-with-substrate-closure-and-environment-preparation-1
 ```
 
 ## accepted P1-1 / P1-2 handoff

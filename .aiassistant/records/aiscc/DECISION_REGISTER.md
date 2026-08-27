@@ -164,6 +164,25 @@
 - release handoff: P3-3 owns current provider/configuration and release-time reverification, not first safeguard implementation.
 - supersession_rule: permission/state/cancel/secret/isolation/budget/fallback semantics를 변경하려면 별도 security baseline Task와 Human acceptance가 필요하다.
 
+## AISCC-P1-3-RUNTIME-SUBSTRATE-V1
+
+- decision: AISCC P1-3 application/runtime baseline은 CPython 3.12.x, FastAPI/Pydantic v2/Uvicorn HTTP boundary, uv/Hatchling build, exact `src/aiscc/`·`tests/` layout과 Docker Engine Linux containers + Compose v2 sandbox/evidence substrate를 사용한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED`
+- provenance:
+  - `20260827_1442_aiscc-p1-3-runtime-substrate-baseline-design-with-blocker-provenance-commit-1`
+  - Human Runtime Substrate final review `ACCEPTED`
+  - `.aiassistant/records/aiscc/cycles/20260827_1513_aiscc-p1-3-runtime-substrate-baseline-final-acceptance-1.cycle.md`
+- implementation_status: `NOT_STARTED`
+- runtime_security_proof: `NOT_EXECUTED`
+- canonical owner: `.aiassistant/rules/AISCC_RUNTIME_SUBSTRATE.md`
+- exact bootstrap boundary: canonical owner section 11 allowlist only; `workflow`, `providers`, `persistence`, migrations, deployment와 actual public scenario corpus 제외
+- authority invariants:
+  - `SecurityAdmissionDecision != TransitionDecision`
+  - `security test state fixture != P1-4 workflow kernel`
+  - Docker availability/container strategy `!=` isolation proof
+- implementation handoff: P1-3 may prepare the accepted Python/uv environment, create only the exact bootstrap and implement/verify P1-2 safeguards.
+- supersession_rule: runtime major/minor, framework major boundary, build/package strategy 또는 sandbox substrate 변경은 separate Human-accepted baseline update가 필요하다.
+
 ## AISCC-P1-SAFEGUARD-BEFORE-RELEASE-V1
 
 - decision: P1 security/runtime design 뒤에 dedicated safeguard implementation + verification을 완료하고 accepted하기 전에는 public bounded Live release로 진행할 수 없다.
