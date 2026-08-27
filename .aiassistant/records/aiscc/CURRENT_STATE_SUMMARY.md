@@ -16,7 +16,8 @@
 | P0-4 Repository Bootstrap / Canonical Authority / Git Policy | `ACCEPTED / CLOSED` |
 | P0-5 First Project Source Mirror v1 | `ACCEPTED / CLOSED` |
 | P1-1 Core Domain / State Machine Design | `ACCEPTED / CLOSED` |
-| P1-2 Security / Sandbox / Runtime Boundary Design | `READY / NOT_EXECUTED` |
+| P1-2 Security / Sandbox / Runtime Boundary Design | `ACCEPTED / CLOSED` |
+| P1-3 Security / Runtime Safeguard Implementation and Verification | `READY / NOT_EXECUTED` |
 
 ## P0-4 provenance
 
@@ -101,14 +102,34 @@ Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260827_1115_aiscc-p1-1-core-domain-state-machine-design-final-acceptance-1.cycle.md`
 
+## P1-2 accepted design baseline
+
+Human final review:
+
+```text
+HUMAN_PROVIDED
+P1-2: ACCEPTED / CLOSED
+```
+
+Canonical owner:
+
+- `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260827_1342_aiscc-p1-2-security-sandbox-runtime-boundary-final-acceptance-1.cycle.md`
+
+P1-2 implementation/runtime proof remains `NOT_EXECUTED`. Public bounded Live release remains `BLOCKED` until P1-3 safeguard implementation and applicable verification are Human-accepted.
+
 ## blockers and next action
 
 - P0 blocker: `none`
 - P1-1: `ACCEPTED / CLOSED`
-- current repository Git persistence: Human working tree contains accumulated P0-5/P1-1 canonical provenance not yet committed
-- next design action: `P1-2 Security / Sandbox / Runtime Boundary Design`
-- P1-2 Task may be issued, but Executor execution should start after canonical closure commit is completed
-- P1-3 remains blocked until P1-2 `ACCEPTED / CLOSED`
+- P1-2: `ACCEPTED / CLOSED`
+- P1-3: `READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED`
+- previous P1-3 preflight attempt: `BLOCKED_P1_2_CLOSURE_SET_MISMATCH`; no implementation occurred
+- current execution authority: `20260827_1421_aiscc-p1-3-security-runtime-safeguard-implementation-with-closure-repair-commit-1`
+- public bounded Live release: `BLOCKED` until P1-3 safeguard implementation and applicable verification are accepted
 
 ## non-substitution statement
 

@@ -142,6 +142,28 @@
 - future owners: `P1-2`, `P1-3`, `P1-4`, `P1-5`, `P1-6`, `P1-7`, `P1-8`
 - supersession_rule: state set, transition authority, Judgment ordering, Human gate/result projection, concurrency/persistence semantic 변경은 별도 baseline Task와 Human acceptance가 필요하다.
 
+## AISCC-P1-2-SECURITY-SANDBOX-RUNTIME-BOUNDARY-V1
+
+- decision: AISCC security/runtime boundary는 `SecurityAdmissionDecision = ALLOW | DENY`, versioned RuntimeMode profiles, deny-by-default resource admission, exact action-class × current `WorkflowState` eligibility, state/version-bound capability invalidation, exact public requester/session→target-run cancel authorization, secret/isolation/cleanup, bounded timeout/retry/cancel, application idempotency/abuse/budget와 Replay failure-domain separation을 canonical design으로 사용한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - `20260827_1115_aiscc-security-sandbox-runtime-boundary-design-1`
+  - `20260827_1247_aiscc-p1-2-security-action-state-and-public-cancel-authorization-alignment-rework-1`
+  - Human P1-2 final review `ACCEPTED`
+  - `.aiassistant/records/aiscc/cycles/20260827_1342_aiscc-p1-2-security-sandbox-runtime-boundary-final-acceptance-1.cycle.md`
+- implementation_status: `NOT_IMPLEMENTED`
+- verification_status: semantic design + Human acceptance complete; safeguard runtime evidence deferred to P1-3
+- canonical owner: `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
+- authority invariants:
+  - `SecurityAdmissionDecision = ALLOW | DENY`
+  - `fresh state_version != action admissible in current WorkflowState`
+  - `PUBLIC_RUN_OR_REPLAY_VISIBILITY != PUBLIC_CANCEL_AUTHORITY`
+  - `RUN_ID_KNOWLEDGE != TARGET_RUN_CONTROL_AUTHORIZATION`
+  - `LIVE_UNAVAILABLE_OR_BUDGET_EXHAUSTED → RECORDED_REPLAY_REMAINS_AVAILABLE`
+- implementation handoff: P1-3 is the first safeguard implementation + runtime proof owner.
+- release handoff: P3-3 owns current provider/configuration and release-time reverification, not first safeguard implementation.
+- supersession_rule: permission/state/cancel/secret/isolation/budget/fallback semantics를 변경하려면 별도 security baseline Task와 Human acceptance가 필요하다.
+
 ## AISCC-P1-SAFEGUARD-BEFORE-RELEASE-V1
 
 - decision: P1 security/runtime design 뒤에 dedicated safeguard implementation + verification을 완료하고 accepted하기 전에는 public bounded Live release로 진행할 수 없다.
