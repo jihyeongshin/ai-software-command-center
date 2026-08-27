@@ -56,13 +56,14 @@
 
 ## AISCC-BOOTSTRAP-SEED-AUTHORITY-V1
 
-- decision: Browser Project의 `AISCC-BOOTSTRAP-SEED-V1`은 P0-5 complete replacement가 Human-confirmed될 때까지 immutable temporary authority다.
-- decision_status: `ACTIVE_TEMPORARY_BROWSER_AUTHORITY`
-- provenance: Seed v1 index와 Project Source mirror rule
-- implementation_status: Browser active set `14/14`은 P0-3 Human-confirmed; P0-5 replacement `NOT_EXECUTED`
-- verification_status: current Browser sync beyond P0-3는 `HUMAN_OWNED / DEFERRED`
-- owner / future task: `P0-5 First Project Source Mirror v1`
-- supersession_rule: P0-5의 complete active-set replacement 확인 시 historical genesis provenance로 retire한다. Seed와 mirror를 mixed current authority로 유지하지 않는다.
+- decision: Browser Project의 `AISCC-BOOTSTRAP-SEED-V1`은 P0-5 complete replacement가 Human-confirmed될 때까지 immutable temporary authority였으며, complete replacement 확인 후 historical genesis provenance로 retire한다.
+- decision_status: `RETIRED / HISTORICAL`
+- provenance: Seed v1 index, Project Source mirror rule, P0-5 Human complete replacement evidence
+- implementation_status: Browser active Seed `0/14`; mirror v1 active `18/18`
+- verification_status: `HUMAN_PROVIDED / CONFIRMED`
+- owner / future task: historical bootstrap provenance; current Browser source lifecycle owner는 repository canonical mirror policy
+- supersession_rule: Seed를 current authority로 재활성화하지 않는다. 향후 Browser source는 repository canonical에서 생성한 complete mirror replacement만 사용한다.
+
 
 ## AISCC-ROOT-AGENTS-TRANSPORT-V1
 
@@ -77,12 +78,69 @@
 ## AISCC-CANONICAL-MIRROR-AUTHORITY-SPLIT-V1
 
 - decision: local repository canonical은 editable source owner이고 Browser Project Source는 Human-uploaded read-only mirror다.
-- decision_status: `ACCEPTED_PROJECT_DECISION`
-- provenance: Seed index, Project Source mirror rule, P0-4 Task
-- implementation_status: repository canonical candidate created; first mirror `NOT_EXECUTED`
-- verification_status: local canonical integrity는 P0-4 executor evidence; Browser replacement는 `HUMAN_OWNED / P0-5`
-- owner / future task: repository canonical owners; mirror lifecycle는 P0-5
-- supersession_rule: Browser direct edit는 canonical change가 아니며 complete mirror generation/sync cycle만 mirror state를 갱신한다.
+- decision_status: `ACCEPTED_PROJECT_DECISION / ACTIVE`
+- provenance: Seed index, Project Source mirror rule, P0-4 acceptance, P0-5 terminal Human sync evidence
+- implementation_status: first repository mirror v1 complete replacement `IMPLEMENTED`
+- verification_status: `HUMAN_PROVIDED / CONFIRMED`; active mirror `18/18`, Seed active `0`
+- active mirror: `AISCC-PROJECT-SOURCE-MIRROR-V1`
+- mirror snapshot canonical commit: `0dc4e19a6da31c22e08d144eaba24209a4476b4d`
+- owner / future task: repository canonical owners; future mirror refreshes follow `.aiassistant/rules/AISCC_PROJECT_SOURCE_MIRROR.md`
+- supersession_rule: Browser direct edit는 canonical change가 아니며 tracked manifest + generated bundle + Human complete replacement cycle만 mirror state를 갱신한다.
+
+
+## AISCC-PROJECT-SOURCE-MIRROR-V1-ACTIVATION
+
+- decision: `AI Software Command Center` Browser Project의 active source를 Bootstrap Seed v1에서 `AISCC-PROJECT-SOURCE-MIRROR-V1` `18/18` complete replacement로 전환한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - sync-ready canonical snapshot Commit A: `0dc4e19a6da31c22e08d144eaba24209a4476b4d`
+  - regenerated candidate Commit B: `25a81a9d42ecee0185fb36f83b86348b575905aa`
+  - Human complete replacement result: Seed `0`, mirror `18`, metadata/hash `complete`
+- implementation_status: `BROWSER_PROJECT_SOURCE_REPLACEMENT_COMPLETED`
+- verification_status: `HUMAN_PROVIDED / CONFIRMED`
+- authority_effect:
+  - repository canonical remains editable owner
+  - Browser Project Source becomes read-only mirror v1
+  - Bootstrap Seed v1 becomes historical-only
+- owner / future task: future mirror refresh Task only when active canonical changes warrant a new Browser source snapshot
+- supersession_rule: future mirror version may supersede v1 only through complete replacement; mixed current authority is forbidden.
+
+
+## AISCC-P1-1-CORE-DOMAIN-STATE-MACHINE-V1
+
+- decision: AISCC core domain/orchestration은 `WorkRun` System-owned authoritative aggregate, exact nine-state `WorkflowState`, request/evaluation/decision/mutation separation, state-version concurrency guard, durable transition provenance를 canonical design으로 사용한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - `20260826_2157_aiscc-core-domain-and-state-machine-design-1`
+  - `20260827_1008_aiscc-p1-1-judgment-transition-admission-semantic-alignment-rework-1`
+  - `20260827_1008_aiscc-p1-1-human-gate-result-projection-alignment-rework-1`
+  - Human P1-1 final review `ACCEPTED`
+  - `.aiassistant/records/aiscc/cycles/20260827_1115_aiscc-p1-1-core-domain-state-machine-design-final-acceptance-1.cycle.md`
+- implementation_status: `NOT_IMPLEMENTED`
+- verification_status: semantic design + Human acceptance complete; runtime implementation/evidence `DEFERRED`
+- canonical owners:
+  - `.aiassistant/rules/AISCC_ARCHITECTURE.md`
+  - `.aiassistant/rules/AISCC_ORCHESTRATION.md`
+- exact WorkflowState:
+  - `READY`
+  - `RUNNING`
+  - `ADMISSION_PENDING`
+  - `HUMAN_REQUIRED`
+  - `BLOCKED`
+  - `REWORK_REQUIRED`
+  - `ACCEPTED`
+  - `REJECTED`
+  - `FAILED`
+- authority invariants:
+  - `AgentOutput != SystemState`
+  - `EvidenceCandidate != AdmittedEvidence`
+  - `HumanGateStatus != HumanResult != Judgment != TransitionDecision != WorkflowState`
+  - `ExecutorCompleted != WorkRun.ACCEPTED`
+  - `WorkRun.ACCEPTED != Project.CLOSED`
+- concurrency invariant: transition request는 authoritative current state/version에 대해 평가하며 stale request는 deny되고 current state를 overwrite하지 않는다.
+- persistence invariant: authoritative projection과 append-only transition/provenance는 restart 후 reconstruct 가능해야 한다.
+- future owners: `P1-2`, `P1-3`, `P1-4`, `P1-5`, `P1-6`, `P1-7`, `P1-8`
+- supersession_rule: state set, transition authority, Judgment ordering, Human gate/result projection, concurrency/persistence semantic 변경은 별도 baseline Task와 Human acceptance가 필요하다.
 
 ## AISCC-P1-SAFEGUARD-BEFORE-RELEASE-V1
 

@@ -1,35 +1,42 @@
 # AISCC Next Actions
 
-이 문서는 stable roadmap이다. per-turn 실행 log와 terminal judgment는 Cycle Record에 둔다.
+이 문서는 stable roadmap이다. per-turn execution log와 terminal judgment는 Cycle Record에 둔다.
+
+## completed phases
+
+```text
+P0-1 → ACCEPTED / CLOSED
+P0-2 → ACCEPTED / CLOSED
+P0-3 → HUMAN_CONFIRMED / CLOSED
+P0-4 → ACCEPTED / CLOSED
+P0-5 → ACCEPTED / CLOSED
+P1-1 → ACCEPTED / CLOSED
+```
 
 ## canonical queue
 
-1. `P0-5` — First Project Source Mirror v1
-2. `P1-1` — Core Domain / State Machine Design
-3. `P1-2` — Security / Sandbox / Runtime Boundary Design
-4. `P1-3` — Security / Runtime Safeguard Implementation and Verification
-5. `P1-4` — Explicit State Machine Kernel Implementation
-6. `P1-5` — Agent Provider and Tool Execution
-7. `P1-6` — Evidence Admission
-8. `P1-7` — Human Gate and Judgment
-9. `P1-8` — Project Memory and Cycle Admission
-10. `P2-1` — Command Center Web UI
-11. `P2-2` — Synthetic Demo Repository
-12. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
-13. `P2-4` — Self-Dogfooding Cutover
-14. `P3-1` — Comparative Evaluation
-15. `P3-2` — Public Repository Documentation
-16. `P3-3` — Public Release and Competition Submission
+1. `P1-2` — Security / Sandbox / Runtime Boundary Design
+2. `P1-3` — Security / Runtime Safeguard Implementation and Verification
+3. `P1-4` — Explicit State Machine Kernel Implementation
+4. `P1-5` — Agent Provider and Tool Execution
+5. `P1-6` — Evidence Admission
+6. `P1-7` — Human Gate and Judgment
+7. `P1-8` — Project Memory and Cycle Admission
+8. `P2-1` — Command Center Web UI
+9. `P2-2` — Synthetic Demo Repository
+10. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
+11. `P2-4` — Self-Dogfooding Cutover
+12. `P3-1` — Comparative Evaluation
+13. `P3-2` — Public Repository Documentation
+14. `P3-3` — Public Release and Competition Submission
 
-Required ordering:
+## required ordering
 
 ```text
-P0-5 First Project Source Mirror v1
-→ P1-1 Core Domain / State Machine Design
-→ P1-2 Security / Sandbox / Runtime Boundary Design
+P1-2 Security / Sandbox / Runtime Boundary Design
 → P1-3 Security / Runtime Safeguard Implementation and Verification
-→ remaining Governance Kernel implementation tasks
-→ P2 Demonstration / scenario / Self-Dogfooding
+→ remaining Governance Kernel implementation
+→ P2 Demonstration / Self-Dogfooding
 → P3 Proof / public release / submission
 ```
 
@@ -41,34 +48,31 @@ BEFORE
 P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 ```
 
-`P1-3`은 다음 safeguard를 처음 구현하고 applicable evidence로 검증하는 dedicated stage다.
-
-- public/private permission-profile isolation
-- synthetic repository isolation
-- command/network deny-by-default
-- secret/credential boundary
-- timeout/retry/cancel failure semantics
-- idempotency/abuse/throttling guard
-- application budget guard
-- provider spend-guard capability/configuration when supported
-- Replay fallback under Live/provider/budget failure
-
-`P3-3`은 이미 설계·구현·검증된 safeguard를 current provider와 release environment에서 재검증하고 구성한다. `P3-3`은 위 safeguard의 first implementation stage가 아니다.
+`P3-3` MUST NOT be the first safeguard implementation stage.
 
 ## current next action
 
 ```text
-phase: P0-5
-current_action:
-Command Center candidate review
-→ if accepted, Human complete Browser Project Source replacement
-status: MIRROR_REWORK_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING
-P1-1: BLOCKED_UNTIL_P0_5_TERMINAL_CLOSURE
-owner: current P0-5 rework Task Contract / Command Center / Human sync gate
+phase: P1-2
+current_action: Security / Sandbox / Runtime Boundary Design
+status: READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED
+predecessor: P1-1 ACCEPTED / CLOSED
+execution_gate: complete current canonical closure Git persistence first
 ```
 
-P0-5는 tracked manifest, ignored generated mirror bundle, canonical/body hash mapping, Human complete Browser Project Source replacement를 소유한다. Browser mirror에서 이 pre-sync snapshot을 읽는 경우 snapshot의 상태만 근거로 P0-5 generation을 다시 실행하지 않으며, latest Human-provided source-sync evidence와 terminal Cycle을 먼저 확인한다.
+## accepted P1-1 handoff
 
-## deployment decision handoff
+P1-2 MUST preserve:
 
-`AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1`은 accepted direction이지만 `NOT_EXECUTED`다. Provider resource, region/plan capability, pricing, budget control, API key, deployment, public URL은 해당 future Task에서 current official source와 actual configuration evidence로 검증해야 한다.
+- System-owned authoritative workflow state
+- Agent cannot mutate state directly
+- Human-owned verification cannot be forged by Agent/Executor
+- `RuntimeMode != WorkflowState`
+- `OWNER_SELF_DOGFOOD` and `PUBLIC_BOUNDED_LIVE` may use different permission profiles
+- security failure cannot be silently relabeled as successful workflow outcome
+
+## deployment handoff
+
+`AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1` remains accepted direction but `NOT_EXECUTED`.
+
+Provider resources, current provider capability/pricing, API keys, billing controls, deployment and public URL remain future-task evidence.
