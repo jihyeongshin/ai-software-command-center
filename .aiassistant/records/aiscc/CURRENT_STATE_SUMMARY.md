@@ -18,7 +18,8 @@
 | P1-1 Core Domain / State Machine Design | `ACCEPTED / CLOSED` |
 | P1-2 Security / Sandbox / Runtime Boundary Design | `ACCEPTED / CLOSED` |
 | P1-3 Security / Runtime Safeguard Implementation and Verification | `ACCEPTED / CLOSED` |
-| P1-4 Explicit State Machine Kernel Implementation | `READY / NOT_STARTED` |
+| P1-4 Explicit State Machine Kernel Implementation | `ACCEPTED / CLOSED` |
+| P1-5 Agent Provider and Tool Execution | `READY / DESIGN_FREEZE_REQUIRED` |
 
 ## P0-4 provenance
 
@@ -174,19 +175,104 @@ Terminal Cycle:
 
 P1-3 security/runtime implementation is now canonical after terminal Git persistence.
 
+## P1-4 terminal explicit state-machine kernel
+
+Human final review:
+
+```text
+HUMAN_PROVIDED
+P1-4: ACCEPTED / CLOSED
+```
+
+Final accepted implementation candidate:
+
+```text
+path count:
+19
+
+aggregate SHA-256:
+1316fd14faf6a2ad85f43ae9e9a2bab45c1736e4f28bea40d35865f53dee4cb5
+```
+
+Accepted implementation:
+
+```text
+exact WorkflowState:
+9
+
+exact transition pairs:
+22
+
+authoritative WorkRun/state_version:
+IMPLEMENTED
+
+TransitionRequest/Evaluation/Decision:
+IMPLEMENTED
+
+append-only ADMITTED/DENIED provenance:
+IMPLEMENTED
+
+stale concurrency:
+IMPLEMENTED / PASS
+
+duplicate request idempotency:
+IMPLEMENTED / PASS
+
+atomic PostgreSQL mutation:
+IMPLEMENTED / PASS
+
+restart durability:
+IMPLEMENTED / PASS
+
+projection/event consistency gate:
+IMPLEMENTED / PASS
+
+future-owner guard separation:
+IMPLEMENTED / PASS
+
+denied pre-creation fresh retry semantics:
+IMPLEMENTED / PASS
+```
+
+Verification:
+
+```text
+targeted PostgreSQL integration:
+17 PASS
+
+full unit + integration:
+74 PASS
+
+PostgreSQL:
+17.6
+
+Alembic head:
+20260828_0001
+
+final Task-owned Docker residue:
+none
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260828_1110_aiscc-p1-4-explicit-state-machine-kernel-final-acceptance-1.cycle.md`
+
+P1-4 source becomes canonical after the next terminal Git persistence commit.
+
 ## blockers and next action
 
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
 - P1-3: `ACCEPTED / CLOSED`
-- P1-3 runtime substrate: `HUMAN_PROVIDED / ACCEPTED`
-- P1-3 mandatory runtime evidence: `8 / 8 EXECUTED_PASS`
+- P1-4: `ACCEPTED / CLOSED`
+- final P1-4 candidate: `19 paths / 1316fd14faf6a2ad85f43ae9e9a2bab45c1736e4f28bea40d35865f53dee4cb5`
 - P1 security safeguard release prerequisite: `SATISFIED`
 - Public Bounded Live: `NOT_RELEASED`
-- P1-4: `READY / NOT_STARTED`
-- next Executor Task must first Git-persist the P1-3 terminal Cycle/state plus the exact accepted 55-path implementation candidate
-- then P1-4 may implement the explicit authoritative state-machine kernel
-- P1-5 and later owner scopes remain `NOT_STARTED`
+- P1-5: `READY / DESIGN_FREEZE_REQUIRED`
+- next Executor Task must first Git-persist the P1-4 terminal Cycle/state plus the exact accepted 19-path P1-4 implementation candidate
+- the same Task then designs the exact provider/tool execution contract only
+- P1-5 runtime implementation waits for Human acceptance of that design baseline
+- P1-6/P1-7/P1-8 remain `NOT_STARTED`
 
 ## non-substitution statement
 
@@ -195,8 +281,8 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- state-machine implementation
-- security/runtime safeguard implementation
+- provider/tool execution implementation
+- evidence/Human/Cycle implementation
 - public deployment
 - provider resource/API key/billing configuration
 - public Live availability

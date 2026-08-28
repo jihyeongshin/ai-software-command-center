@@ -286,3 +286,53 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-7 owns Human gate/result/Judgment;
   - P1-5 owns provider/tool execution.
 - supersession_rule: weakening fail-closed admission, RuntimeMode/state-version capability binding, sandbox isolation, public cancel authority, proof non-substitution or P1-4/P1-5 owner separation requires a separate Human-accepted security baseline update.
+
+## AISCC-P1-4-EXPLICIT-STATE-MACHINE-KERNEL-V1
+
+- decision: accepted P1-1 explicit workflow semantics를 PostgreSQL-backed authoritative state-machine kernel로 구현한 final P1-4 candidate를 canonical implementation baseline으로 채택한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - final Executor Task: `20260828_1110_aiscc-p1-4-denied-precreation-retry-consistency-semantics-rework-1`
+  - final pre-terminal-closure HEAD: `aec4d24ba3ae23d8252c9582130aea99aac333a1`
+  - Human P1-4 final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260828_1110_aiscc-p1-4-explicit-state-machine-kernel-final-acceptance-1.cycle.md`
+- implementation_status: `IMPLEMENTED / ACCEPTED`
+- final candidate:
+  - path count: `19`
+  - aggregate SHA-256: `1316fd14faf6a2ad85f43ae9e9a2bab45c1736e4f28bea40d35865f53dee4cb5`
+- accepted state model:
+  - exact `WorkflowState` count: `9`
+  - exact allowed transition pairs: `22`
+  - terminal states: `ACCEPTED`, `REJECTED`, `FAILED`
+  - `RuntimeMode != WorkflowState`
+- accepted authority:
+  - `TransitionRequest → TransitionEvaluation → TransitionDecision → atomic authoritative mutation`;
+  - `Judgment != TransitionDecision`;
+  - `SecurityAdmissionDecision != TransitionDecision`;
+  - production P1-4 cannot mint P1-6 Evidence or P1-7 Human/Judgment authority;
+  - raw evidence/Human/Judgment refs are non-authoritative without owner-bound facts.
+- persistence/concurrency:
+  - PostgreSQL + SQLAlchemy 2 async + asyncpg + Alembic;
+  - append-only request/evaluation/decision provenance;
+  - per-run/per-request serialization + row lock + CAS;
+  - stale-request deny;
+  - same-request immutable idempotency;
+  - admitted decision/projection mutation atomicity;
+  - restart-durable projection/history;
+  - projection/event mismatch fail-closed.
+- denied-precreation semantics:
+  - complete compatible DENIED-only history with absent projection remains authoritative `NONE/v0`;
+  - corrected fresh create may proceed;
+  - admitted history, partial/orphaned history or immutable run-identity conflict fails closed.
+- verification:
+  - targeted PostgreSQL integration: `17 PASS`;
+  - full unit + integration: `74 PASS`;
+  - PostgreSQL: `17.6`;
+  - Alembic head: `20260828_0001`;
+  - final Task-owned container/network residue: `none`.
+- next-owner boundary:
+  - P1-5 owns provider/tool execution adapters and execution events/status;
+  - P1-6 owns evidence admission;
+  - P1-7 owns Human gate/result/Judgment;
+  - P1-8 owns Cycle admission/project closure/NextAction projection.
+- supersession_rule: changing the exact 9-state set, exact transition authority, state-version concurrency rule, owner-bound guard separation, denied audit semantics, atomicity or consistency fail-closed behavior requires a separate Human-accepted P1-4 baseline update.

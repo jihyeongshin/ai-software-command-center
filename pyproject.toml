@@ -8,8 +8,11 @@ version = "0.1.0"
 description = "AI Software Command Center governance security runtime"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+  "alembic>=1.16,<2",
+  "asyncpg>=0.30,<1",
   "fastapi>=0.116,<1",
   "pydantic>=2.11,<3",
+  "sqlalchemy>=2.0.43,<3",
   "uvicorn>=0.35,<1",
 ]
 
@@ -30,6 +33,7 @@ packages = ["src/aiscc"]
 addopts = "--strict-config --strict-markers"
 testpaths = ["tests"]
 markers = [
+  "postgres: isolated PostgreSQL state-kernel integration evidence",
   "runtime: actual Docker/process runtime boundary evidence",
 ]
 
