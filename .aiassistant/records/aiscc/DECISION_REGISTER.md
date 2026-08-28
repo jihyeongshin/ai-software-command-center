@@ -336,3 +336,58 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-7 owns Human gate/result/Judgment;
   - P1-8 owns Cycle admission/project closure/NextAction projection.
 - supersession_rule: changing the exact 9-state set, exact transition authority, state-version concurrency rule, owner-bound guard separation, denied audit semantics, atomicity or consistency fail-closed behavior requires a separate Human-accepted P1-4 baseline update.
+
+## AISCC-P1-5-PROVIDER-TOOL-EXECUTION-DESIGN-V1
+
+- decision: P1-5 provider/tool execution은 exact four-value `ExecutionStatus`, server-owned provider/tool selector authority, P1-3-mediated SECRET capability, bounded AgentExecutionService loop, versioned ProviderProfile/ToolRegistry, append-only execution operation/status persistence, unknown-outcome no-blind-retry, stateless OpenAI Responses V1 local-history continuation, P1-6 producer-ref handoff를 canonical design으로 사용한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - initial design Task: `20260828_1110_aiscc-p1-5-provider-tool-execution-contract-design-freeze-with-p1-4-terminal-commit-1`
+  - final rework Task: `20260828_1417_aiscc-p1-5-secret-operation-protocol-and-openai-state-mode-design-rework-1`
+  - final design base commit: `d96949f3643e6a0610942e33d70e9da259e1e432`
+  - Human P1-5 design final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260828_1529_aiscc-p1-5-provider-tool-execution-design-final-acceptance-1.cycle.md`
+- canonical owner: `.aiassistant/rules/AISCC_PROVIDER_TOOL_EXECUTION.md`
+- accepted design SHA-256: `12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443`
+- implementation_status: `READY / NOT_STARTED`
+- exact ExecutionStatus:
+  - `NOT_STARTED`
+  - `RUNNING`
+  - `EXECUTOR_COMPLETED`
+  - `EXECUTION_FAILED`
+- authority invariants:
+  - `ExecutionStatus != WorkflowState`;
+  - pure execution status/event admission does not increment `WorkRun.state_version`;
+  - `EXECUTOR_COMPLETED != ACCEPTED`;
+  - `EXECUTION_FAILED != FAILED`;
+  - P1-5 provider/tool/secret selector attestation does not mint P1-3 `SecurityAdmissionDecision`, `ResourceGrant` or `Capability`;
+  - `PROVIDER Capability != SECRET Capability`;
+  - `TOOL Capability != SECRET Capability`;
+  - `ToolOutput/AgentOutput != AdmittedEvidence`.
+- provider/tool resource contract:
+  - ProviderProfile and ToolRegistry are server-owned/versioned;
+  - public/Agent input cannot select provider/model/tool/endpoint/secret;
+  - exact operation/argument fingerprints bind P1-5 selector authority and P1-3 security capability.
+- secret contract:
+  - secret material is reachable only through server-side mediated adapter/dispatcher after exact P1-5 SecretUse attestation + P1-3 SECRET capability;
+  - raw secret is excluded from Agent/workspace/tool args/provider durable protocol history/public provenance/Replay.
+- operation contract:
+  - pre-side-effect deny, pre-dispatch cancel, dispatched known outcome and dispatched unknown outcome are exact representable terminal paths;
+  - unknown outcome cannot be blindly retried;
+  - `RETRY_EXHAUSTED` is attempt-level.
+- OpenAI Responses V1:
+  - custom functions only;
+  - `background=false`, `stream=false`, `store=false`, `parallel_tool_calls=false`, `truncation=disabled`;
+  - no provider Conversation authority;
+  - no `previous_response_id` sole continuation;
+  - AISCC durable private local protocol history is continuation authority;
+  - `queued`, `in_progress`, `completed`, `failed`, `cancelled`, `incomplete` are explicitly mapped.
+- mode contract:
+  - OWNER = bounded server-owned profile/registry;
+  - REPLAY = provider/tool/process/network execution exactly zero;
+  - PUBLIC LIVE = fixed synthetic repo/scenario/server profile with bounded resources; release remains `NOT_RELEASED`.
+- owner handoff:
+  - P1-5 runtime implementation may produce immutable execution/output/submission refs;
+  - P1-6 remains sole evidence admission owner;
+  - P1-7/P1-8 remain separate.
+- supersession_rule: changing exact ExecutionStatus, provider/tool/secret authority ownership, unknown-outcome retry semantics, Responses V1 continuation authority, Replay zero-execution, or P1-6 non-substitution requires a separate Human-accepted P1-5 design baseline update.

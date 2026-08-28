@@ -19,7 +19,7 @@
 | P1-2 Security / Sandbox / Runtime Boundary Design | `ACCEPTED / CLOSED` |
 | P1-3 Security / Runtime Safeguard Implementation and Verification | `ACCEPTED / CLOSED` |
 | P1-4 Explicit State Machine Kernel Implementation | `ACCEPTED / CLOSED` |
-| P1-5 Agent Provider and Tool Execution | `READY / DESIGN_FREEZE_REQUIRED` |
+| P1-5 Agent Provider and Tool Execution | `DESIGN_ACCEPTED / IMPLEMENTATION_READY` |
 
 ## P0-4 provenance
 
@@ -259,19 +259,62 @@ Terminal Cycle:
 
 P1-4 source becomes canonical after the next terminal Git persistence commit.
 
+## P1-5 terminal provider/tool execution design
+
+Human final design review:
+
+```text
+HUMAN_PROVIDED
+P1-5 Design: ACCEPTED / CLOSED
+```
+
+Canonical owner:
+
+```text
+.aiassistant/rules/AISCC_PROVIDER_TOOL_EXECUTION.md
+```
+
+Accepted design SHA-256:
+
+```text
+12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443
+```
+
+Accepted design freezes:
+
+```text
+exact four-value ExecutionStatus lifecycle
+ExecutionStatus != WorkflowState
+provider/tool selector authority != P1-3 ALLOW
+scoped SECRET mediation through P1-3 capability
+server-owned ProviderProfile and ToolRegistry
+bounded AgentExecutionService loop
+append-only ExecutionAttempt/ExecutionOperation events
+unknown-outcome no-blind-retry
+OpenAI Responses V1 store=false local-history continuation
+P1-5 producer refs != P1-6 evidence admission
+Replay zero execution
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260828_1529_aiscc-p1-5-provider-tool-execution-design-final-acceptance-1.cycle.md`
+
+P1-5 runtime implementation remains `NOT_STARTED`.
+
 ## blockers and next action
 
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
 - P1-3: `ACCEPTED / CLOSED`
 - P1-4: `ACCEPTED / CLOSED`
-- final P1-4 candidate: `19 paths / 1316fd14faf6a2ad85f43ae9e9a2bab45c1736e4f28bea40d35865f53dee4cb5`
-- P1 security safeguard release prerequisite: `SATISFIED`
+- P1-5 Design Freeze: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- P1-5 accepted design: `AISCC_PROVIDER_TOOL_EXECUTION.md / 12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443`
+- P1-5 runtime implementation: `READY / NOT_STARTED`
 - Public Bounded Live: `NOT_RELEASED`
-- P1-5: `READY / DESIGN_FREEZE_REQUIRED`
-- next Executor Task must first Git-persist the P1-4 terminal Cycle/state plus the exact accepted 19-path P1-4 implementation candidate
-- the same Task then designs the exact provider/tool execution contract only
-- P1-5 runtime implementation waits for Human acceptance of that design baseline
+- next Executor Task must first Git-persist the accepted P1-5 design + terminal Cycle/state
+- the same Task then implements P1-5 provider/tool execution with fake/local provider transport and PostgreSQL/P1-3 security proof
+- real provider credential/network/billing/release configuration is not required and remains deferred
 - P1-6/P1-7/P1-8 remain `NOT_STARTED`
 
 ## non-substitution statement
@@ -281,8 +324,10 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- provider/tool execution implementation
-- evidence/Human/Cycle implementation
+- P1-5 provider/tool execution runtime verification
+- P1-6 evidence admission
+- P1-7 Human/Judgment implementation
+- P1-8 Cycle/project-memory implementation
 - public deployment
 - provider resource/API key/billing configuration
 - public Live availability

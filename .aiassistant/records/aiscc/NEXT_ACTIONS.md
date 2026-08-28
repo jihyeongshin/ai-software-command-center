@@ -15,11 +15,12 @@ P1-2 → ACCEPTED / CLOSED
 P1-3 Runtime Substrate → HUMAN_PROVIDED / ACCEPTED
 P1-3 Security / Runtime Safeguard Implementation and Verification → ACCEPTED / CLOSED
 P1-4 Explicit State Machine Kernel Implementation → ACCEPTED / CLOSED
+P1-5 Provider / Tool Execution Contract Design Freeze → ACCEPTED / CLOSED
 ```
 
 ## canonical queue
 
-1. `P1-5` — Agent Provider and Tool Execution
+1. `P1-5` — Provider / Tool Execution Implementation + Runtime Verification
 2. `P1-6` — Evidence Admission
 3. `P1-7` — Human Gate and Judgment
 4. `P1-8` — Project Memory and Cycle Admission
@@ -31,53 +32,61 @@ P1-4 Explicit State Machine Kernel Implementation → ACCEPTED / CLOSED
 10. `P3-2` — Public Repository Documentation
 11. `P3-3` — Public Release and Competition Submission
 
-## P1-4 terminal evidence
+## P1-5 accepted design
 
 ```text
-final candidate paths:
-19
+canonical:
+.aiassistant/rules/AISCC_PROVIDER_TOOL_EXECUTION.md
 
-final candidate aggregate SHA-256:
-1316fd14faf6a2ad85f43ae9e9a2bab45c1736e4f28bea40d35865f53dee4cb5
-
-targeted PostgreSQL integration:
-17 PASS
-
-full unit + integration:
-74 PASS
-
-PostgreSQL:
-17.6
-
-Alembic head:
-20260828_0001
+SHA-256:
+12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443
 
 Human final review:
 ACCEPTED
 ```
 
+Accepted runtime implementation contract includes:
+
+```text
+ExecutionStatus exact four values
+provider/tool selector authority + P1-3 ALLOW separation
+scoped SECRET mediation
+server-owned ProviderProfile / ToolRegistry
+bounded provider/tool loop
+append-only execution attempts/operations/events
+OpenAI Responses V1 store=false local-history continuation
+unknown-outcome no-blind-retry
+P1-6 output/submission ref handoff
+Replay zero execution
+```
+
 ## release gate
 
-P1-3 security safeguard prerequisite remains:
+P1-3 safeguard prerequisite:
 
 ```text
 SATISFIED
 ```
 
-P1-4 authoritative workflow kernel prerequisite is now:
+P1-4 authoritative state-machine prerequisite:
 
 ```text
 SATISFIED
 ```
 
-This still does NOT release Public Bounded Live.
+P1-5 design prerequisite:
 
 ```text
-PUBLIC_BOUNDED_LIVE
-→ NOT_RELEASED
+SATISFIED
 ```
 
-P1-5/P1-6/P1-7/P1-8 and later demo/release verification remain required.
+Public Bounded Live remains:
+
+```text
+NOT_RELEASED
+```
+
+P1-5 runtime, P1-6/P1-7/P1-8, demo and release evidence remain required.
 
 ## current next action
 
@@ -86,98 +95,53 @@ phase:
 P1-5
 
 title:
-Agent Provider and Tool Execution
+Provider / Tool Execution Implementation + Runtime Verification
 
 status:
-READY / DESIGN_FREEZE_REQUIRED
-
-first subtask:
-Provider / Tool Execution Contract Design Freeze
+READY / NOT_STARTED
 
 pre-step:
-persist P1-4 terminal canonical state + exact accepted 19-path implementation candidate in one local commit
+persist accepted AISCC_PROVIDER_TOOL_EXECUTION.md + P1-5 design terminal Cycle/state in one local commit
+
+implementation:
+provider/tool models + authority + profiles
+P1-3 PROVIDER/TOOL/SECRET extension integration
+OpenAI Responses V1 stateless adapter
+ToolRegistry / dispatcher
+bounded AgentExecutionService
+ExecutionAttempt/Operation/Event PostgreSQL durability
+P1-4 execution-start/submission ref validation
+fake/local provider transport runtime proof
 ```
 
-## why P1-5 starts with a design freeze
+## implementation acceptance boundary
 
-P1-1/P1-2 already freeze the outer ownership/security boundary:
+Required:
 
 ```text
-P1-5
-→ provider/tool execution adapter + execution events
+real provider call:
+NOT REQUIRED
 
-AGENT_PROVIDER
-→ proposal/output/tool/evidence candidates only
-→ no permission expansion
-→ no authoritative WorkflowState mutation
+real API key:
+FORBIDDEN / NOT REQUIRED
 
-PUBLIC_RECORDED_REPLAY
-→ provider inference 0
-→ tool execution 0
+real billing/spend configuration:
+NOT REQUIRED
 
-PUBLIC_BOUNDED_LIVE
-→ fixed synthetic repository
-→ allowlisted scenario
-→ server-fixed provider/model
-→ bounded calls/retry/time/budget
+public deployment:
+FORBIDDEN
 ```
 
-But no Human-accepted exact P1-5 contract yet defines:
+Acceptance uses deterministic fake/local provider transport plus actual P1-3 security and isolated
+PostgreSQL runtime proof.
 
-- provider/tool `ResourceDomain` authority integration with P1-3;
-- exact provider/model/tool profile/selector identity;
-- capability binding to exact provider/tool operation;
-- exact `ExecutionStatus` durable projection/event semantics;
-- provider/tool call idempotency;
-- ambiguous timeout/unknown provider outcome handling;
-- retry/cancel policy at the provider/tool layer;
-- provider output/tool output durable candidate/reference boundary;
-- provider adapter transport/API selection;
-- tool registry/schema/argument binding;
-- P1-6 evidence handoff.
+Exact current provider SDK/API compatibility may be verified from official public documentation and
+package metadata, but no external provider side effect is required.
 
-Those decisions are load-bearing and must not be silently invented inside implementation.
-
-## P1-5 design-freeze boundaries
-
-The design MUST preserve:
+## next after P1-5 runtime Human acceptance
 
 ```text
-ExecutionStatus != WorkflowState
-
-EXECUTOR_COMPLETED != ACCEPTED
-
-AgentOutput != SystemState
-
-provider/tool output
-!= AdmittedEvidence
-
-SecurityAdmissionDecision
-!= provider result
-!= TransitionDecision
+P1-6 Evidence Admission
 ```
 
-It must also preserve P1-3 fail-closed behavior:
-
-```text
-no P1-5 provider/tool authority
-→ PROVIDER / TOOL side effects DENY
-```
-
-P1-5 design does NOT implement:
-
-```text
-P1-6 evidence admission
-P1-7 Human/Judgment
-P1-8 Cycle memory
-public deployment
-real provider credentials/billing
-```
-
-## after P1-5 design Human acceptance
-
-```text
-P1-5 Provider / Tool Execution Implementation + Runtime Verification
-```
-
-Do not start implementation before that acceptance.
+Do not implement P1-6 in P1-5.
