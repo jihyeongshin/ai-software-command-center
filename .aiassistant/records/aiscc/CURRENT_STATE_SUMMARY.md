@@ -19,7 +19,8 @@
 | P1-2 Security / Sandbox / Runtime Boundary Design | `ACCEPTED / CLOSED` |
 | P1-3 Security / Runtime Safeguard Implementation and Verification | `ACCEPTED / CLOSED` |
 | P1-4 Explicit State Machine Kernel Implementation | `ACCEPTED / CLOSED` |
-| P1-5 Agent Provider and Tool Execution | `DESIGN_ACCEPTED / IMPLEMENTATION_READY` |
+| P1-5 Agent Provider and Tool Execution | `ACCEPTED / CLOSED` |
+| P1-6 Evidence Admission | `READY / DESIGN_FREEZE_REQUIRED` |
 
 ## P0-4 provenance
 
@@ -302,20 +303,90 @@ Terminal Cycle:
 
 P1-5 runtime implementation remains `NOT_STARTED`.
 
+## P1-5 terminal provider/tool execution runtime
+
+Human final runtime review:
+
+```text
+HUMAN_PROVIDED
+P1-5 Runtime: ACCEPTED / CLOSED
+```
+
+Final accepted implementation candidate:
+
+```text
+path count:
+42
+
+aggregate SHA-256:
+ffeb5ba70649c564c482c2cff79ce8e2b0a462f811d8e03f2c1096f170bd39d6
+```
+
+Accepted executable authority:
+
+```text
+PostgreSQL durable ExecutionAttempt / ExecutionOperation / event projections
+restart-durable bounded counters/deadline
+per-side-effect WorkRun/state_version freshness
+P1-3 PROVIDER / TOOL / SECRET capability mediation
+consumed-authority SecretResolutionLease
+exact Tool ResourceRequirement binding
+OpenAI Responses V1 store=false local-history continuation
+unknown-outcome no-blind-retry
+Replay zero execution
+fixed Public Live repository/version/scenario local-fake proof
+P1-4 issuer-backed execution start/submission handoff
+```
+
+Final verification:
+
+```text
+unit + integration:
+145 PASS
+
+P1-5 persistence/accounting:
+23 PASS
+
+P1-5 runtime:
+10 PASS
+
+P1-3 Docker runtime regression:
+10 PASS
+
+PostgreSQL:
+17.6
+
+Alembic:
+20260828_0002
+
+real provider calls:
+0
+
+final Task-owned residue:
+none
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260828_2329_aiscc-p1-5-provider-tool-execution-runtime-final-acceptance-1.cycle.md`
+
+P1-5 source becomes canonical after the next terminal Git persistence commit.
+
 ## blockers and next action
 
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
 - P1-3: `ACCEPTED / CLOSED`
 - P1-4: `ACCEPTED / CLOSED`
-- P1-5 Design Freeze: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
-- P1-5 accepted design: `AISCC_PROVIDER_TOOL_EXECUTION.md / 12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443`
-- P1-5 runtime implementation: `READY / NOT_STARTED`
+- P1-5 Design: `ACCEPTED / CLOSED`
+- P1-5 Runtime: `ACCEPTED / CLOSED`
+- final P1-5 candidate: `42 paths / ffeb5ba70649c564c482c2cff79ce8e2b0a462f811d8e03f2c1096f170bd39d6`
 - Public Bounded Live: `NOT_RELEASED`
-- next Executor Task must first Git-persist the accepted P1-5 design + terminal Cycle/state
-- the same Task then implements P1-5 provider/tool execution with fake/local provider transport and PostgreSQL/P1-3 security proof
-- real provider credential/network/billing/release configuration is not required and remains deferred
-- P1-6/P1-7/P1-8 remain `NOT_STARTED`
+- P1-6: `READY / DESIGN_FREEZE_REQUIRED`
+- next Executor Task must first Git-persist the accepted 42-path P1-5 runtime candidate + terminal Cycle/state
+- the same Task then performs P1-6 Evidence Admission design only
+- P1-6 runtime implementation waits for Human design acceptance
+- P1-7/P1-8 remain `NOT_STARTED`
 
 ## non-substitution statement
 
@@ -324,8 +395,7 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- P1-5 provider/tool execution runtime verification
-- P1-6 evidence admission
+- P1-6 evidence admission implementation
 - P1-7 Human/Judgment implementation
 - P1-8 Cycle/project-memory implementation
 - public deployment

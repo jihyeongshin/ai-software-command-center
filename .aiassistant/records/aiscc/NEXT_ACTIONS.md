@@ -15,133 +15,138 @@ P1-2 → ACCEPTED / CLOSED
 P1-3 Runtime Substrate → HUMAN_PROVIDED / ACCEPTED
 P1-3 Security / Runtime Safeguard Implementation and Verification → ACCEPTED / CLOSED
 P1-4 Explicit State Machine Kernel Implementation → ACCEPTED / CLOSED
-P1-5 Provider / Tool Execution Contract Design Freeze → ACCEPTED / CLOSED
+P1-5 Provider / Tool Execution Design → ACCEPTED / CLOSED
+P1-5 Provider / Tool Execution Runtime → ACCEPTED / CLOSED
 ```
 
 ## canonical queue
 
-1. `P1-5` — Provider / Tool Execution Implementation + Runtime Verification
-2. `P1-6` — Evidence Admission
-3. `P1-7` — Human Gate and Judgment
-4. `P1-8` — Project Memory and Cycle Admission
-5. `P2-1` — Command Center Web UI
-6. `P2-2` — Synthetic Demo Repository
-7. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
-8. `P2-4` — Self-Dogfooding Cutover
-9. `P3-1` — Comparative Evaluation
-10. `P3-2` — Public Repository Documentation
-11. `P3-3` — Public Release and Competition Submission
+1. `P1-6` — Evidence Admission
+2. `P1-7` — Human Gate and Judgment
+3. `P1-8` — Project Memory and Cycle Admission
+4. `P2-1` — Command Center Web UI
+5. `P2-2` — Synthetic Demo Repository
+6. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
+7. `P2-4` — Self-Dogfooding Cutover
+8. `P3-1` — Comparative Evaluation
+9. `P3-2` — Public Repository Documentation
+10. `P3-3` — Public Release and Competition Submission
 
-## P1-5 accepted design
+## P1-5 terminal evidence
 
 ```text
-canonical:
-.aiassistant/rules/AISCC_PROVIDER_TOOL_EXECUTION.md
+final candidate:
+42 paths
 
-SHA-256:
-12070677aa1cfa74b7eea9a52db24f78aacd2bf23d655f125a7689797d172443
+aggregate SHA-256:
+ffeb5ba70649c564c482c2cff79ce8e2b0a462f811d8e03f2c1096f170bd39d6
+
+unit + integration:
+145 PASS
+
+P1-5 persistence/accounting:
+23 PASS
+
+P1-5 runtime:
+10 PASS
+
+P1-3 Docker runtime regression:
+10 PASS
+
+PostgreSQL:
+17.6
+
+Alembic:
+20260828_0002
+
+real provider calls:
+0
+
+final residue:
+none
 
 Human final review:
 ACCEPTED
 ```
 
-Accepted runtime implementation contract includes:
+## current release status
 
 ```text
-ExecutionStatus exact four values
-provider/tool selector authority + P1-3 ALLOW separation
-scoped SECRET mediation
-server-owned ProviderProfile / ToolRegistry
-bounded provider/tool loop
-append-only execution attempts/operations/events
-OpenAI Responses V1 store=false local-history continuation
-unknown-outcome no-blind-retry
-P1-6 output/submission ref handoff
-Replay zero execution
-```
-
-## release gate
-
 P1-3 safeguard prerequisite:
-
-```text
 SATISFIED
-```
 
-P1-4 authoritative state-machine prerequisite:
-
-```text
+P1-4 authoritative workflow kernel:
 SATISFIED
-```
 
-P1-5 design prerequisite:
-
-```text
+P1-5 bounded provider/tool runtime:
 SATISFIED
-```
 
-Public Bounded Live remains:
-
-```text
+PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 ```
 
-P1-5 runtime, P1-6/P1-7/P1-8, demo and release evidence remain required.
+P1-6/P1-7/P1-8 and demo/release verification remain required.
 
 ## current next action
 
 ```text
 phase:
-P1-5
+P1-6
 
 title:
-Provider / Tool Execution Implementation + Runtime Verification
+Evidence Admission
 
 status:
-READY / NOT_STARTED
+READY / DESIGN_FREEZE_REQUIRED
+
+first subtask:
+Evidence Admission Contract Design Freeze
 
 pre-step:
-persist accepted AISCC_PROVIDER_TOOL_EXECUTION.md + P1-5 design terminal Cycle/state in one local commit
-
-implementation:
-provider/tool models + authority + profiles
-P1-3 PROVIDER/TOOL/SECRET extension integration
-OpenAI Responses V1 stateless adapter
-ToolRegistry / dispatcher
-bounded AgentExecutionService
-ExecutionAttempt/Operation/Event PostgreSQL durability
-P1-4 execution-start/submission ref validation
-fake/local provider transport runtime proof
+persist final 42-path P1-5 runtime candidate + P1-5 terminal Cycle/state in one local commit
 ```
 
-## implementation acceptance boundary
+## P1-6 outer authority already inherited
 
-Required:
+P1-1/P1-4/P1-5 already require:
 
 ```text
-real provider call:
-NOT REQUIRED
-
-real API key:
-FORBIDDEN / NOT REQUIRED
-
-real billing/spend configuration:
-NOT REQUIRED
-
-public deployment:
-FORBIDDEN
+AgentOutput != SystemState
+EvidenceCandidate != AdmittedEvidence
+P1-5 producer ref != AdmittedEvidence
+G_EVIDENCE requires P1-6 Evidence authority
+P1-6 cannot mint P1-4 TransitionDecision or P1-7 Judgment
 ```
 
-Acceptance uses deterministic fake/local provider transport plus actual P1-3 security and isolated
-PostgreSQL runtime proof.
+P1-6 therefore owns evidence requirement matching/admission, not execution truth or workflow state.
 
-Exact current provider SDK/API compatibility may be verified from official public documentation and
-package metadata, but no external provider side effect is required.
+## why P1-6 starts with design freeze
 
-## next after P1-5 runtime Human acceptance
+No Human-accepted exact P1-6 contract yet freezes:
+
+- evidence requirement identity/version;
+- evidence type/classification model;
+- task-scoped evidence ownership;
+- executor_required / reuse_allowed / human_owned / not_required / forbidden semantics;
+- candidate issuer/provenance binding;
+- content/body/hash/reference authority;
+- freshness/applicability/coverage rules;
+- reuse and anti-replay semantics;
+- evidence-set completeness;
+- admission/rejection reason taxonomy;
+- immutable admitted evidence refs;
+- revocation/supersession/correction semantics;
+- P1-4 `G_EVIDENCE` owner-bound fact issuance;
+- Human-owned evidence boundary into P1-7;
+- private/sensitive evidence redaction/export rules;
+- persistence/concurrency/restart model.
+
+Those decisions must not be invented inside implementation.
+
+## after P1-6 design Human acceptance
 
 ```text
-P1-6 Evidence Admission
+P1-6 Evidence Admission Implementation + Runtime Verification
 ```
 
-Do not implement P1-6 in P1-5.
+Do not start P1-7 before P1-6 runtime acceptance.

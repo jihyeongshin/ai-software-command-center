@@ -12,4 +12,8 @@ description = "Read-only recorded replay with no live provider or mutable contro
 [profiles.PUBLIC_BOUNDED_LIVE]
 version = "p1-3-v2"
 description = "Fixed synthetic scenario with bounded runtime and explicit target control grants."
-fixed_scenarios = ["p1-3-fixed-synthetic"]
+fixed_scenarios = ["p1-3-fixed-synthetic", "p1-5-fixed-synthetic"]
+profile_eligible_resource_domains = ["FILESYSTEM", "PROCESS", "NETWORK", "REPOSITORY", "SCENARIO", "PROVIDER", "TOOL", "SECRET"]
+p1_5_selector_authority_required = true
+p1_5_repository_context = "repository:p1-5-synthetic@1"
+p1_5_scenario_context = "scenario:p1-5-fixed-synthetic@1"

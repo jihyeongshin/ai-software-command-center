@@ -1,0 +1,37 @@
+schema_version = "AISCC-P1-5-TOOL-REGISTRY-V1"
+registry_id = "aiscc-p1-5-tools"
+version = "1"
+default_effect = "DENY"
+
+[tools.synthetic_lookup]
+schema_version = "1"
+dispatcher_version = "synthetic-v1"
+description = "Return one deterministic server-owned synthetic value."
+side_effect_classification = "READ_ONLY"
+allowed_runtime_modes = ["OWNER_SELF_DOGFOOD", "PUBLIC_BOUNDED_LIVE"]
+allowed_profiles = ["fake-openai-responses-v1"]
+allowed_scenarios = ["p1-5-fixed-synthetic"]
+underlying_resource_requirements = []
+timeout_seconds = 2
+retry_maximum = 1
+idempotency_policy = "READ_ONLY_NO_RETRY_AFTER_DISPATCH"
+output_byte_bound = 1024
+enabled = true
+issued_at = "2026-08-28T00:00:00Z"
+
+[tools.synthetic_lookup.output_schema]
+type = "object"
+additionalProperties = false
+required = ["value"]
+
+[tools.synthetic_lookup.output_schema.properties.value]
+type = "string"
+
+[tools.synthetic_lookup.input_schema]
+type = "object"
+additionalProperties = false
+required = ["key"]
+
+[tools.synthetic_lookup.input_schema.properties.key]
+type = "string"
+enum = ["aiscc-fixed-key"]

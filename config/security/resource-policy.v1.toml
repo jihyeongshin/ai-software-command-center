@@ -20,8 +20,11 @@ process = "process:p1-3-synthetic-probe"
 workspace = "workspace:p1-3-synthetic"
 repository = "repository:p1-3-synthetic"
 network = "network:p1-3-internal-fixture"
-provider = "DENY_P1_5_OWNER_MISSING"
-tool = "DENY_P1_5_OWNER_MISSING"
+provider = "EXACT_P1_5_SELECTOR_AND_P1_3_CAPABILITY_REQUIRED"
+tool = "EXACT_P1_5_SELECTOR_AND_P1_3_CAPABILITY_REQUIRED"
+secret = "EXACT_P1_5_SECRET_USE_AND_P1_3_CAPABILITY_REQUIRED"
+p1_5_repository = "repository:p1-5-synthetic@1"
+p1_5_scenario = "scenario:p1-5-fixed-synthetic@1"
 
 [process]
 shell = false

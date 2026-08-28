@@ -77,6 +77,9 @@ class ResourceGrant:
     expires_at: datetime
     revoked: bool
     _issuer_token: object = field(repr=False, compare=False)
+    selector_attestation_ref: str | None = None
+    selector_request: object | None = field(default=None, repr=False, compare=True)
+    operation_fingerprint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

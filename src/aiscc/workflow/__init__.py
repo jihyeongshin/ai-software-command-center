@@ -1,5 +1,6 @@
 from aiscc.workflow.guards import (
     GUARD_OWNER_POLICY,
+    ExecutionRefVerifier,
     FutureOwnerGuardVerifier,
     P1_4GuardAuthority,
     TrustedGuardFact,
@@ -34,6 +35,7 @@ __all__ = [
     "TransitionEvaluation",
     "TransitionRequest",
     "FutureOwnerGuardVerifier",
+    "ExecutionRefVerifier",
     "P1_4GuardAuthority",
     "TrustedGuardFact",
     "WorkRun",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 
 from aiscc.contracts.security import (
@@ -14,7 +15,12 @@ from aiscc.contracts.security import (
 )
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot
 from aiscc.security.action_state import is_action_state_eligible
-from aiscc.security.capability import Capability, CapabilityUse
+from aiscc.security.capability import (
+    Capability,
+    CapabilityConsumeRequest,
+    CapabilityConsumptionReceipt,
+    CapabilityUse,
+)
 from aiscc.security.models import PermissionProfile
 
 _MUTABLE_TARGET_ACTIONS = frozenset(
@@ -71,18 +77,28 @@ def default_profiles() -> dict[str, PermissionProfile]:
                     ResourceDomain.NETWORK,
                     ResourceDomain.REPOSITORY,
                     ResourceDomain.SCENARIO,
+                    ResourceDomain.PROVIDER,
+                    ResourceDomain.TOOL,
+                    ResourceDomain.SECRET,
                 }
             ),
-            frozenset({"p1-3-fixed-synthetic"}),
+            frozenset({"p1-3-fixed-synthetic", "p1-5-fixed-synthetic"}),
         ),
     }
 
 
 class SecurityPolicy:
-    def __init__(self, profiles: dict[str, PermissionProfile]) -> None:
+    def __init__(
+        self,
+        profiles: dict[str, PermissionProfile],
+        *,
+        provider_tool_policy: object | None = None,
+        secret_use_policy: object | None = None,
+    ) -> None:
         self._profiles = dict(profiles)
         self._resource_issuer_token = object()
         self._capability_issuer_token = object()
+        self._receipt_issuer_token = object()
         self._grant_sequence = 0
         self._admission_sequence = 0
         self._capability_sequence = 0
@@ -90,6 +106,9 @@ class SecurityPolicy:
         self._capabilities: dict[str, Capability] = {}
         self._capability_uses: dict[str, int] = {}
         self._revoked_capabilities: set[str] = set()
+        self._consumption_receipts: dict[str, CapabilityConsumptionReceipt] = {}
+        self._provider_tool_policy = provider_tool_policy
+        self._secret_use_policy = secret_use_policy
 
     def issue_resource_grant(
         self,
@@ -102,6 +121,9 @@ class SecurityPolicy:
         action: SecurityActionClass,
         scope: ResourceScope,
         ttl_seconds: int = 30,
+        selector_attestation_ref: str | None = None,
+        selector_request: object | None = None,
+        operation_fingerprint: str | None = None,
         now: datetime | None = None,
     ) -> ResourceGrant | None:
         current_time = now or datetime.now(UTC)
@@ -113,7 +135,17 @@ class SecurityPolicy:
             or profile.version != profile_version
             or action not in profile.actions
             or scope.domain not in profile.resources
-            or not self._scope_is_policy_owned(mode, scenario_id, action, scope)
+            or not self._scope_is_policy_owned(
+                mode,
+                scenario_id,
+                action,
+                scope,
+                principal=principal,
+                run_id=run_id,
+                operation_fingerprint=operation_fingerprint,
+                selector_attestation_ref=selector_attestation_ref,
+                selector_request=selector_request,
+            )
         ):
             return None
         self._grant_sequence += 1
@@ -129,6 +161,9 @@ class SecurityPolicy:
             scope=scope,
             expires_at=current_time + timedelta(seconds=ttl_seconds),
             revoked=False,
+            selector_attestation_ref=selector_attestation_ref,
+            selector_request=selector_request,
+            operation_fingerprint=operation_fingerprint,
             _issuer_token=self._resource_issuer_token,
         )
 
@@ -236,6 +271,9 @@ class SecurityPolicy:
         admitted = self._admissions.get(decision.admission_id)
         if admitted is None or admitted[0] is not decision or admitted[1] != request:
             return None
+        grant = request.resource_grant
+        if grant is None:
+            return None
         self._capability_sequence += 1
         capability = Capability(
             capability_id=f"capability-{self._capability_sequence}",
@@ -249,6 +287,8 @@ class SecurityPolicy:
             scope=request.resource_scope,
             expires_at=current_time + timedelta(seconds=ttl_seconds),
             max_uses=max_uses,
+            selector_attestation_ref=grant.selector_attestation_ref,
+            operation_fingerprint=grant.operation_fingerprint,
             _issuer_token=self._capability_issuer_token,
         )
         self._capabilities[capability.capability_id] = capability
@@ -265,6 +305,8 @@ class SecurityPolicy:
         profile_version: str,
         action: SecurityActionClass,
         scope: ResourceScope,
+        selector_attestation_ref: str | None = None,
+        operation_fingerprint: str | None = None,
         now: datetime | None = None,
     ) -> CapabilityUse:
         capability_id = capability.capability_id if capability is not None else "none"
@@ -300,6 +342,8 @@ class SecurityPolicy:
             scope=scope,
             current_use_count=current_use_count,
             revoked=capability.capability_id in self._revoked_capabilities,
+            selector_attestation_ref=selector_attestation_ref,
+            operation_fingerprint=operation_fingerprint,
             now=now,
         )
         if valid and not is_action_state_eligible(current.state, action):
@@ -321,6 +365,129 @@ class SecurityPolicy:
             reason="CAPABILITY_CONSUMED",
             consumed_use_count=consumed,
             provenance=provenance,
+        )
+
+    def consume_capabilities_atomically(
+        self,
+        requirements: tuple[CapabilityConsumeRequest, ...],
+        *,
+        now: datetime | None = None,
+    ) -> tuple[CapabilityUse, ...]:
+        """Validate every exact capability before consuming any ledger use."""
+        validations: list[tuple[Capability, int, dict[str, str]]] = []
+        for requirement in requirements:
+            capability = requirement.capability
+            if capability is None:
+                return (
+                    CapabilityUse.create(
+                        allowed=False,
+                        reason="CAPABILITY_REQUIRED",
+                        consumed_use_count=0,
+                        provenance={"capability_id": "none"},
+                    ),
+                )
+            use_count = self._capability_uses.get(capability.capability_id, 0)
+            valid, reason = capability.validate(
+                issuer_token=self._capability_issuer_token,
+                registered_capability=self._capabilities.get(capability.capability_id),
+                principal=requirement.principal,
+                current_mode=requirement.current_mode,
+                current=requirement.current,
+                profile_version=requirement.profile_version,
+                action=requirement.action,
+                scope=requirement.scope,
+                current_use_count=use_count,
+                revoked=capability.capability_id in self._revoked_capabilities,
+                selector_attestation_ref=requirement.selector_attestation_ref,
+                operation_fingerprint=requirement.operation_fingerprint,
+                now=now,
+            )
+            if valid and not is_action_state_eligible(
+                requirement.current.state, requirement.action
+            ):
+                valid, reason = False, "ACTION_STATE_NOT_ADMISSIBLE"
+            if not valid:
+                return (
+                    CapabilityUse.create(
+                        allowed=False,
+                        reason=reason,
+                        consumed_use_count=use_count,
+                        provenance={"capability_id": capability.capability_id},
+                    ),
+                )
+            validations.append((capability, use_count, {"capability_id": capability.capability_id}))
+        results: list[CapabilityUse] = []
+        for capability, use_count, provenance in validations:
+            consumed = use_count + 1
+            self._capability_uses[capability.capability_id] = consumed
+            results.append(
+                CapabilityUse.create(
+                    allowed=True,
+                    reason="CAPABILITY_CONSUMED",
+                    consumed_use_count=consumed,
+                    provenance=provenance,
+                )
+            )
+        return tuple(results)
+
+    def consume_capabilities_atomically_with_receipts(
+        self,
+        requirements: tuple[CapabilityConsumeRequest, ...],
+        *,
+        now: datetime | None = None,
+    ) -> tuple[tuple[CapabilityUse, ...], tuple[CapabilityConsumptionReceipt, ...]]:
+        uses = self.consume_capabilities_atomically(requirements, now=now)
+        if len(uses) != len(requirements) or not all(use.allowed for use in uses):
+            return uses, ()
+        issued_at = now or datetime.now(UTC)
+        receipts: list[CapabilityConsumptionReceipt] = []
+        for requirement, use in zip(requirements, uses, strict=True):
+            capability = requirement.capability
+            if capability is None:
+                raise RuntimeError("allowed consumption unexpectedly lacked a capability")
+            receipt = CapabilityConsumptionReceipt(
+                receipt_id=(
+                    f"capability-consumption:{capability.capability_id}:{use.consumed_use_count}"
+                ),
+                capability_id=capability.capability_id,
+                consumed_use_ordinal=use.consumed_use_count,
+                principal=requirement.principal,
+                current_mode=requirement.current_mode,
+                current=requirement.current,
+                profile_version=requirement.profile_version,
+                action=requirement.action,
+                scope=requirement.scope,
+                selector_attestation_ref=requirement.selector_attestation_ref,
+                operation_fingerprint=requirement.operation_fingerprint,
+                issued_at=issued_at,
+                _issuer_token=self._receipt_issuer_token,
+            )
+            self._consumption_receipts[receipt.receipt_id] = receipt
+            receipts.append(receipt)
+        return uses, tuple(receipts)
+
+    def verify_consumption_receipt(
+        self,
+        receipt: CapabilityConsumptionReceipt,
+        requirement: CapabilityConsumeRequest,
+    ) -> bool:
+        capability = requirement.capability
+        return bool(
+            capability is not None
+            and receipt._issuer_token is self._receipt_issuer_token
+            and self._consumption_receipts.get(receipt.receipt_id) is receipt
+            and receipt.capability_id == capability.capability_id
+            and receipt.consumed_use_ordinal > 0
+            and self._capability_uses.get(capability.capability_id, 0)
+            >= receipt.consumed_use_ordinal
+            and receipt.principal == requirement.principal
+            and receipt.current_mode is requirement.current_mode
+            and receipt.current == requirement.current
+            and receipt.profile_version == requirement.profile_version
+            and receipt.action is requirement.action
+            and receipt.scope == requirement.scope
+            and receipt.selector_attestation_ref == requirement.selector_attestation_ref
+            and receipt.operation_fingerprint == requirement.operation_fingerprint
         )
 
     def revoke_capability(self, capability: Capability) -> bool:
@@ -350,17 +517,60 @@ class SecurityPolicy:
             and grant.run_id == request.run_id
             and grant.action is action
             and grant.scope == request.resource_scope
+            and grant.operation_fingerprint
+            == (
+                request.resource_grant.operation_fingerprint
+                if request.resource_grant is not None
+                else None
+            )
         )
 
-    @staticmethod
     def _scope_is_policy_owned(
+        self,
         mode: RuntimeMode,
         scenario_id: str | None,
         action: SecurityActionClass,
         scope: ResourceScope,
+        *,
+        principal: str,
+        run_id: str,
+        operation_fingerprint: str | None,
+        selector_attestation_ref: str | None = None,
+        selector_request: object | None = None,
     ) -> bool:
-        if scope.domain in _P1_5_OWNED_DOMAINS or scope.domain is ResourceDomain.SECRET:
-            return False
+        if scope.domain in _P1_5_OWNED_DOMAINS:
+            verifier = getattr(self._provider_tool_policy, "verify", None)
+            return bool(
+                selector_attestation_ref
+                and selector_request is not None
+                and callable(verifier)
+                and getattr(selector_request, "domain", None) == scope.domain.value
+                and getattr(selector_request, "canonical_resource_identity", None)
+                == scope.resource_id
+                and getattr(selector_request, "principal", None) == principal
+                and getattr(selector_request, "work_run_id", None) == run_id
+                and getattr(selector_request, "runtime_mode", None) is mode
+                and getattr(selector_request, "scenario_id", None) == scenario_id
+                and getattr(selector_request, "operation_fingerprint", None)
+                == operation_fingerprint
+                and verifier(selector_attestation_ref, selector_request)
+            )
+        if scope.domain is ResourceDomain.SECRET:
+            verifier = getattr(self._secret_use_policy, "verify", None)
+            return bool(
+                selector_attestation_ref
+                and selector_request is not None
+                and callable(verifier)
+                and getattr(selector_request, "secret_class", None)
+                and scope.resource_id == _secret_scope_identity(selector_request)
+                and getattr(selector_request, "principal", None) == principal
+                and getattr(selector_request, "work_run_id", None) == run_id
+                and getattr(selector_request, "runtime_mode", None) is mode
+                and getattr(selector_request, "scenario_id", None) == scenario_id
+                and getattr(selector_request, "operation_fingerprint", None)
+                == operation_fingerprint
+                and verifier(selector_attestation_ref, selector_request)
+            )
         if action is SecurityActionClass.SAFETY_CLEANUP_REVOKE_QUARANTINE:
             return (
                 scope.domain in {ResourceDomain.PROCESS, ResourceDomain.NETWORK}
@@ -402,6 +612,16 @@ class SecurityPolicy:
                 and scope.workspace_path is None
                 and scope.network_name is None
             )
+        if scenario_id == "p1-5-fixed-synthetic":
+            if scope.domain is ResourceDomain.REPOSITORY:
+                return scope == ResourceScope(
+                    ResourceDomain.REPOSITORY, "repository:p1-5-synthetic@1"
+                )
+            if scope.domain is ResourceDomain.SCENARIO:
+                return scope == ResourceScope(
+                    ResourceDomain.SCENARIO, "scenario:p1-5-fixed-synthetic@1"
+                )
+            return False
         if scenario_id != "p1-3-fixed-synthetic":
             return False
         if scope.domain is ResourceDomain.PROCESS:
@@ -423,3 +643,9 @@ class SecurityPolicy:
         if scope.domain is ResourceDomain.SCENARIO:
             return scope == ResourceScope(ResourceDomain.SCENARIO, "scenario:p1-3-fixed-synthetic")
         return False
+
+
+def _secret_scope_identity(selector_request: object) -> str:
+    secret_class = str(getattr(selector_request, "secret_class", ""))
+    secret_ref = str(getattr(selector_request, "secret_ref", ""))
+    return f"{secret_class}:{hashlib.sha256(secret_ref.encode()).hexdigest()}"

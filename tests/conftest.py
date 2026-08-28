@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,6 +26,7 @@ BASE_IMAGE = (
     "sha256:0f5b26b9518d002b6173fd61daad821fa340635ebfec5bba471013f9ca114579"
 )
 FIXTURES = Path(__file__).parent / "fixtures"
+sys.path.insert(0, str(FIXTURES / "providers"))
 
 
 class DockerEvidenceObserver:

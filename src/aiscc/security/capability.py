@@ -22,6 +22,8 @@ class Capability:
     scope: ResourceScope
     expires_at: datetime
     max_uses: int
+    selector_attestation_ref: str | None
+    operation_fingerprint: str | None
     _issuer_token: object = field(repr=False, compare=False)
 
     def validate(
@@ -37,6 +39,8 @@ class Capability:
         scope: ResourceScope,
         current_use_count: int,
         revoked: bool,
+        selector_attestation_ref: str | None = None,
+        operation_fingerprint: str | None = None,
         now: datetime | None = None,
     ) -> tuple[bool, str]:
         current_time = now or datetime.now(UTC)
@@ -53,6 +57,14 @@ class Capability:
             (profile_version == self.profile_version, "CAPABILITY_PROFILE_MISMATCH"),
             (action is self.action, "CAPABILITY_ACTION_MISMATCH"),
             (scope == self.scope, "CAPABILITY_RESOURCE_SCOPE_MISMATCH"),
+            (
+                selector_attestation_ref == self.selector_attestation_ref,
+                "CAPABILITY_SELECTOR_ATTESTATION_MISMATCH",
+            ),
+            (
+                operation_fingerprint == self.operation_fingerprint,
+                "CAPABILITY_OPERATION_FINGERPRINT_MISMATCH",
+            ),
         )
         for passed, reason in checks:
             if not passed:
@@ -82,3 +94,33 @@ class CapabilityUse:
             consumed_use_count,
             MappingProxyType(dict(provenance)),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityConsumeRequest:
+    capability: Capability | None
+    principal: str
+    current_mode: RuntimeMode
+    current: WorkflowSnapshot
+    profile_version: str
+    action: SecurityActionClass
+    scope: ResourceScope
+    selector_attestation_ref: str | None = None
+    operation_fingerprint: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityConsumptionReceipt:
+    receipt_id: str
+    capability_id: str
+    consumed_use_ordinal: int
+    principal: str
+    current_mode: RuntimeMode
+    current: WorkflowSnapshot
+    profile_version: str
+    action: SecurityActionClass
+    scope: ResourceScope
+    selector_attestation_ref: str | None
+    operation_fingerprint: str | None
+    issued_at: datetime
+    _issuer_token: object = field(repr=False, compare=False)

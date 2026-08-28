@@ -391,3 +391,56 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-6 remains sole evidence admission owner;
   - P1-7/P1-8 remain separate.
 - supersession_rule: changing exact ExecutionStatus, provider/tool/secret authority ownership, unknown-outcome retry semantics, Responses V1 continuation authority, Replay zero-execution, or P1-6 non-substitution requires a separate Human-accepted P1-5 design baseline update.
+
+## AISCC-P1-5-PROVIDER-TOOL-EXECUTION-RUNTIME-V1
+
+- decision: Human-accepted P1-5 provider/tool execution design을 PostgreSQL-backed durable execution runtime으로 구현한 final 42-path candidate를 canonical implementation baseline으로 채택한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - final Executor Task: `20260828_2215_aiscc-p1-5-missing-provider-usage-token-accounting-rework-1`
+  - final pre-terminal-closure HEAD: `15036a5ff316fccbd6d891b9ce43563de056e342`
+  - Human P1-5 runtime final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260828_2329_aiscc-p1-5-provider-tool-execution-runtime-final-acceptance-1.cycle.md`
+- implementation_status: `IMPLEMENTED / ACCEPTED`
+- final candidate:
+  - path count: `42`
+  - aggregate SHA-256: `ffeb5ba70649c564c482c2cff79ce8e2b0a462f811d8e03f2c1096f170bd39d6`
+- accepted execution authority:
+  - exact four-value `ExecutionStatus`;
+  - execution status/events remain separate from P1-4 WorkflowState/state_version;
+  - PostgreSQL restart-durable ExecutionAttempt/Operation/event projections;
+  - server-owned ProviderProfile/ToolRegistry;
+  - P1-5 selector authority + P1-3 ResourceGrant/SecurityAdmissionDecision/Capability composition;
+  - exact consumed-authority secret-resolution lease;
+  - exact Tool underlying-resource requirements;
+  - durable bounded AgentExecutionService;
+  - per-side-effect WorkRun/state-version freshness;
+  - fail-closed workflow-left-running terminalization;
+  - local-history-only Responses continuation;
+  - unknown-outcome no-blind-retry;
+  - conservative missing-usage token accounting;
+  - Replay provider/tool/process/network/secret execution exactly zero.
+- Responses V1:
+  - official OpenAI Python SDK;
+  - acceptance uses local deterministic fake endpoint only;
+  - `background=false`, `stream=false`, `store=false`, `parallel_tool_calls=false`, `truncation=disabled`;
+  - provider Conversation and `previous_response_id` are not execution authority;
+  - durable local private protocol state is continuation authority.
+- Public Live acceptance effect:
+  - fixed synthetic repository/version + scenario + server profile/tool registry positive local proof passed;
+  - this does not release Public Bounded Live;
+  - current release status remains `NOT_RELEASED`.
+- verification:
+  - unit + integration: `145 PASS`;
+  - P1-5 persistence/accounting: `23 PASS`;
+  - P1-5 runtime: `10 PASS`;
+  - P1-3 Docker runtime regression: `10 PASS`;
+  - PostgreSQL `17.6`;
+  - Alembic head `20260828_0002`;
+  - real provider calls `0`;
+  - final Task-owned residue `none`.
+- evidence handoff:
+  - P1-5 producer/output/submission refs are immutable producer authority only;
+  - `AgentOutputRef/ToolOutputRef/ExecutionArtifactRef/ExecutionSubmissionRef != EvidenceCandidate admission != AdmittedEvidence`;
+  - P1-6 is the sole Evidence Admission owner.
+- supersession_rule: weakening durable bounds, state/version freshness, P1-3 security mediation, secret lease, exact tool resource binding, Replay zero-execution, unknown-outcome no-blind-retry, or producer-ref/evidence non-substitution requires a separate Human-accepted P1-5 baseline update.

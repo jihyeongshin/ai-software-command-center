@@ -69,6 +69,10 @@ class FutureOwnerGuardVerifier(Protocol):
     def recognizes(self, fact: TrustedGuardFact) -> bool: ...
 
 
+class ExecutionRefVerifier(Protocol):
+    def verify(self, ref: object, request: TransitionRequest, guard_id: GuardId) -> bool: ...
+
+
 class P1_4GuardAuthority:
     """Issues only P1-4-owned facts; future-owner guards are never mintable here."""
 
@@ -111,6 +115,26 @@ class P1_4GuardAuthority:
 
     def recognizes(self, fact: TrustedGuardFact) -> bool:
         return fact._issuer_token is self._issuer_token
+
+    def issue_from_execution_ref(
+        self,
+        *,
+        guard_id: GuardId,
+        execution_ref: object,
+        verifier: ExecutionRefVerifier,
+        request: TransitionRequest,
+    ) -> TrustedGuardFact:
+        if guard_id not in {GuardId.G_EXECUTION_STARTED, GuardId.G_EXECUTOR_SUBMISSION}:
+            raise ValueError("only P1-5 execution refs use this validation path")
+        if not verifier.verify(execution_ref, request, guard_id):
+            raise ValueError("unrecognized or mismatched P1-5 execution ref")
+        return self.issue(
+            guard_id=guard_id,
+            satisfied=True,
+            reason="P1_5_EXECUTION_REF_VERIFIED",
+            authority_ref=f"p1-5:{type(execution_ref).__name__}",
+            request=request,
+        )
 
 
 def required_bound_refs(guard_id: GuardId, request: TransitionRequest) -> tuple[str, ...]:
