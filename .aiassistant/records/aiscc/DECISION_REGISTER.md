@@ -144,44 +144,67 @@
 
 ## AISCC-P1-2-SECURITY-SANDBOX-RUNTIME-BOUNDARY-V1
 
-- decision: AISCC security/runtime boundary는 `SecurityAdmissionDecision = ALLOW | DENY`, versioned RuntimeMode profiles, deny-by-default resource admission, exact action-class × current `WorkflowState` eligibility, state/version-bound capability invalidation, exact public requester/session→target-run cancel authorization, secret/isolation/cleanup, bounded timeout/retry/cancel, application idempotency/abuse/budget와 Replay failure-domain separation을 canonical design으로 사용한다.
+- decision: AISCC security/runtime boundary는 RuntimeMode별 permission profile, deny-by-default security admission, exact action-class × WorkflowState eligibility, state/version-bound capability freshness, secret/run isolation, bounded timeout/retry/cancel, idempotency/abuse/budget admission, public cancel target authorization, Replay failure-domain separation을 canonical design으로 사용한다.
 - decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - provenance:
   - `20260827_1115_aiscc-security-sandbox-runtime-boundary-design-1`
   - `20260827_1247_aiscc-p1-2-security-action-state-and-public-cancel-authorization-alignment-rework-1`
+  - `20260827_1247_aiscc-p1-2-security-action-state-and-cancel-authorization-hold-1.cycle.md`
   - Human P1-2 final review `ACCEPTED`
   - `.aiassistant/records/aiscc/cycles/20260827_1342_aiscc-p1-2-security-sandbox-runtime-boundary-final-acceptance-1.cycle.md`
 - implementation_status: `NOT_IMPLEMENTED`
-- verification_status: semantic design + Human acceptance complete; safeguard runtime evidence deferred to P1-3
+- verification_status: semantic design + Human acceptance complete; safeguard runtime evidence `DEFERRED_TO_P1_3`
 - canonical owner: `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
-- authority invariants:
-  - `SecurityAdmissionDecision = ALLOW | DENY`
-  - `fresh state_version != action admissible in current WorkflowState`
-  - `PUBLIC_RUN_OR_REPLAY_VISIBILITY != PUBLIC_CANCEL_AUTHORITY`
-  - `RUN_ID_KNOWLEDGE != TARGET_RUN_CONTROL_AUTHORIZATION`
-  - `LIVE_UNAVAILABLE_OR_BUDGET_EXHAUSTED → RECORDED_REPLAY_REMAINS_AVAILABLE`
-- implementation handoff: P1-3 is the first safeguard implementation + runtime proof owner.
-- release handoff: P3-3 owns current provider/configuration and release-time reverification, not first safeguard implementation.
-- supersession_rule: permission/state/cancel/secret/isolation/budget/fallback semantics를 변경하려면 별도 security baseline Task와 Human acceptance가 필요하다.
+- security decision: `SecurityAdmissionDecision = ALLOW | DENY`; unknown/ambiguous permission fails closed.
+- action/state invariant: fresh `state_version` is necessary but not sufficient; action class must be admissible in the authoritative current `WorkflowState`.
+- capability invariant: state/version change invalidates prior permission; normal execution/provider capability cannot remain usable in terminal state solely because its lease has not expired.
+- cancel invariant: public run/replay visibility or run ID knowledge does not grant cancel authority; public cancel requires exact requester/session/principal → target-run control authorization and fresh target state/version.
+- public Live invariant: fixed synthetic repository + allowlisted scenario + server-fixed provider/model + bounded calls/retry/time/budget; no free-form task/external repo/upload/arbitrary shell/network/owner workspace access.
+- fallback invariant: `LIVE_UNAVAILABLE_OR_BUDGET_EXHAUSTED → RECORDED_REPLAY_REMAINS_AVAILABLE`.
+- owner / future task:
+  - `P1-3 Security / Runtime Safeguard Implementation and Verification` = first safeguard implementation + runtime proof
+  - `P3-3 Public Release and Competition Submission` = current provider/release configuration reverification
+- supersession_rule: weakening public hard prohibitions, fail-closed policy, secret/run isolation, action-state eligibility, cancel authorization, budget/fallback or P1-3-before-release invariant requires a separate Human-accepted security baseline change.
 
 ## AISCC-P1-3-RUNTIME-SUBSTRATE-V1
 
-- decision: AISCC P1-3 application/runtime baseline은 CPython 3.12.x, FastAPI/Pydantic v2/Uvicorn HTTP boundary, uv/Hatchling build, exact `src/aiscc/`·`tests/` layout과 Docker Engine Linux containers + Compose v2 sandbox/evidence substrate를 사용한다.
+- decision: AISCC executable application/runtime substrate는 Python CPython `3.12.x` (`>=3.12,<3.13`), FastAPI/Pydantic v2/Uvicorn HTTP boundary, `uv` + Hatchling + `pyproject.toml` + `uv.lock`, canonical roots `src/aiscc/` and `tests/`, versioned non-secret security config `config/security/`, Docker Engine Linux containers + Docker Compose v2 sandbox/evidence substrate를 사용한다.
 - decision_status: `HUMAN_PROVIDED / ACCEPTED`
 - provenance:
+  - P1-3 preflight blocker: `BLOCKED_RUNTIME_SUBSTRATE_DECISION_REQUIRED`
+  - blocker base commit: `4ec8bf49330128f5fccb70d94a863dc57f9984d2`
+  - runtime-substrate design provenance commit: `95de4ae9d5ec36bed8636b608dc5729b47e815fe`
   - `20260827_1442_aiscc-p1-3-runtime-substrate-baseline-design-with-blocker-provenance-commit-1`
-  - Human Runtime Substrate final review `ACCEPTED`
+  - Human Runtime Substrate final review: `ACCEPTED`
   - `.aiassistant/records/aiscc/cycles/20260827_1513_aiscc-p1-3-runtime-substrate-baseline-final-acceptance-1.cycle.md`
+- canonical owner: `.aiassistant/rules/AISCC_RUNTIME_SUBSTRATE.md`
 - implementation_status: `NOT_STARTED`
 - runtime_security_proof: `NOT_EXECUTED`
-- canonical owner: `.aiassistant/rules/AISCC_RUNTIME_SUBSTRATE.md`
-- exact bootstrap boundary: canonical owner section 11 allowlist only; `workflow`, `providers`, `persistence`, migrations, deployment와 actual public scenario corpus 제외
-- authority invariants:
-  - `SecurityAdmissionDecision != TransitionDecision`
-  - `security test state fixture != P1-4 workflow kernel`
-  - Docker availability/container strategy `!=` isolation proof
-- implementation handoff: P1-3 may prepare the accepted Python/uv environment, create only the exact bootstrap and implement/verify P1-2 safeguards.
-- supersession_rule: runtime major/minor, framework major boundary, build/package strategy 또는 sandbox substrate 변경은 separate Human-accepted baseline update가 필요하다.
+- primary runtime: `Python / CPython 3.12.x`
+- HTTP/input-output boundary: `FastAPI + Pydantic v2 + Uvicorn`; framework does not own workflow/security authority.
+- package/build: `uv`, Hatchling, root `pyproject.toml`, root `uv.lock`, exact 3.12 patch pinned by authorized implementation Task.
+- source/test roots:
+  - `src/aiscc/`
+  - `tests/`
+  - `config/security/`
+  - `containers/p1_3/`
+- security/runtime authority:
+  - `src/aiscc/security/` owns `SecurityAdmissionDecision` policy;
+  - `src/aiscc/runtime/` executes admitted capabilities and cleanup;
+  - `src/aiscc/workflow/` remains P1-4-only;
+  - `src/aiscc/providers/` remains P1-5-only.
+- sandbox/evidence: Docker Engine Linux containers + Docker Compose v2; actual isolation/network/cleanup proof remains P1-3 runtime evidence.
+- persistence direction: PostgreSQL + SQLAlchemy 2 async/asyncpg + Alembic; schema/migrations are not authorized by this baseline or P1-3 bootstrap.
+- secret boundary: configuration/domain carries opaque `secret_ref`/capability reference only; no committed credential.
+- bootstrap authority: section 11 of `AISCC_RUNTIME_SUBSTRATE.md` is the exact Human-accepted P1-3 creation allowlist.
+- version/dependency authority:
+  - Python major/minor, framework major boundary, package/build strategy, sandbox strategy, persistence-direction changes require separate Human-accepted baseline update;
+  - exact Python `3.12.x` patch and compatible dependency patch/minor may be resolved by an explicitly authorized implementation/maintenance Task with lock/evidence provenance.
+- non-substitution:
+  - `runtime substrate accepted != P1-3 safeguard accepted`;
+  - `Docker installed != isolation proof`;
+  - `security test fixture != P1-4 state-machine kernel`.
+- supersession_rule: a load-bearing change to runtime family, build/package authority, canonical roots, sandbox/evidence strategy or the P1-3/P1-4/P1-5 ownership boundary requires a separate Human-accepted baseline.
 
 ## AISCC-P1-SAFEGUARD-BEFORE-RELEASE-V1
 
@@ -210,3 +233,56 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - supersession_rule: operational environment 변경 시 해당 Task가 새 root/repository/metadata boundary를 명시해야 한다.
 
 이 environment convention은 product architecture 결정이 아니다.
+
+## AISCC-P1-3-SECURITY-RUNTIME-SAFEGUARDS-V1
+
+- decision: P1-2의 accepted security/runtime boundary를 Python/Docker 기반 executable safeguard로 구현하고 non-substitutable runtime proof를 완료한 최종 P1-3 candidate를 canonical implementation baseline으로 채택한다.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - runtime substrate: `AISCC-P1-3-RUNTIME-SUBSTRATE-V1`
+  - final Executor Task: `20260827_1941_aiscc-p1-3-runtime-proof-assertion-coverage-rework-1`
+  - final pre-closure HEAD: `575fb3c4623a28b8537d15c8b34b838982f96ce2`
+  - Human P1-3 final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260827_1941_aiscc-p1-3-security-runtime-safeguard-final-acceptance-1.cycle.md`
+- implementation_status: `IMPLEMENTED / ACCEPTED`
+- final candidate:
+  - path count: `55`
+  - aggregate SHA-256: `4a9f49a70bbe6cc628a9bc9e6612d07b724876beaf3fd0e672b9815343018c4c`
+- static/targeted verification:
+  - uv build: `PASS`
+  - Ruff: `PASS`
+  - mypy strict: `PASS`
+  - unit + integration: `26 PASS`
+- runtime verification:
+  - Docker health: `PASS`
+  - runtime security tests: `10 PASS`
+  - mandatory proof classes: `8 / 8 EXECUTED_PASS`
+  - final container/network residue: `none`
+- accepted security properties:
+  - fail-closed requester/task/resource/limit/budget/idempotency authority;
+  - exact action × WorkflowState policy;
+  - state/version/RuntimeMode-bound capability lifetime;
+  - typed exact resource grants;
+  - public cancel target authorization and idempotency;
+  - capability-gated process/Docker/network side effects;
+  - capability-gated product Docker reads/cleanup;
+  - secret non-exposure;
+  - Docker filesystem/process isolation;
+  - default network deny + exact internal allow;
+  - bounded timeout/retry/cancel;
+  - application idempotency/abuse/budget;
+  - cleanup/residue/quarantine;
+  - Replay independence from simulated Live/provider/budget failure.
+- authority boundary:
+  - `SecurityAdmissionDecision != TransitionDecision`;
+  - P1-3 `WorkflowSnapshot` fixtures are not authoritative P1-4 `WorkRun`;
+  - caller-created authority values do not become trusted System evidence merely by being typed.
+- release effect:
+  - `NO_PUBLIC_BOUNDED_LIVE_RELEASE BEFORE P1 security safeguard acceptance` prerequisite is now satisfied;
+  - Public Bounded Live itself remains `NOT_RELEASED`.
+- owner / future task:
+  - P1-4 owns authoritative WorkRun/state/version/TransitionDecision;
+  - P1-6 owns evidence admission;
+  - P1-7 owns Human gate/result/Judgment;
+  - P1-5 owns provider/tool execution.
+- supersession_rule: weakening fail-closed admission, RuntimeMode/state-version capability binding, sandbox isolation, public cancel authority, proof non-substitution or P1-4/P1-5 owner separation requires a separate Human-accepted security baseline update.

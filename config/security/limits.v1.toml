@@ -1,0 +1,15 @@
+schema_version = "AISCC-P1-3-LIMITS-V1"
+unknown_policy_effect = "DENY"
+
+[public_bounded_live]
+timeout_seconds = 10
+max_attempts = 2
+max_concurrent = 1
+pids_limit = 64
+memory = "128m"
+cpus = "0.50"
+budget_units = 2
+
+[cleanup]
+attempts = 1
+residue_effect = "QUARANTINE"

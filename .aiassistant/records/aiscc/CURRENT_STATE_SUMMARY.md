@@ -17,7 +17,8 @@
 | P0-5 First Project Source Mirror v1 | `ACCEPTED / CLOSED` |
 | P1-1 Core Domain / State Machine Design | `ACCEPTED / CLOSED` |
 | P1-2 Security / Sandbox / Runtime Boundary Design | `ACCEPTED / CLOSED` |
-| P1-3 Security / Runtime Safeguard Implementation and Verification | `READY / NOT_EXECUTED` |
+| P1-3 Security / Runtime Safeguard Implementation and Verification | `ACCEPTED / CLOSED` |
+| P1-4 Explicit State Machine Kernel Implementation | `READY / NOT_STARTED` |
 
 ## P0-4 provenance
 
@@ -102,7 +103,7 @@ Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260827_1115_aiscc-p1-1-core-domain-state-machine-design-final-acceptance-1.cycle.md`
 
-## P1-2 accepted design baseline
+## P1-2 accepted security baseline
 
 Human final review:
 
@@ -115,41 +116,77 @@ Canonical owner:
 
 - `.aiassistant/rules/AISCC_SECURITY_SANDBOX.md`
 
+Implementation/runtime security proof remains `NOT_EXECUTED`.
+
 Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260827_1342_aiscc-p1-2-security-sandbox-runtime-boundary-final-acceptance-1.cycle.md`
 
-P1-2 implementation/runtime proof remains `NOT_EXECUTED`. Public bounded Live release remains `BLOCKED` until P1-3 safeguard implementation and applicable verification are Human-accepted.
-
-## accepted P1-3 runtime substrate baseline
+## P1-3 terminal safeguard implementation
 
 Human final review:
 
 ```text
-AISCC-P1-3-RUNTIME-SUBSTRATE-V1
-HUMAN_PROVIDED / ACCEPTED
+HUMAN_PROVIDED
+P1-3: ACCEPTED / CLOSED
 ```
 
-Canonical owner:
+Accepted runtime substrate:
 
 - `.aiassistant/rules/AISCC_RUNTIME_SUBSTRATE.md`
+- `AISCC-P1-3-RUNTIME-SUBSTRATE-V1`
+
+Final accepted implementation candidate:
+
+```text
+path count:
+55
+
+aggregate SHA-256:
+4a9f49a70bbe6cc628a9bc9e6612d07b724876beaf3fd0e672b9815343018c4c
+```
+
+Accepted verification:
+
+```text
+uv build / Ruff / mypy:
+PASS
+
+unit + integration:
+26 PASS
+
+Docker health:
+PASS
+
+runtime security:
+10 PASS
+
+mandatory runtime proof classes:
+8 / 8 EXECUTED_PASS
+
+final P1-3 Docker residue:
+none
+```
 
 Terminal Cycle:
 
-`.aiassistant/records/aiscc/cycles/20260827_1513_aiscc-p1-3-runtime-substrate-baseline-final-acceptance-1.cycle.md`
+`.aiassistant/records/aiscc/cycles/20260827_1941_aiscc-p1-3-security-runtime-safeguard-final-acceptance-1.cycle.md`
 
-The runtime-substrate blocker is resolved. P1-3 safeguard implementation is `READY / NOT_STARTED`; runtime proof is `NOT_EXECUTED`. P1-4 remains `NOT_STARTED`.
+P1-3 security/runtime implementation is now canonical after terminal Git persistence.
 
 ## blockers and next action
 
-- P0 blocker: `none`
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
+- P1-3: `ACCEPTED / CLOSED`
 - P1-3 runtime substrate: `HUMAN_PROVIDED / ACCEPTED`
-- P1-3 safeguard implementation: `READY / TASK_CONTRACT_ISSUED / NOT_EXECUTED`
-- previous runtime-substrate blocker: `RESOLVED`; safeguard implementation did not start in the blocked attempt
-- current execution authority: `20260827_1513_aiscc-p1-3-security-runtime-safeguard-implementation-with-substrate-closure-and-environment-preparation-1`
-- public bounded Live release: `BLOCKED` until P1-3 safeguard implementation and applicable verification are accepted
+- P1-3 mandatory runtime evidence: `8 / 8 EXECUTED_PASS`
+- P1 security safeguard release prerequisite: `SATISFIED`
+- Public Bounded Live: `NOT_RELEASED`
+- P1-4: `READY / NOT_STARTED`
+- next Executor Task must first Git-persist the P1-3 terminal Cycle/state plus the exact accepted 55-path implementation candidate
+- then P1-4 may implement the explicit authoritative state-machine kernel
+- P1-5 and later owner scopes remain `NOT_STARTED`
 
 ## non-substitution statement
 

@@ -1,0 +1,35 @@
+schema_version = "AISCC-P1-3-RESOURCE-POLICY-V1"
+default_effect = "DENY"
+grant_version = "resource-grant-v1"
+capability_profile_version = "p1-3-v2"
+
+[filesystem]
+workspace_mount = "/workspace"
+mount_mode = "read-only"
+temporary_mount = "/tmp"
+temporary_mode = "tmpfs"
+
+[network]
+default = "none"
+allowlisted_runtime = "internal-fixture-network-only"
+public_egress = false
+
+[public_live]
+scenario = "p1-3-fixed-synthetic"
+process = "process:p1-3-synthetic-probe"
+workspace = "workspace:p1-3-synthetic"
+repository = "repository:p1-3-synthetic"
+network = "network:p1-3-internal-fixture"
+provider = "DENY_P1_5_OWNER_MISSING"
+tool = "DENY_P1_5_OWNER_MISSING"
+
+[process]
+shell = false
+run_as = "65532:65532"
+capabilities = "drop-all"
+no_new_privileges = true
+
+[secret]
+injection = false
+persistence = false
+logs = false

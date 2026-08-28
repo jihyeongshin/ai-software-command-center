@@ -1,0 +1,15 @@
+schema_version = "AISCC-P1-3-PERMISSION-PROFILES-V1"
+default_effect = "DENY"
+
+[profiles.OWNER_SELF_DOGFOOD]
+version = "p1-3-v2"
+description = "Owner-only profile; action-state and all independent guards still apply."
+
+[profiles.PUBLIC_RECORDED_REPLAY]
+version = "p1-3-v2"
+description = "Read-only recorded replay with no live provider or mutable control authority."
+
+[profiles.PUBLIC_BOUNDED_LIVE]
+version = "p1-3-v2"
+description = "Fixed synthetic scenario with bounded runtime and explicit target control grants."
+fixed_scenarios = ["p1-3-fixed-synthetic"]
