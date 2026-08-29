@@ -18,12 +18,13 @@ P1-4 Explicit State Machine Kernel Implementation → ACCEPTED / CLOSED
 P1-5 Provider / Tool Execution Design → ACCEPTED / CLOSED
 P1-5 Provider / Tool Execution Runtime → ACCEPTED / CLOSED
 P1-6 Evidence Admission Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-6 Evidence Admission Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
 ```
 
 ## canonical queue
 
-1. `P1-6` — Evidence Admission
-2. `P1-7` — Human Gate and Judgment
+1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
+2. `P1-7` — Human Gate and Judgment (`CURRENT NEXT PHASE / NOT_STARTED`)
 3. `P1-8` — Project Memory and Cycle Admission
 4. `P2-1` — Command Center Web UI
 5. `P2-2` — Synthetic Demo Repository
@@ -86,25 +87,25 @@ PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 ```
 
-P1-6/P1-7/P1-8 and demo/release verification remain required.
+P1-7/P1-8 and demo/release verification remain required. P1-6 is `ACCEPTED / CLOSED`.
 
 ## current next action
 
 ```text
 phase:
-P1-6
+P1-7
 
 title:
-Evidence Admission
+Human Gate and Judgment
 
 status:
-READY / IMPLEMENTATION_AND_RUNTIME_VERIFICATION
+NOT_STARTED / READY_FOR_AUTHORITY_DESIGN
 
 first subtask:
-Evidence Admission domain/persistence/authority implementation
+HumanGate / HumanResult / Judgment authority contract design
 
 pre-step:
-persist accepted P1-6 design + terminal Cycle/state in one local commit before runtime source mutation
+preserve accepted P1-1/P1-4/P1-6 owner boundaries; design before runtime implementation
 ```
 
 ## P1-6 outer authority already inherited
@@ -137,11 +138,23 @@ identity, checkpoint-specific applicability/completeness, fail-closed candidate 
 checkpoint-bound `G_EVIDENCE`, direct/P1-7 Human producer separation, supplemental non-authority,
 PostgreSQL durability/concurrency/restart, and sensitive evidence export rules.
 
-## current P1-6 runtime action
+## P1-6 runtime terminal state
 
 ```text
-P1-6 Evidence Admission Implementation + Runtime Verification
+P1-6 Evidence Admission Runtime
+HUMAN_PROVIDED / ACCEPTED / CLOSED
+
+runtime acceptance commit:
+f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e
+
+terminal Cycle:
+20260829_1920_aiscc-p1-6-evidence-admission-runtime-final-acceptance-1.cycle.md
 ```
 
-The runtime output is a review candidate only. Do not start P1-7 before separate P1-6 runtime Human
-acceptance. P1-7/P1-8 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
+## current P1-7 action
+
+P1-7 Human Gate and Judgment is the current next phase but remains `NOT_STARTED`. It must begin with
+an exact HumanGate/HumanResult/Judgment authority design before any runtime implementation. Preserve
+`HumanResult != Judgment`, `HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7`, and
+`P1-6 G_EVIDENCE != G_HUMAN_* != G_JUDGMENT_*`. P1-8 remains `NOT_STARTED`; Public Bounded Live
+remains `NOT_RELEASED`.

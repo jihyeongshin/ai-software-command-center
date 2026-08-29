@@ -21,7 +21,9 @@
 | P1-4 Explicit State Machine Kernel Implementation | `ACCEPTED / CLOSED` |
 | P1-5 Agent Provider and Tool Execution | `ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-6 Evidence Admission Runtime | `NOT_STARTED` |
+| P1-6 Evidence Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-7 Human Gate and Judgment | `NOT_STARTED / CURRENT NEXT PHASE` |
+| P1-8 Project Memory and Cycle Admission | `NOT_STARTED` |
 
 ## P0-4 provenance
 
@@ -413,7 +415,70 @@ Terminal Cycle:
 `.aiassistant/records/aiscc/cycles/20260829_1241_aiscc-p1-6-evidence-admission-design-final-acceptance-1.cycle.md`
 
 P1-6 runtime implementation and runtime verification were `NOT_STARTED` at design judgment time.
-They are the current Executor action and remain subject to separate Human final review.
+Their later terminal runtime state is recorded below.
+
+## P1-6 terminal evidence admission runtime
+
+Human final runtime review:
+
+```text
+HUMAN_PROVIDED
+P1-6 Evidence Admission Runtime: ACCEPTED / CLOSED
+```
+
+Final accepted implementation candidate:
+
+```text
+path count:
+21
+
+aggregate SHA-256:
+a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9
+```
+
+P1-6 runtime acceptance commit:
+
+```text
+f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e
+```
+
+Accepted authority boundary:
+
+```text
+EvidenceCandidate != AdmittedEvidence
+AdmittedEvidenceRef != G_EVIDENCE
+EvidenceSetSatisfactionAttestation != TransitionDecision
+HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7
+P1-6 owns only the exact G_EVIDENCE fact/attestation
+P1-4 remains the WorkflowState/TransitionDecision mutation owner
+P1-7 remains the HumanGate/HumanResult/Judgment owner
+```
+
+Accepted verification:
+
+```text
+unique targeted/regression total:
+132 PASS
+
+PostgreSQL:
+17.6
+
+empty DB -> migration head:
+PASS
+
+20260828_0002 -> migration head:
+PASS
+
+real provider calls:
+0
+```
+
+Terminal P1-6 runtime Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260829_1920_aiscc-p1-6-evidence-admission-runtime-final-acceptance-1.cycle.md`
+
+P1-7 Human Gate and Judgment is the current next phase but remains `NOT_STARTED`.
+P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
 
 ## blockers and next action
 
@@ -427,9 +492,12 @@ They are the current Executor action and remain subject to separate Human final 
 - Public Bounded Live: `NOT_RELEASED`
 - P1-6 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-6 design: `0d9d4c194efda37f100c6183d1a7e88e1a09fe073dc3a37bbb5a3e1cd577e463`
-- P1-6 Runtime: `NOT_STARTED` before the current implementation stage
-- current next action: `P1-6 Evidence Admission Implementation + Runtime Verification`
-- P1-7/P1-8 remain `NOT_STARTED`
+- P1-6 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted P1-6 runtime: `21 paths / a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9`
+- P1-6 runtime acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
+- current next action: `P1-7 Human Gate and Judgment authority design`
+- P1-7: `NOT_STARTED / CURRENT NEXT PHASE`
+- P1-8: `NOT_STARTED`
 
 ## non-substitution statement
 
@@ -438,7 +506,6 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- P1-6 evidence admission implementation
 - P1-7 Human/Judgment implementation
 - P1-8 Cycle/project-memory implementation
 - public deployment

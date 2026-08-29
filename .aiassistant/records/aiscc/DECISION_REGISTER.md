@@ -475,6 +475,51 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-6 does not create HumanGate, HumanResult, Judgment, `G_HUMAN_*`, or `G_JUDGMENT_*`.
 - supplemental boundary: unrequired material may remain candidate/provenance only and creates no `EvidenceRequirement`, `AdmittedEvidence`, satisfaction mapping, set/root contribution, or `G_EVIDENCE` authority.
 - transition boundary: P1-4 remains the exact WorkflowState, TransitionDecision, and atomic mutation owner; P1-6 owns only evidence admission and owner-bound `G_EVIDENCE` facts.
-- runtime/release effect: P1-6 runtime remains unaccepted until separate implementation evidence and Human final review; P1-7/P1-8 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
-- owner / next task: `P1-6 Evidence Admission Implementation + Runtime Verification`.
+- runtime/release effect: P1-6 runtime is separately accepted and closed in `AISCC-P1-6-EVIDENCE-ADMISSION-RUNTIME-V1`; P1-7/P1-8 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
+- owner / next task: `P1-7 Human Gate and Judgment` authority design before runtime implementation.
 - supersession_rule: changing exact profiles, checkpoint authority/applicability, evidence/guard non-substitution, direct/P1-7 Human producer separation, supplemental non-authority, or transition-owner separation requires a separate Human-accepted P1-6 design baseline update.
+
+## AISCC-P1-6-EVIDENCE-ADMISSION-RUNTIME-V1
+
+- decision: Adopt the exact Human-reviewed 21-path P1-6 Evidence Admission runtime as the canonical implementation baseline.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - final Executor rework Task: `20260829_1617_aiscc-p1-6-authoritative-workrun-admission-freshness-rework-1`
+  - accepted design terminal commit: `192e223854a02293809cf6675e3a329e099e628d`
+  - runtime acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
+  - Human P1-6 runtime final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260829_1920_aiscc-p1-6-evidence-admission-runtime-final-acceptance-1.cycle.md`
+- implementation_status: `IMPLEMENTED / ACCEPTED / CLOSED`
+- verification_status: `ACCEPTED / CLOSED`
+- final candidate:
+  - path count: `21`
+  - aggregate SHA-256: `a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9`
+- accepted evidence authority:
+  - PostgreSQL durable candidates, requests, evaluations, decisions, admitted mappings, set evaluations, attestations, direct-Human ingress, and authority events;
+  - System/TaskContract-owned EvidenceCheckpoint and checkpoint-specific Requirement applicability;
+  - finite reuse maximum with concurrency and restart preservation;
+  - revocation/supersession/correction invalidation across the complete authority revision;
+  - authoritative current WorkRun TaskContract/state/state_version freshness under the shared P1-4/P1-6 run serialization boundary;
+  - exact checkpoint/state/version/target-use/root-bound `G_EVIDENCE` attestation.
+- authority invariants:
+  - `EvidenceCandidate != AdmittedEvidence`;
+  - `AdmittedEvidenceRef != G_EVIDENCE`;
+  - `EvidenceSetSatisfactionAttestation != TransitionDecision`;
+  - `HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7`;
+  - P1-6 owns only the exact `G_EVIDENCE` fact/attestation;
+  - P1-4 retains WorkflowState/TransitionDecision mutation ownership;
+  - P1-7 retains HumanGate/HumanResult/Judgment and Human/Judgment guard ownership.
+- verification:
+  - unique targeted/regression total: `132 PASS`;
+  - P1-4 regression: `48 PASS`;
+  - P1-5 unit: `43 PASS`;
+  - P1-5 integration: `28 PASS`;
+  - PostgreSQL: `17.6`;
+  - empty DB to migration head: `PASS`;
+  - `20260828_0002` to migration head: `PASS`;
+  - real provider/external network/credentialed external actions: `0`.
+- release/next-phase effect:
+  - P1-7 Human Gate and Judgment is the current next phase but remains `NOT_STARTED`;
+  - P1-8 remains `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: weakening evidence/admission/attestation non-substitution, checkpoint binding, WorkRun freshness, P1-4 synchronization, Human producer separation, reuse/revocation authority, or restart durability requires a separate Human-accepted P1-6 baseline update.
