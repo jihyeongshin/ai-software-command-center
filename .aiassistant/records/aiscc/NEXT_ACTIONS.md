@@ -17,6 +17,7 @@ P1-3 Security / Runtime Safeguard Implementation and Verification → ACCEPTED /
 P1-4 Explicit State Machine Kernel Implementation → ACCEPTED / CLOSED
 P1-5 Provider / Tool Execution Design → ACCEPTED / CLOSED
 P1-5 Provider / Tool Execution Runtime → ACCEPTED / CLOSED
+P1-6 Evidence Admission Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
 ```
 
 ## canonical queue
@@ -97,13 +98,13 @@ title:
 Evidence Admission
 
 status:
-READY / DESIGN_FREEZE_REQUIRED
+READY / IMPLEMENTATION_AND_RUNTIME_VERIFICATION
 
 first subtask:
-Evidence Admission Contract Design Freeze
+Evidence Admission domain/persistence/authority implementation
 
 pre-step:
-persist final 42-path P1-5 runtime candidate + P1-5 terminal Cycle/state in one local commit
+persist accepted P1-6 design + terminal Cycle/state in one local commit before runtime source mutation
 ```
 
 ## P1-6 outer authority already inherited
@@ -120,33 +121,27 @@ P1-6 cannot mint P1-4 TransitionDecision or P1-7 Judgment
 
 P1-6 therefore owns evidence requirement matching/admission, not execution truth or workflow state.
 
-## why P1-6 starts with design freeze
+## accepted P1-6 implementation authority
 
-No Human-accepted exact P1-6 contract yet freezes:
+The Human-accepted canonical contract is:
 
-- evidence requirement identity/version;
-- evidence type/classification model;
-- task-scoped evidence ownership;
-- executor_required / reuse_allowed / human_owned / not_required / forbidden semantics;
-- candidate issuer/provenance binding;
-- content/body/hash/reference authority;
-- freshness/applicability/coverage rules;
-- reuse and anti-replay semantics;
-- evidence-set completeness;
-- admission/rejection reason taxonomy;
-- immutable admitted evidence refs;
-- revocation/supersession/correction semantics;
-- P1-4 `G_EVIDENCE` owner-bound fact issuance;
-- Human-owned evidence boundary into P1-7;
-- private/sensitive evidence redaction/export rules;
-- persistence/concurrency/restart model.
+```text
+.aiassistant/rules/AISCC_EVIDENCE_ADMISSION.md
 
-Those decisions must not be invented inside implementation.
+SHA-256:
+0d9d4c194efda37f100c6183d1a7e88e1a09fe073dc3a37bbb5a3e1cd577e463
+```
 
-## after P1-6 design Human acceptance
+It freezes exact five-profile evidence authority, immutable RequirementSet/EvidenceCheckpoint
+identity, checkpoint-specific applicability/completeness, fail-closed candidate admission,
+checkpoint-bound `G_EVIDENCE`, direct/P1-7 Human producer separation, supplemental non-authority,
+PostgreSQL durability/concurrency/restart, and sensitive evidence export rules.
+
+## current P1-6 runtime action
 
 ```text
 P1-6 Evidence Admission Implementation + Runtime Verification
 ```
 
-Do not start P1-7 before P1-6 runtime acceptance.
+The runtime output is a review candidate only. Do not start P1-7 before separate P1-6 runtime Human
+acceptance. P1-7/P1-8 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.

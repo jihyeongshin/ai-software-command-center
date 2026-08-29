@@ -444,3 +444,37 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - `AgentOutputRef/ToolOutputRef/ExecutionArtifactRef/ExecutionSubmissionRef != EvidenceCandidate admission != AdmittedEvidence`;
   - P1-6 is the sole Evidence Admission owner.
 - supersession_rule: weakening durable bounds, state/version freshness, P1-3 security mediation, secret lease, exact tool resource binding, Replay zero-execution, unknown-outcome no-blind-retry, or producer-ref/evidence non-substitution requires a separate Human-accepted P1-5 baseline update.
+
+## AISCC-P1-6-EVIDENCE-ADMISSION-DESIGN-V1
+
+- decision: Use the exact Human-accepted P1-6 contract for immutable requirement/checkpoint authority, fail-closed evidence admission, checkpoint-specific completeness, and owner-bound `G_EVIDENCE` handoff.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - final design rework Task: `20260829_1026_aiscc-p1-6-checkpoint-human-ingress-and-optional-evidence-design-rework-1`
+  - predecessor HOLD Cycle: `.aiassistant/records/aiscc/cycles/20260829_1026_aiscc-p1-6-checkpoint-human-ingress-and-optional-evidence-hold-1.cycle.md`
+  - Human P1-6 design final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260829_1241_aiscc-p1-6-evidence-admission-design-final-acceptance-1.cycle.md`
+- canonical owner: `.aiassistant/rules/AISCC_EVIDENCE_ADMISSION.md`
+- accepted design SHA-256: `0d9d4c194efda37f100c6183d1a7e88e1a09fe073dc3a37bbb5a3e1cd577e463`
+- implementation_status: `NOT_STARTED` at design judgment time
+- verification_status: semantic design and Human acceptance complete; implementation/runtime evidence `DEFERRED_TO_P1_6_RUNTIME`
+- exact evidence profiles:
+  - `EXECUTOR_REQUIRED`
+  - `REUSE_ALLOWED`
+  - `HUMAN_OWNED`
+  - `NOT_REQUIRED`
+  - `FORBIDDEN`
+- accepted checkpoint authority:
+  - `EvidenceCheckpoint` is System/TaskContract-owned and binds source plus exact target or transition-purpose identity;
+  - Requirement applicability and evidence-set completeness are evaluated for an exact checkpoint without rewriting the full immutable RequirementSet;
+  - `EvidenceSetSatisfactionAttestation` commits full-set, checkpoint-subset, and admitted-evidence coverage roots;
+  - same Task/run/state/version does not permit cross-checkpoint `G_EVIDENCE` replay.
+- accepted Human boundary:
+  - `HUMAN_DIRECT_EVIDENCE` is authenticated/server-issued evidence ingress only;
+  - `HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7`;
+  - P1-6 does not create HumanGate, HumanResult, Judgment, `G_HUMAN_*`, or `G_JUDGMENT_*`.
+- supplemental boundary: unrequired material may remain candidate/provenance only and creates no `EvidenceRequirement`, `AdmittedEvidence`, satisfaction mapping, set/root contribution, or `G_EVIDENCE` authority.
+- transition boundary: P1-4 remains the exact WorkflowState, TransitionDecision, and atomic mutation owner; P1-6 owns only evidence admission and owner-bound `G_EVIDENCE` facts.
+- runtime/release effect: P1-6 runtime remains unaccepted until separate implementation evidence and Human final review; P1-7/P1-8 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
+- owner / next task: `P1-6 Evidence Admission Implementation + Runtime Verification`.
+- supersession_rule: changing exact profiles, checkpoint authority/applicability, evidence/guard non-substitution, direct/P1-7 Human producer separation, supplemental non-authority, or transition-owner separation requires a separate Human-accepted P1-6 design baseline update.

@@ -20,7 +20,8 @@
 | P1-3 Security / Runtime Safeguard Implementation and Verification | `ACCEPTED / CLOSED` |
 | P1-4 Explicit State Machine Kernel Implementation | `ACCEPTED / CLOSED` |
 | P1-5 Agent Provider and Tool Execution | `ACCEPTED / CLOSED` |
-| P1-6 Evidence Admission | `READY / DESIGN_FREEZE_REQUIRED` |
+| P1-6 Evidence Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-6 Evidence Admission Runtime | `NOT_STARTED` |
 
 ## P0-4 provenance
 
@@ -370,7 +371,49 @@ Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260828_2329_aiscc-p1-5-provider-tool-execution-runtime-final-acceptance-1.cycle.md`
 
-P1-5 source becomes canonical after the next terminal Git persistence commit.
+P1-5 source is canonical in the accepted predecessor history.
+
+## P1-6 terminal evidence admission design
+
+Human final design review:
+
+```text
+HUMAN_PROVIDED
+P1-6 Evidence Admission Design: ACCEPTED / CLOSED
+```
+
+Canonical owner:
+
+```text
+.aiassistant/rules/AISCC_EVIDENCE_ADMISSION.md
+```
+
+Accepted design SHA-256:
+
+```text
+0d9d4c194efda37f100c6183d1a7e88e1a09fe073dc3a37bbb5a3e1cd577e463
+```
+
+Accepted authority contract:
+
+```text
+EvidenceCandidate != AdmittedEvidence != G_EVIDENCE
+exact five evidence profiles only
+System-owned EvidenceCheckpoint and transition-purpose binding
+checkpoint-specific Requirement applicability and completeness
+checkpoint/state/version/target-use-bound EvidenceSetSatisfactionAttestation
+HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7
+supplemental unrequired material has zero admitted/set/root/G_EVIDENCE authority
+P1-4 transition authority remains separate
+P1-7 HumanGate/HumanResult/Judgment authority remains separate
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260829_1241_aiscc-p1-6-evidence-admission-design-final-acceptance-1.cycle.md`
+
+P1-6 runtime implementation and runtime verification were `NOT_STARTED` at design judgment time.
+They are the current Executor action and remain subject to separate Human final review.
 
 ## blockers and next action
 
@@ -382,10 +425,10 @@ P1-5 source becomes canonical after the next terminal Git persistence commit.
 - P1-5 Runtime: `ACCEPTED / CLOSED`
 - final P1-5 candidate: `42 paths / ffeb5ba70649c564c482c2cff79ce8e2b0a462f811d8e03f2c1096f170bd39d6`
 - Public Bounded Live: `NOT_RELEASED`
-- P1-6: `READY / DESIGN_FREEZE_REQUIRED`
-- next Executor Task must first Git-persist the accepted 42-path P1-5 runtime candidate + terminal Cycle/state
-- the same Task then performs P1-6 Evidence Admission design only
-- P1-6 runtime implementation waits for Human design acceptance
+- P1-6 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted P1-6 design: `0d9d4c194efda37f100c6183d1a7e88e1a09fe073dc3a37bbb5a3e1cd577e463`
+- P1-6 Runtime: `NOT_STARTED` before the current implementation stage
+- current next action: `P1-6 Evidence Admission Implementation + Runtime Verification`
 - P1-7/P1-8 remain `NOT_STARTED`
 
 ## non-substitution statement
