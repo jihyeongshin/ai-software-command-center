@@ -519,7 +519,47 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - `20260828_0002` to migration head: `PASS`;
   - real provider/external network/credentialed external actions: `0`.
 - release/next-phase effect:
-  - P1-7 Human Gate and Judgment is the current next phase but remains `NOT_STARTED`;
+  - at P1-6 runtime terminal judgment time, P1-7 Human Gate and Judgment was the next phase and remained `NOT_STARTED`;
   - P1-8 remains `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: weakening evidence/admission/attestation non-substitution, checkpoint binding, WorkRun freshness, P1-4 synchronization, Human producer separation, reuse/revocation authority, or restart durability requires a separate Human-accepted P1-6 baseline update.
+
+## AISCC-P1-7-HUMAN-GATE-JUDGMENT-DESIGN-V1
+
+- decision: Adopt the exact Human-accepted P1-7 Human Gate and Judgment design as the canonical authority contract for System-owned HumanGate lifecycle, authenticated Human action authority, immutable HumanResult, HUMAN_P1_7 producer handoff, System-owned Judgment, owner-bound Human/Judgment guards, and P1-4 transition handoff.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - initial design Task: `20260829_2204_aiscc-p1-7-human-gate-and-judgment-design-1`
+  - PRE_HUMAN binding rework Task: `20260829_2204_aiscc-p1-7-pre-human-evidence-gate-binding-design-rework-1`
+  - predecessor HOLD Cycle: `.aiassistant/records/aiscc/cycles/20260829_2204_aiscc-p1-7-pre-human-evidence-gate-binding-hold-1.cycle.md`
+  - Human P1-7 design final review: `ACCEPTED`
+  - accepted design persistence commit: `238b0b41460c2504fd3244eadb06809d8692a60f`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260829_2328_aiscc-p1-7-human-gate-and-judgment-design-final-acceptance-1.cycle.md`
+- canonical owner: `.aiassistant/rules/AISCC_HUMAN_GATE_JUDGMENT.md`
+- accepted design SHA-256: `22851cd0a6476fe613a3cc7a86a4096ace7236b4bafdd3c7c5a25e701a3b1549`
+- implementation_status: `NOT_STARTED` at terminal design judgment time
+- verification_status: semantic design and Human acceptance complete; implementation/runtime evidence `DEFERRED_TO_P1_7_RUNTIME`
+- exact authority contract:
+  - `HumanGate` is System-owned and V1 permits one current unsuperseded gate per current `HUMAN_REQUIRED` authority epoch;
+  - `HumanResultKind = APPROVE | REWORK | REJECT`;
+  - `JudgmentKind = ACCEPTED | REJECTED | HOLD_REWORK_REQUIRED`;
+  - concurrent HumanResult winner is `FIRST_DURABLY_ADMITTED`;
+  - V1 policy exception/override is `NOT_SUPPORTED`;
+  - Agent/LLM proposal is non-authoritative historical provenance only.
+- non-substitution:
+  - `HumanResult != Judgment`;
+  - `Judgment != TransitionDecision`;
+  - `HumanResult/Judgment != WorkflowState`;
+  - `HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7`;
+  - `G_EVIDENCE != G_HUMAN_* != G_JUDGMENT_*`.
+- PRE_HUMAN authority:
+  - exact current P1-6 PRE_HUMAN `EvidenceSetSatisfactionAttestation` is mandatory owner-backed input to `G_HUMAN_REQUIRED`;
+  - missing/stale/wrong authority yields no Human guard, no gate-open event, and no `HUMAN_REQUIRED` transition;
+  - an empty checkpoint-applicable subset still uses the exact P1-6 `SATISFIED` attestation path;
+  - P1-7 cannot mint or reinterpret P1-6 evidence truth.
+- transition boundary: P1-4 remains the exclusive `TransitionDecision` and atomic `WorkflowState/state_version` mutation owner; HumanResult/Judgment persistence cannot mutate WorkRun directly.
+- release/next-phase effect:
+  - P1-7 Runtime is the current next phase and remains `NOT_STARTED` at terminal design judgment time;
+  - P1-8 remains `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: changing HumanGate multiplicity/ownership, HumanResult/Judgment vocabulary or separation, PRE_HUMAN evidence binding, guard ownership, concurrent winner, override policy, P1-4 mutation ownership, or privacy/export boundary requires a separate Human-accepted P1-7 design baseline update.

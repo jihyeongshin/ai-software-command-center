@@ -22,7 +22,8 @@
 | P1-5 Agent Provider and Tool Execution | `ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-7 Human Gate and Judgment | `NOT_STARTED / CURRENT NEXT PHASE` |
+| P1-7 Human Gate and Judgment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-7 Human Gate and Judgment Runtime | `NOT_STARTED / CURRENT NEXT PHASE` |
 | P1-8 Project Memory and Cycle Admission | `NOT_STARTED` |
 
 ## P0-4 provenance
@@ -477,7 +478,54 @@ Terminal P1-6 runtime Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260829_1920_aiscc-p1-6-evidence-admission-runtime-final-acceptance-1.cycle.md`
 
-P1-7 Human Gate and Judgment is the current next phase but remains `NOT_STARTED`.
+At P1-6 runtime terminal judgment time, P1-7 Human Gate and Judgment remained `NOT_STARTED` and was
+the next phase. Its later terminal design judgment and current runtime next action are recorded below.
+P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
+
+## P1-7 terminal Human Gate and Judgment design
+
+Human final design review:
+
+```text
+HUMAN_PROVIDED
+P1-7 Human Gate and Judgment Design: ACCEPTED / CLOSED
+```
+
+Canonical owner:
+
+```text
+.aiassistant/rules/AISCC_HUMAN_GATE_JUDGMENT.md
+```
+
+Accepted design identity:
+
+```text
+SHA-256:
+22851cd0a6476fe613a3cc7a86a4096ace7236b4bafdd3c7c5a25e701a3b1549
+
+design acceptance commit:
+238b0b41460c2504fd3244eadb06809d8692a60f
+```
+
+Accepted authority boundary:
+
+```text
+HumanGate = System-owned
+HumanResult != Judgment
+Judgment != TransitionDecision
+HumanResult/Judgment != WorkflowState
+HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7
+G_EVIDENCE != G_HUMAN_* != G_JUDGMENT_*
+FIRST_DURABLY_ADMITTED concurrent HumanResult winner
+PRE_HUMAN P1-6 attestation is mandatory for G_HUMAN_REQUIRED
+P1-4 remains exclusive transition/mutation owner
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260829_2328_aiscc-p1-7-human-gate-and-judgment-design-final-acceptance-1.cycle.md`
+
+P1-7 Runtime was `NOT_STARTED` at terminal design judgment time and is now the current next action.
 P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
 
 ## blockers and next action
@@ -495,8 +543,11 @@ P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
 - P1-6 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-6 runtime: `21 paths / a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9`
 - P1-6 runtime acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
-- current next action: `P1-7 Human Gate and Judgment authority design`
-- P1-7: `NOT_STARTED / CURRENT NEXT PHASE`
+- P1-7 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted P1-7 design: `22851cd0a6476fe613a3cc7a86a4096ace7236b4bafdd3c7c5a25e701a3b1549`
+- P1-7 design acceptance commit: `238b0b41460c2504fd3244eadb06809d8692a60f`
+- current next action: `P1-7 Human Gate and Judgment Runtime Implementation + Verification`
+- P1-7 Runtime: `NOT_STARTED / CURRENT NEXT PHASE`
 - P1-8: `NOT_STARTED`
 
 ## non-substitution statement
@@ -506,7 +557,7 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- P1-7 Human/Judgment implementation
+- P1-7 Human/Judgment runtime implementation or runtime acceptance
 - P1-8 Cycle/project-memory implementation
 - public deployment
 - provider resource/API key/billing configuration
