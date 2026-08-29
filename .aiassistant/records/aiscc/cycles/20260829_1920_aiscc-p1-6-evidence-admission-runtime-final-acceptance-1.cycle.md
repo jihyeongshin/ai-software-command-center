@@ -24,7 +24,7 @@
 - reviewed runtime candidate path count: `21`
 - reviewed runtime candidate aggregate SHA-256: `a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9`
 - runtime acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
-- terminal governance commit: `NOT_SELF_REFERENCED_IN_CYCLE`
+- terminal governance commit: `d80e61f65b048f3d555192ec3a13d296945feb52`
 
 ## command summary
 
@@ -275,7 +275,7 @@ Human P1-6 runtime final review
 - proof_non_substitution_satisfied: `Yes`
 - transition_authority_satisfied: `Yes`
 - security_boundary_satisfied: `Yes for P1-6 scope`
-- public_provenance_satisfied: `pending terminal Git persistence by closure Task`
+- public_provenance_satisfied: `Yes — runtime acceptance Commit A and terminal governance Commit B persisted`
 - terminal_decision_reason: the exact reviewed candidate satisfies the accepted P1-6 design and all previously identified load-bearing authority gaps are closed; Human final review explicitly accepted the runtime.
 
 ## phase state after terminal persistence
@@ -302,11 +302,12 @@ PUBLIC_BOUNDED_LIVE
 
 ## next action
 
-After the closure Task successfully persists the exact accepted runtime candidate and canonical terminal state:
+With terminal persistence complete, the next phase is:
 
 ```text
 P1-7 Human Gate and Judgment
 → next phase
+→ NOT_STARTED
 
 first concern:
 P1-7 design / authority contract before implementation
@@ -356,7 +357,7 @@ Must survive cleanup:
 ## public provenance mapping
 
 - accepted design commit: `192e223854a02293809cf6675e3a329e099e628d`
-- runtime implementation acceptance commit: `TO_BE_FILLED_BY_CLOSURE_TASK`
+- runtime implementation acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
 - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260829_1920_aiscc-p1-6-evidence-admission-runtime-final-acceptance-1.cycle.md`
 - Human final acceptance: `HUMAN_PROVIDED / ACCEPTED`
-- sensitive_data_check: required before terminal commits; no secret/private material may enter public provenance.
+- sensitive_data_check: `PASS — strict UTF-8/control-character and secret/private marker scan completed before terminal closure`.
