@@ -107,7 +107,8 @@ class TestFutureOwnerAuthority:
     def semantic_owner(self) -> GuardSemanticOwner:
         return self._semantic_owner
 
-    def recognizes(self, fact: TrustedGuardFact) -> bool:
+    def recognizes(self, fact: TrustedGuardFact, request: TransitionRequest) -> bool:
+        del request
         return fact._issuer_token is self._issuer_token
 
     def issue(
@@ -215,7 +216,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                assert revision == "20260828_0002"
+                assert revision == "20260829_0003"
         finally:
             await engine.dispose()
 

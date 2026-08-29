@@ -287,3 +287,291 @@ class ExecutionOutputRefRow(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     storage_ref: Mapped[str] = mapped_column(String(256), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceRequirementSetRow(Base):
+    __tablename__ = "evidence_requirement_sets"
+
+    requirement_set_ref: Mapped[str] = mapped_column(String(224), primary_key=True)
+    requirement_set_id: Mapped[str] = mapped_column(String(144), nullable=False)
+    requirement_set_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    requirement_root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceRequirementRow(Base):
+    __tablename__ = "evidence_requirements"
+
+    requirement_ref: Mapped[str] = mapped_column(String(224), primary_key=True)
+    requirement_set_ref: Mapped[str] = mapped_column(
+        ForeignKey("evidence_requirement_sets.requirement_set_ref", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    profile: Mapped[str] = mapped_column(String(48), nullable=False)
+    obligation: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceCheckpointRow(Base):
+    __tablename__ = "evidence_checkpoints"
+
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), primary_key=True)
+    requirement_set_ref: Mapped[str] = mapped_column(
+        ForeignKey("evidence_requirement_sets.requirement_set_ref", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    target_state: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    transition_purpose_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    transition_purpose_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanDirectEvidenceIngressRow(Base):
+    __tablename__ = "human_direct_evidence_ingress"
+
+    ingress_record_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    ingress_record_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    serialized_ref: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    ingress_authority_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    ingress_authority_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    authenticated_principal_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    authenticated_session_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    evidence_type_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    evidence_type_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    provided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceCandidateRow(Base):
+    __tablename__ = "evidence_candidates"
+
+    candidate_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    candidate_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    candidate_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    issuer_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    sensitivity: Mapped[str] = mapped_column(String(40), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    human_ingress_record_ref: Mapped[str | None] = mapped_column(
+        ForeignKey("human_direct_evidence_ingress.serialized_ref", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceAdmissionRequestRow(Base):
+    __tablename__ = "evidence_admission_requests"
+
+    admission_request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_candidates.candidate_id", ondelete="RESTRICT"), nullable=False
+    )
+    requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    requirement_set_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    observed_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    observed_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceEvaluationRow(Base):
+    __tablename__ = "evidence_evaluations"
+
+    evaluation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    admission_request_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_admission_requests.admission_request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    dimension_results: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False)
+    authority_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceAdmissionDecisionRow(Base):
+    __tablename__ = "evidence_admission_decisions"
+
+    decision_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), nullable=False)
+    admission_request_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_admission_requests.admission_request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_evaluations.evaluation_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    secondary_reasons: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    admitting_authority_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AdmittedEvidenceRow(Base):
+    __tablename__ = "admitted_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "candidate_id",
+            "requirement_ref",
+            "work_run_id",
+            "checkpoint_ref",
+            name="uq_admitted_evidence_logical_mapping",
+        ),
+    )
+
+    admitted_evidence_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    decision_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_admission_decisions.decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_candidates.candidate_id", ondelete="RESTRICT"), nullable=False
+    )
+    requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(
+        ForeignKey("work_runs.work_run_id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    coverage: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceRequirementSatisfactionRow(Base):
+    __tablename__ = "evidence_requirement_satisfactions"
+
+    satisfaction_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    admitted_evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("admitted_evidence.admitted_evidence_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    coverage: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceReuseConsumptionRow(Base):
+    __tablename__ = "evidence_reuse_consumptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "prior_admitted_evidence_ref",
+            "requirement_ref",
+            "work_run_id",
+            "checkpoint_ref",
+            "consumption_ordinal",
+            name="uq_evidence_reuse_scope_ordinal",
+        ),
+    )
+
+    consumption_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    prior_admitted_evidence_ref: Mapped[str] = mapped_column(
+        String(288), nullable=False, index=True
+    )
+    admitted_evidence_id: Mapped[str] = mapped_column(
+        ForeignKey("admitted_evidence.admitted_evidence_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    policy_maximum: Mapped[int] = mapped_column(Integer, nullable=False)
+    consumption_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    consumed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceSetEvaluationRow(Base):
+    __tablename__ = "evidence_set_evaluations"
+
+    evaluation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    evaluation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    source_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    requirement_set_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    full_requirement_root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    checkpoint_subset_root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    admitted_ref_root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    evidence_authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class EvidenceSetAttestationRow(Base):
+    __tablename__ = "evidence_set_attestations"
+
+    attestation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    attestation_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    evidence_set_evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_set_evaluations.evaluation_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    checkpoint_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class EvidenceAuthorityEventRow(Base):
+    __tablename__ = "evidence_authority_events"
+    __table_args__ = (
+        UniqueConstraint("subject_ref", "event_kind", "replacement_ref", name="uq_evidence_event"),
+    )
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    subject_ref: Mapped[str] = mapped_column(String(288), nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    replacement_ref: Mapped[str] = mapped_column(String(288), nullable=False, default="NONE")
+    reason: Mapped[str] = mapped_column(String(128), nullable=False)
+    owner_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    authority_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    work_run_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
+    affected_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    affected_mappings: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

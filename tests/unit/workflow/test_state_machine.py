@@ -98,7 +98,8 @@ class TestFutureOwnerAuthority:
     def semantic_owner(self) -> GuardSemanticOwner:
         return self._semantic_owner
 
-    def recognizes(self, fact: TrustedGuardFact) -> bool:
+    def recognizes(self, fact: TrustedGuardFact, request: TransitionRequest) -> bool:
+        del request
         return fact._issuer_token is self._issuer_token
 
     def issue(

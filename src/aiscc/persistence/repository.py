@@ -1255,7 +1255,7 @@ class PostgresExecutionRepository:
             raise AuthorityConflictError("transition evaluator is not configured")
         fingerprint = _request_fingerprint(request, facts)
         async with self._session_factory() as session, session.begin():
-            await _advisory_lock(session, f"run:{request.work_run_id}")
+            await acquire_work_run_transaction_lock(session, request.work_run_id)
             await _advisory_lock(session, f"request:{request.transition_request_id}")
             existing_request = await session.get(
                 TransitionRequestRow, request.transition_request_id
@@ -1350,7 +1350,7 @@ class PostgresExecutionRepository:
 
     async def verify_consistency(self, work_run_id: str) -> WorkRun:
         async with self._session_factory() as session, session.begin():
-            await _advisory_lock(session, f"run:{work_run_id}")
+            await acquire_work_run_transaction_lock(session, work_run_id)
             projection_row = await session.scalar(
                 select(WorkRunRow).where(WorkRunRow.work_run_id == work_run_id).with_for_update()
             )
@@ -1826,6 +1826,11 @@ def _operation_event(
         refs=refs,
         created_at=now,
     )
+
+
+async def acquire_work_run_transaction_lock(session: AsyncSession, work_run_id: str) -> None:
+    """Canonical P1-4 WorkRun transaction lock shared by dependent authorities."""
+    await _advisory_lock(session, f"run:{work_run_id}")
 
 
 async def _advisory_lock(session: AsyncSession, key: str) -> None:

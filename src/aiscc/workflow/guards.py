@@ -66,7 +66,7 @@ class FutureOwnerGuardVerifier(Protocol):
     @property
     def semantic_owner(self) -> GuardSemanticOwner: ...
 
-    def recognizes(self, fact: TrustedGuardFact) -> bool: ...
+    def recognizes(self, fact: TrustedGuardFact, request: TransitionRequest) -> bool: ...
 
 
 class ExecutionRefVerifier(Protocol):
@@ -167,7 +167,7 @@ def verifier_matches_fact(
         verifier.semantic_owner is fact.semantic_owner
         and fact.semantic_owner is not GuardSemanticOwner.P1_4_SYSTEM
         and fact_matches_request(fact, request)
-        and verifier.recognizes(fact)
+        and verifier.recognizes(fact, request)
     )
 
 
