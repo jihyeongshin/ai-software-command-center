@@ -68,6 +68,8 @@ P1_7_HUMAN:
 G_HUMAN_REQUIRED
 G_HUMAN_NOT_REQUIRED
 G_NO_PENDING_HUMAN_GATE
+G_SUSPENDED_HUMAN_GATE
+G_RESUMABLE_HUMAN_GATE
 G_HUMAN_APPROVED
 G_HUMAN_REWORK
 G_HUMAN_REJECTED
@@ -77,6 +79,10 @@ G_JUDGMENT_ACCEPTED
 G_JUDGMENT_REJECTED
 G_JUDGMENT_REWORK
 ```
+
+`G_SUSPENDED_HUMAN_GATE` and `G_RESUMABLE_HUMAN_GATE` preserve the accepted HumanGate
+suspension/resumption authority used by the P1-4 blocked/resume lifecycle; P1-8 must not reinterpret,
+replace, or absorb these guards.
 
 These facts are owner-backed, exact-authority-bound inputs to P1-4. They are not transition decisions.
 
