@@ -23,8 +23,8 @@
 | P1-6 Evidence Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-7 Human Gate and Judgment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-7 Human Gate and Judgment Runtime | `NOT_STARTED / CURRENT NEXT PHASE` |
-| P1-8 Project Memory and Cycle Admission | `NOT_STARTED` |
+| P1-7 Human Gate and Judgment Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-8 Project Memory and Cycle Admission | `NOT_STARTED / NEXT_ACTION` |
 
 ## P0-4 provenance
 
@@ -525,8 +525,80 @@ Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260829_2328_aiscc-p1-7-human-gate-and-judgment-design-final-acceptance-1.cycle.md`
 
-P1-7 Runtime was `NOT_STARTED` at terminal design judgment time and is now the current next action.
-P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
+P1-7 Runtime was `NOT_STARTED` at terminal design judgment time. Its later Human-accepted terminal
+runtime state is recorded below.
+
+## P1-7 terminal Human Gate and Judgment runtime
+
+Human final runtime review:
+
+```text
+HUMAN_PROVIDED
+P1-7 Human Gate and Judgment Runtime: ACCEPTED / CLOSED
+```
+
+Accepted runtime identity:
+
+```text
+path count:
+21
+
+aggregate SHA-256:
+1933e0451d101b142e099cc987babb426f87422d15338775d9d87bbf29fa2f90
+
+runtime acceptance commit:
+b4ba49ebaeb437d885bf22d52473c7d8a79832d1
+```
+
+Accepted runtime authority:
+
+```text
+System-owned HumanGate lifecycle
+authenticated and immutable HumanResult authority
+System-owned Judgment authority
+owner-backed G_HUMAN_* and G_JUDGMENT_* guards
+FIRST_DURABLY_ADMITTED concurrent HumanResult winner
+historical provenance verification separated from current effectiveness
+P1-6 PRE_HUMAN authority required for G_HUMAN_REQUIRED
+P1-4 remains exclusive TransitionDecision/WorkflowState mutation owner
+```
+
+Accepted executor evidence reused by Human final review:
+
+```text
+full unit + integration:
+183 PASS
+
+P1-7 Human PostgreSQL:
+2 PASS
+
+P1-4 PostgreSQL regression:
+18 PASS
+
+P1-6 PostgreSQL regression:
+6 PASS
+
+PostgreSQL:
+17.6
+
+Alembic:
+20260829_0004
+
+ruff:
+PASS
+
+mypy:
+PASS / 67 source files
+
+provider/network/credential/deployment:
+0
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260830_1712_aiscc-p1-7-human-gate-and-judgment-runtime-final-acceptance-1.cycle.md`
+
+P1-8 remains `NOT_STARTED / NEXT_ACTION`. Public Bounded Live remains `NOT_RELEASED`.
 
 ## blockers and next action
 
@@ -546,9 +618,11 @@ P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
 - P1-7 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-7 design: `22851cd0a6476fe613a3cc7a86a4096ace7236b4bafdd3c7c5a25e701a3b1549`
 - P1-7 design acceptance commit: `238b0b41460c2504fd3244eadb06809d8692a60f`
-- current next action: `P1-7 Human Gate and Judgment Runtime Implementation + Verification`
-- P1-7 Runtime: `NOT_STARTED / CURRENT NEXT PHASE`
-- P1-8: `NOT_STARTED`
+- P1-7 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted P1-7 runtime: `21 paths / 1933e0451d101b142e099cc987babb426f87422d15338775d9d87bbf29fa2f90`
+- P1-7 runtime acceptance commit: `b4ba49ebaeb437d885bf22d52473c7d8a79832d1`
+- current next action: `P1-8 Project Memory and Cycle Admission`
+- P1-8: `NOT_STARTED / NEXT_ACTION`
 
 ## non-substitution statement
 
@@ -557,11 +631,10 @@ Human complete Browser Project Source replacement confirms mirror synchronizatio
 It does NOT prove:
 
 - product runtime implementation
-- P1-7 Human/Judgment runtime implementation or runtime acceptance
 - P1-8 Cycle/project-memory implementation
 - public deployment
 - provider resource/API key/billing configuration
 - public Live availability
 - competition submission completion
 
-Those remain owned by their future Tasks and evidence contracts.
+The remaining items are owned by their future Tasks and evidence contracts.

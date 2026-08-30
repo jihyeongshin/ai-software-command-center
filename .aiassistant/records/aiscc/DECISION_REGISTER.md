@@ -563,3 +563,49 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-8 remains `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing HumanGate multiplicity/ownership, HumanResult/Judgment vocabulary or separation, PRE_HUMAN evidence binding, guard ownership, concurrent winner, override policy, P1-4 mutation ownership, or privacy/export boundary requires a separate Human-accepted P1-7 design baseline update.
+
+## AISCC-P1-7-HUMAN-GATE-JUDGMENT-RUNTIME-V1
+
+- decision: Adopt the exact Human-reviewed 21-path P1-7 Human Gate and Judgment runtime as the canonical implementation baseline.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - runtime entry Task: `20260829_2328_aiscc-p1-7-design-terminal-persistence-and-runtime-implementation-1`
+  - runtime rework/HOLD lineage: `0051 → 0148 → 0225 → 1142 → 1241 → 1346 → 1447 → 1530 → 1627`
+  - accepted design commit: `238b0b41460c2504fd3244eadb06809d8692a60f`
+  - accepted design terminal commit: `c87cfc75f14476e10b4a02a2ab0bd295720a85a0`
+  - runtime acceptance commit: `b4ba49ebaeb437d885bf22d52473c7d8a79832d1`
+  - Human P1-7 runtime final review: `ACCEPTED`
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260830_1712_aiscc-p1-7-human-gate-and-judgment-runtime-final-acceptance-1.cycle.md`
+- implementation_status: `IMPLEMENTED / ACCEPTED / CLOSED`
+- verification_status: `ACCEPTED / CLOSED`
+- final candidate:
+  - path count: `21`
+  - aggregate SHA-256: `1933e0451d101b142e099cc987babb426f87422d15338775d9d87bbf29fa2f90`
+- accepted authority:
+  - System-owned HumanGate lifecycle and exact current authority binding;
+  - authenticated immutable HumanResult with `FIRST_DURABLY_ADMITTED` concurrency;
+  - System-owned Judgment and policy-owner separation;
+  - exact owner-backed `G_HUMAN_*` and `G_JUDGMENT_*` guard attestations;
+  - correction, restart, anti-replay, durable historical provenance, and current-effectiveness separation;
+  - exact current P1-6 PRE_HUMAN authority remains mandatory for `G_HUMAN_REQUIRED`;
+  - P1-4 remains the exclusive TransitionDecision and WorkflowState/state_version mutation owner.
+- non-substitution:
+  - `HumanResult != Judgment`;
+  - `Judgment != TransitionDecision`;
+  - `HumanResult/Judgment != WorkflowState`;
+  - `HUMAN_DIRECT_EVIDENCE != HUMAN_P1_7`;
+  - `G_EVIDENCE != G_HUMAN_* != G_JUDGMENT_*`.
+- verification:
+  - full unit + integration: `183 PASS`;
+  - P1-7 Human PostgreSQL: `2 PASS`;
+  - P1-4 PostgreSQL regression: `18 PASS`;
+  - P1-6 PostgreSQL regression: `6 PASS`;
+  - PostgreSQL: `17.6`;
+  - Alembic: `20260829_0004`;
+  - ruff: `PASS`;
+  - mypy: `PASS / 67 source files`;
+  - real provider/network/credential/deployment actions: `0`.
+- release/next-phase effect:
+  - P1-8 Project Memory and Cycle Admission is `NOT_STARTED / NEXT_ACTION`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: weakening accepted Human/Judgment ownership, immutable identity, historical/current separation, guard binding, PRE_HUMAN evidence dependency, P1-4 transition ownership, correction/restart/anti-replay, or non-substitution requires a separate Human-accepted P1-7 baseline update.
