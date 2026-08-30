@@ -609,3 +609,37 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P1-8 Project Memory and Cycle Admission is `NOT_STARTED / NEXT_ACTION`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: weakening accepted Human/Judgment ownership, immutable identity, historical/current separation, guard binding, PRE_HUMAN evidence dependency, P1-4 transition ownership, correction/restart/anti-replay, or non-substitution requires a separate Human-accepted P1-7 baseline update.
+
+## AISCC-P1-8-PROJECT-MEMORY-CYCLE-ADMISSION-DESIGN-V1
+
+- decision: Adopt the exact Human-accepted P1-8 Project Memory and Cycle Admission design as the canonical authority contract for accepted-terminal-only runtime Cycle admission, deterministic curated-memory projection, append-only historical/current applicability, deterministic retrieval, enrolled Next Action selection, and external Task issuance handoff.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - initial design Task: `20260830_1909_aiscc-p1-8-project-memory-and-cycle-admission-design-1`;
+  - authority/lineage/eligibility rework Task: `20260830_1933_aiscc-p1-8-memory-authority-lineage-and-next-action-eligibility-design-rework-1`;
+  - historical source/current applicability rework Task: `20260830_2011_aiscc-p1-8-historical-source-and-current-applicability-separation-design-rework-1`;
+  - historical policy/current policy rework Task: `20260830_2011_aiscc-p1-8-historical-policy-and-current-policy-separation-design-rework-1`;
+  - three predecessor HOLD Cycles: `1933`, `2011-source`, `2011-policy`, all closed by the accepted final design;
+  - Human P1-8 design final review: `ACCEPTED`;
+  - accepted design persistence commit: `c108e9c02f222cf51ce833e311465584447b3571`;
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260830_2130_aiscc-p1-8-project-memory-and-cycle-admission-design-final-acceptance-1.cycle.md`.
+- canonical owner: `.aiassistant/rules/AISCC_PROJECT_MEMORY_CYCLE_ADMISSION.md`
+- accepted design SHA-256: `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a`
+- implementation_status: `NOT_STARTED / IMPLEMENTATION_AUTHORIZED` at terminal design judgment time
+- verification_status: semantic design and Human acceptance complete; runtime evidence `DEFERRED_TO_P1_8_RUNTIME`
+- exact authority contract:
+  - repository `CommandCenterCycleRecord` is not runtime `AdmittedCycle` authority;
+  - only exact accepted terminal TaskContract/WorkRun/Judgment/TransitionDecision/P1-6 provenance is Cycle-admissible;
+  - rejected/HOLD/FAILED/BLOCKED/rework provenance remains historical/operational and is not reusable ProjectMemory;
+  - caller-authored MemoryDeclaration content, raw session, and Agent summary cannot create semantic memory authority;
+  - `ProjectMemoryEntryId != MemoryLineageKey`, with one CURRENT tip and `EXPLICIT_SUPERSESSION_ONLY`;
+  - historical source/policy validity is separated from current source/policy/memory applicability;
+  - only current enrolled ActionRef/descriptor candidates are ranked, and proposal claims are non-authoritative;
+  - `NextActionSelection != TransitionDecision`, and non-authoritative `TaskIssuanceCandidate != TaskContract`;
+  - exact Task issuance owner is `EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY`.
+- predecessor boundary: P1-4/P1-6/P1-7 authority semantics remain unchanged and are consumed only by exact immutable reference.
+- release/next-phase effect:
+  - P1-8 Runtime is `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`;
+  - P2 remains `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: changing accepted Cycle eligibility, memory source-to-content authority, lineage/current-tip behavior, historical/current separation, NextAction enrollment/selection ownership, Task issuance boundary, or predecessor non-substitution requires a separate Human-accepted P1-8 baseline update.
