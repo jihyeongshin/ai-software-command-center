@@ -20,6 +20,8 @@ from aiscc.workflow.models import (
     TransitionRequest,
     WorkRun,
 )
+from aiscc.workflow.participants import CompositeTransitionParticipant
+from aiscc.workflow.ports import TransitionTransactionParticipant
 
 __all__ = [
     "TRANSITION_MATRIX",
@@ -40,5 +42,7 @@ __all__ = [
     "TrustedGuardFact",
     "WorkRun",
     "WorkflowKernel",
+    "TransitionTransactionParticipant",
+    "CompositeTransitionParticipant",
     "required_judgment_guard",
 ]

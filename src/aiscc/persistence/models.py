@@ -575,3 +575,217 @@ class EvidenceAuthorityEventRow(Base):
     affected_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     affected_mappings: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanGateRow(Base):
+    __tablename__ = "human_gates"
+
+    human_gate_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    gate_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    opened_from_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    opened_from_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    bound_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanGateAuthorityEventRow(Base):
+    __tablename__ = "human_gate_authority_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    human_gate_id: Mapped[str] = mapped_column(
+        ForeignKey("human_gates.human_gate_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanGateProjectionRow(Base):
+    __tablename__ = "human_gate_projections"
+    __table_args__ = (
+        UniqueConstraint("work_run_id", "authority_epoch", name="uq_current_human_gate_epoch"),
+    )
+
+    human_gate_id: Mapped[str] = mapped_column(
+        ForeignKey("human_gates.human_gate_id", ondelete="RESTRICT"), primary_key=True
+    )
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    authority_epoch: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    suspension_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    bound_state: Mapped[str] = mapped_column(String(40), nullable=False)
+    bound_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_result_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanResultRow(Base):
+    __tablename__ = "human_results"
+
+    human_result_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    human_result_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    human_gate_id: Mapped[str] = mapped_column(
+        ForeignKey("human_gates.human_gate_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    result_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanResultAuthorityEventRow(Base):
+    __tablename__ = "human_result_authority_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    human_result_id: Mapped[str] = mapped_column(
+        ForeignKey("human_results.human_result_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanP1_7EvidenceProducerRow(Base):
+    __tablename__ = "human_p1_7_evidence_producers"
+
+    producer_ref_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(512), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    human_result_ref: Mapped[str] = mapped_column(String(288), nullable=False, index=True)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class HumanGuardAttestationRow(Base):
+    __tablename__ = "human_guard_attestations"
+
+    attestation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    guard_id: Mapped[str] = mapped_column(String(48), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class JudgmentPolicyRow(Base):
+    __tablename__ = "judgment_policies"
+
+    serialized_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    policy_scope_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentPolicyProjectionRow(Base):
+    __tablename__ = "judgment_policy_projections"
+
+    policy_scope_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    current_policy_ref: Mapped[str] = mapped_column(
+        ForeignKey("judgment_policies.serialized_ref", ondelete="RESTRICT"), nullable=False
+    )
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CommandCenterJudgmentActionRow(Base):
+    __tablename__ = "command_center_judgment_actions"
+
+    serialized_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentEvaluationRow(Base):
+    __tablename__ = "judgment_evaluations"
+
+    evaluation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentRow(Base):
+    __tablename__ = "judgments"
+
+    judgment_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("judgment_evaluations.evaluation_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    judgment_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentAuthorityEventRow(Base):
+    __tablename__ = "judgment_authority_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    judgment_id: Mapped[str] = mapped_column(
+        ForeignKey("judgments.judgment_id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    new_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentProjectionRow(Base):
+    __tablename__ = "judgment_projections"
+
+    work_run_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    judgment_id: Mapped[str] = mapped_column(
+        ForeignKey("judgments.judgment_id", ondelete="RESTRICT"), nullable=False
+    )
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JudgmentGuardAttestationRow(Base):
+    __tablename__ = "judgment_guard_attestations"
+
+    attestation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    guard_id: Mapped[str] = mapped_column(String(48), nullable=False)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

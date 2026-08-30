@@ -21,6 +21,7 @@ from aiscc.evidence.ports import (
 
 if TYPE_CHECKING:
     from aiscc.evidence.repository import PostgresEvidenceRepository
+    from aiscc.human.repository import PostgresHumanAuthorityRepository
 
 
 class EvidenceIssuerRegistry:
@@ -440,3 +441,66 @@ class PriorAdmittedEvidenceIssuerAuthority:
         return (
             await self._repository.load_admitted(candidate.prior_admitted_evidence_ref) is not None
         )
+
+
+class P1_7HumanEvidenceIssuerAuthority:
+    """Durable HUMAN_P1_7 producer verifier; it seeds candidates but never admits evidence."""
+
+    issuer_type = EvidenceIssuerType.HUMAN_P1_7
+
+    def __init__(
+        self,
+        repository: PostgresHumanAuthorityRepository,
+        issuer_id: str = "AISCC_P1_7_HUMAN_EVIDENCE_PRODUCER_V1",
+        issuer_version: str = "p1-7-producer-authority-v1",
+    ) -> None:
+        self._repository = repository
+        self.issuer_id = issuer_id
+        self.issuer_version = issuer_version
+        self._token = object()
+
+    async def seed_candidate(self, candidate: EvidenceCandidate) -> EvidenceCandidate:
+        if (
+            candidate.issuer.owner_type is not self.issuer_type
+            or candidate.issuer.owner_id != self.issuer_id
+            or candidate.issuer.owner_version != self.issuer_version
+            or candidate.human_producer_category is not HumanEvidenceProducerCategory.HUMAN_P1_7
+        ):
+            raise ValueError("HUMAN_P1_7 candidate owner/category binding is incomplete")
+        producer = await self._repository.load_producer_ref(candidate.producer_attestation_ref)
+        if producer is None or not _p1_7_producer_matches(producer, candidate):
+            raise ValueError("HUMAN_P1_7 producer ref is unavailable or mismatched")
+        value = replace(candidate, _issuer_token=self._token)
+        return replace(value, candidate_fingerprint=candidate_fingerprint(value))
+
+    async def recognizes(self, candidate: EvidenceCandidate) -> bool:
+        if (
+            candidate._issuer_token is not self._token
+            or candidate.candidate_fingerprint != candidate_fingerprint(candidate)
+            or candidate.human_producer_category is not HumanEvidenceProducerCategory.HUMAN_P1_7
+        ):
+            return False
+        producer = await self._repository.load_producer_ref(candidate.producer_attestation_ref)
+        return producer is not None and _p1_7_producer_matches(producer, candidate)
+
+
+def _p1_7_producer_matches(producer: object, candidate: EvidenceCandidate) -> bool:
+    from aiscc.human.models import HumanP1_7EvidenceProducerRef
+
+    if not isinstance(producer, HumanP1_7EvidenceProducerRef):
+        return False
+    return bool(
+        producer.task_contract_id == candidate.task_contract_id
+        and producer.task_contract_version == candidate.task_contract_version
+        and producer.work_run_id == candidate.producer_work_run_id
+        and producer.source_state is candidate.observed_state
+        and producer.state_version == candidate.observed_state_version
+        and producer.checkpoint_ref == candidate.checkpoint_ref.serialized()
+        and producer.evidence_type_id == candidate.evidence_type_id
+        and producer.evidence_type_version == candidate.evidence_type_version
+        and producer.subject_id == candidate.subject_id
+        and producer.scope_id == candidate.scope_id
+        and producer.resource_id == candidate.resource_id
+        and producer.content_hash == candidate.content_ref.content_hash
+        and producer.sensitivity is candidate.content_ref.sensitivity
+    )

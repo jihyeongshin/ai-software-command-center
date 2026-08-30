@@ -26,6 +26,7 @@ from aiscc.workflow.models import (
 )
 
 KERNEL_VERSION = "AISCC-P1-4-KERNEL-V1"
+ADMITTING_OWNER = "AISCC_SYSTEM_TRANSITION_AUTHORITY"
 
 
 class TransitionEvaluator:
@@ -140,7 +141,7 @@ class TransitionEvaluator:
             reason=reason,
             resulting_state=resulting_state,
             resulting_state_version=resulting_version,
-            admitting_owner="AISCC_SYSTEM_TRANSITION_AUTHORITY",
+            admitting_owner=ADMITTING_OWNER,
             kernel_version=KERNEL_VERSION,
             decided_at=evaluated_at,
         )

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -35,21 +36,47 @@ from aiscc.providers.models import (
     OperationKind,
     ProviderProfile,
 )
-from aiscc.workflow.evaluator import TransitionEvaluator
-from aiscc.workflow.guards import TrustedGuardFact
+from aiscc.workflow.evaluator import ADMITTING_OWNER, KERNEL_VERSION, TransitionEvaluator
+from aiscc.workflow.guards import GUARD_OWNER_POLICY, TrustedGuardFact, required_bound_refs
+from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
     AuthorityConflictError,
     DecisionOutcome,
     DecisionReason,
+    GuardId,
+    GuardObservation,
+    GuardSemanticOwner,
+    RequesterType,
     RequestIdentityConflictError,
     TransitionDecision,
     TransitionEvaluation,
     TransitionRequest,
     WorkRun,
 )
-from aiscc.workflow.ports import FailureInjector, FailurePoint
+from aiscc.workflow.ports import (
+    FailureInjector,
+    FailurePoint,
+    TransitionTransactionParticipant,
+)
 
 _COUNTER_SCHEMA_VERSION = "AISCC-P1-5-DURABLE-COUNTERS-V1"
+_HISTORICAL_RECONSTRUCTION_TOKEN = object()
+
+
+class HistoricalTransitionProvenanceError(AuthorityConflictError):
+    """Sanitized P1-4 historical transition provenance failure."""
+
+    def __init__(self, message: str, *, incomplete: bool = False) -> None:
+        super().__init__(message)
+        self.incomplete = incomplete
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedHistoricalTransition:
+    request: TransitionRequest
+    evaluation: TransitionEvaluation
+    decision: TransitionDecision
+    work_run: WorkRun
 
 
 class PostgresExecutionRepository:
@@ -1250,10 +1277,15 @@ class PostgresExecutionRepository:
         facts: tuple[TrustedGuardFact, ...],
         *,
         failure_injector: FailureInjector | None = None,
+        transaction_participant: TransitionTransactionParticipant | None = None,
     ) -> TransitionDecision:
         if self._evaluator is None:
             raise AuthorityConflictError("transition evaluator is not configured")
-        fingerprint = _request_fingerprint(request, facts)
+        participant_facts = (
+            transaction_participant.facts(request) if transaction_participant is not None else ()
+        )
+        effective_facts = (*facts, *participant_facts)
+        fingerprint = _request_fingerprint(request, effective_facts)
         async with self._session_factory() as session, session.begin():
             await acquire_work_run_transaction_lock(session, request.work_run_id)
             await _advisory_lock(session, f"request:{request.transition_request_id}")
@@ -1283,17 +1315,27 @@ class PostgresExecutionRepository:
                 current_row,
                 incoming_request=request,
             )
-            evaluation, decision = self._evaluator.evaluate(
-                request=request,
-                current=current,
-                facts=facts,
-            )
+            if transaction_participant is not None:
+                await transaction_participant.prepare(session, request, current)
+            try:
+                evaluation, decision = self._evaluator.evaluate(
+                    request=request,
+                    current=current,
+                    facts=effective_facts,
+                )
+            finally:
+                if transaction_participant is not None:
+                    transaction_participant.after_evaluation(request)
             session.add(_request_row(request, fingerprint))
             await session.flush()
             session.add(_evaluation_row(evaluation))
             await session.flush()
             session.add(_decision_row(decision))
             await session.flush()
+            if transaction_participant is not None:
+                await transaction_participant.after_decision(
+                    session, request, evaluation, decision, current
+                )
             _inject(failure_injector, FailurePoint.AFTER_PROVENANCE_BEFORE_PROJECTION)
 
             if decision.outcome is DecisionOutcome.ADMITTED:
@@ -1403,15 +1445,16 @@ class PostgresExecutionRepository:
                     raise AuthorityConflictError(
                         "projection-free transition provenance is partial or orphaned"
                     )
-                evaluation = evaluations[0]
-                decision = decisions[0]
+                historical_evaluation_row = evaluations[0]
+                historical_decision_row = decisions[0]
                 if (
-                    decision.transition_evaluation_id != evaluation.transition_evaluation_id
-                    or evaluation.authoritative_state is not None
-                    or evaluation.authoritative_state_version != 0
-                    or decision.outcome != DecisionOutcome.DENIED.value
-                    or decision.resulting_state is not None
-                    or decision.resulting_state_version != 0
+                    historical_decision_row.transition_evaluation_id
+                    != historical_evaluation_row.transition_evaluation_id
+                    or historical_evaluation_row.authoritative_state is not None
+                    or historical_evaluation_row.authoritative_state_version != 0
+                    or historical_decision_row.outcome != DecisionOutcome.DENIED.value
+                    or historical_decision_row.resulting_state is not None
+                    or historical_decision_row.resulting_state_version != 0
                 ):
                     raise AuthorityConflictError(
                         "authoritative WorkRun projection is missing and provenance is not "
@@ -1426,7 +1469,7 @@ class PostgresExecutionRepository:
             return None
 
         joined = await session.execute(
-            select(TransitionDecisionRow, TransitionEvaluationRow)
+            select(TransitionDecisionRow, TransitionEvaluationRow, TransitionRequestRow)
             .join(
                 TransitionRequestRow,
                 TransitionRequestRow.transition_request_id
@@ -1443,25 +1486,30 @@ class PostgresExecutionRepository:
         reconstructed_state: WorkflowState | None = None
         reconstructed_version = 0
         admitted_count = 0
-        for decision_row, evaluation_row in joined:
+        for decision_row, evaluation_row, request_row in joined:
             if decision_row.outcome != DecisionOutcome.ADMITTED.value:
                 continue
-            evaluated_state = (
-                WorkflowState(evaluation_row.authoritative_state)
-                if evaluation_row.authoritative_state is not None
-                else None
+            step_request, step_evaluation, step_decision = (
+                _verify_historical_transition_step_from_rows(
+                    request_row,
+                    evaluation_row,
+                    decision_row,
+                    projection_row,
+                )
             )
             if (
-                evaluated_state is not reconstructed_state
-                or evaluation_row.authoritative_state_version != reconstructed_version
-                or decision_row.resulting_state_version != reconstructed_version + 1
-                or decision_row.resulting_state is None
+                step_request.observed_state is not reconstructed_state
+                or step_request.observed_state_version != reconstructed_version
+                or step_evaluation.authoritative_state is not reconstructed_state
+                or step_evaluation.authoritative_state_version != reconstructed_version
+                or step_decision.resulting_state_version != reconstructed_version + 1
+                or step_decision.resulting_state is None
             ):
                 raise AuthorityConflictError(
                     "admitted provenance is not a contiguous state/version lineage"
                 )
-            reconstructed_state = WorkflowState(decision_row.resulting_state)
-            reconstructed_version = decision_row.resulting_state_version
+            reconstructed_state = step_decision.resulting_state
+            reconstructed_version = step_decision.resulting_state_version
             admitted_count += 1
         if admitted_count == 0:
             raise AuthorityConflictError("projection has no admitted provenance")
@@ -1493,6 +1541,306 @@ class PostgresTransitionRepository(PostgresExecutionRepository):
     ) -> None:
         super().__init__(session_factory)
         self._evaluator = evaluator
+
+
+def _verify_historical_transition_step_from_rows(
+    request_row: TransitionRequestRow,
+    evaluation_row: TransitionEvaluationRow,
+    decision_row: TransitionDecisionRow,
+    projection_row: WorkRunRow,
+) -> tuple[TransitionRequest, TransitionEvaluation, TransitionDecision]:
+    """Verify one immutable admitted P1-4 step without whole-history recursion."""
+    try:
+        request = _transition_request_from_row(request_row)
+        evaluation, facts = _historical_evaluation_from_row(evaluation_row, request)
+        decision = _decision_from_row(decision_row)
+    except HistoricalTransitionProvenanceError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HistoricalTransitionProvenanceError(
+            "transition provenance contains malformed immutable values"
+        ) from exc
+    if request_row.request_fingerprint != _request_fingerprint(request, facts):
+        raise HistoricalTransitionProvenanceError(
+            "transition request fingerprint does not match durable request and guard facts"
+        )
+    if (
+        evaluation.transition_request_id != request.transition_request_id
+        or evaluation.authoritative_state is not request.observed_state
+        or evaluation.authoritative_state_version != request.observed_state_version
+        or decision.transition_request_id != request.transition_request_id
+        or decision.transition_evaluation_id != evaluation.transition_evaluation_id
+        or evaluation.evaluated_at != decision.decided_at
+    ):
+        raise HistoricalTransitionProvenanceError(
+            "transition request, evaluation, and decision bindings disagree"
+        )
+    if (
+        decision.outcome is not DecisionOutcome.ADMITTED
+        or decision.reason is not DecisionReason.ADMITTED
+        or decision.resulting_state is not request.target_state
+        or decision.resulting_state_version != request.observed_state_version + 1
+        or decision.admitting_owner != ADMITTING_OWNER
+        or decision.kernel_version != KERNEL_VERSION
+    ):
+        raise HistoricalTransitionProvenanceError(
+            "transition decision is not an exact P1-4 admitted decision"
+        )
+    if (
+        request.work_run_id != projection_row.work_run_id
+        or request.project_id != projection_row.project_id
+        or request.task_contract_id != projection_row.task_contract_id
+        or request.task_contract_version != projection_row.task_contract_version
+        or request.runtime_mode.value != projection_row.runtime_mode
+    ):
+        raise HistoricalTransitionProvenanceError(
+            "admitted transition request identity disagrees with the WorkRun projection"
+        )
+    return request, evaluation, decision
+
+
+async def verify_historical_transition_provenance(
+    session: AsyncSession,
+    transition_request_id: str,
+) -> VerifiedHistoricalTransition:
+    """Verify one admitted transition against canonical P1-4 durable history.
+
+    The caller supplies the active transaction/session. Dependent authorities use the
+    canonical WorkRun advisory-lock boundary before invoking this read-only verifier.
+    """
+    request_row = await session.get(TransitionRequestRow, transition_request_id)
+    if request_row is None:
+        raise HistoricalTransitionProvenanceError(
+            "transition request provenance is missing", incomplete=True
+        )
+    evaluation_rows = tuple(
+        await session.scalars(
+            select(TransitionEvaluationRow).where(
+                TransitionEvaluationRow.transition_request_id == transition_request_id
+            )
+        )
+    )
+    decision_rows = tuple(
+        await session.scalars(
+            select(TransitionDecisionRow).where(
+                TransitionDecisionRow.transition_request_id == transition_request_id
+            )
+        )
+    )
+    if not evaluation_rows or not decision_rows:
+        raise HistoricalTransitionProvenanceError(
+            "transition evaluation or decision provenance is missing", incomplete=True
+        )
+    if len(evaluation_rows) != 1 or len(decision_rows) != 1:
+        raise HistoricalTransitionProvenanceError(
+            "transition evaluation or decision provenance is ambiguous"
+        )
+
+    evaluation_row = evaluation_rows[0]
+    decision_row = decision_rows[0]
+    projection_row = await session.get(WorkRunRow, request_row.work_run_id)
+    if projection_row is None:
+        raise HistoricalTransitionProvenanceError(
+            "authoritative WorkRun projection is missing", incomplete=True
+        )
+    request, evaluation, decision = _verify_historical_transition_step_from_rows(
+        request_row,
+        evaluation_row,
+        decision_row,
+        projection_row,
+    )
+    try:
+        work_run = await PostgresExecutionRepository._verify_consistency_in_session(
+            session,
+            request.work_run_id,
+            projection_row,
+        )
+    except AuthorityConflictError as exc:
+        raise HistoricalTransitionProvenanceError(
+            "complete admitted history does not reconstruct the WorkRun projection"
+        ) from exc
+    if work_run is None:
+        raise HistoricalTransitionProvenanceError(
+            "authoritative WorkRun projection is missing", incomplete=True
+        )
+    if (
+        work_run.project_id != request.project_id
+        or work_run.task_contract_id != request.task_contract_id
+        or work_run.task_contract_version != request.task_contract_version
+        or work_run.runtime_mode is not request.runtime_mode
+    ):
+        raise HistoricalTransitionProvenanceError(
+            "transition request identity disagrees with the WorkRun projection"
+        )
+
+    admitted_ids = set(
+        await session.scalars(
+            select(TransitionDecisionRow.transition_decision_id)
+            .join(
+                TransitionRequestRow,
+                TransitionRequestRow.transition_request_id
+                == TransitionDecisionRow.transition_request_id,
+            )
+            .where(
+                TransitionRequestRow.work_run_id == request.work_run_id,
+                TransitionDecisionRow.outcome == DecisionOutcome.ADMITTED.value,
+            )
+        )
+    )
+    if decision.transition_decision_id not in admitted_ids:
+        raise HistoricalTransitionProvenanceError(
+            "transition decision is not a member of canonical admitted WorkRun history"
+        )
+    return VerifiedHistoricalTransition(request, evaluation, decision, work_run)
+
+
+def _transition_request_from_row(row: TransitionRequestRow) -> TransitionRequest:
+    ref_fields = (row.evidence_refs, row.human_result_refs, row.judgment_refs)
+    if any(
+        not isinstance(values, list) or any(not isinstance(value, str) for value in values)
+        for values in ref_fields
+    ):
+        raise HistoricalTransitionProvenanceError("transition request refs are malformed")
+    return TransitionRequest(
+        transition_request_id=row.transition_request_id,
+        project_id=row.project_id,
+        task_contract_id=row.task_contract_id,
+        task_contract_version=row.task_contract_version,
+        work_run_id=row.work_run_id,
+        observed_state=(WorkflowState(row.observed_state) if row.observed_state else None),
+        observed_state_version=row.observed_state_version,
+        target_state=WorkflowState(row.target_state),
+        requester_identity=row.requester_identity,
+        requester_type=RequesterType(row.requester_type),
+        runtime_mode=RuntimeMode(row.runtime_mode),
+        evidence_refs=tuple(row.evidence_refs),
+        human_result_refs=tuple(row.human_result_refs),
+        judgment_refs=tuple(row.judgment_refs),
+        parent_request_id=row.parent_request_id,
+        created_at=_aware(row.created_at),
+    )
+
+
+def _historical_evaluation_from_row(
+    row: TransitionEvaluationRow,
+    request: TransitionRequest,
+) -> tuple[TransitionEvaluation, tuple[TrustedGuardFact, ...]]:
+    if not isinstance(row.guards, list) or not isinstance(row.missing_guards, list):
+        raise HistoricalTransitionProvenanceError("transition guard provenance is malformed")
+    required = TRANSITION_MATRIX.get((request.observed_state, request.target_state))
+    if required is None:
+        raise HistoricalTransitionProvenanceError(
+            "transition request is absent from the exact P1-4 matrix"
+        )
+
+    observations: list[GuardObservation] = []
+    facts: list[TrustedGuardFact] = []
+    seen: set[GuardId] = set()
+    exact_guard_keys = {
+        "guard_id",
+        "semantic_owner",
+        "satisfied",
+        "reason",
+        "authority_ref",
+        "bound_refs",
+    }
+    for raw in row.guards:
+        if not isinstance(raw, dict) or set(raw) != exact_guard_keys:
+            raise HistoricalTransitionProvenanceError(
+                "transition guard entry has a non-canonical shape"
+            )
+        raw_guard_id = raw["guard_id"]
+        raw_semantic_owner = raw["semantic_owner"]
+        if not isinstance(raw_guard_id, str) or not isinstance(raw_semantic_owner, str):
+            raise HistoricalTransitionProvenanceError("transition guard identity is malformed")
+        guard_id = GuardId(raw_guard_id)
+        semantic_owner = GuardSemanticOwner(raw_semantic_owner)
+        satisfied = raw["satisfied"]
+        reason = raw["reason"]
+        authority_ref = raw["authority_ref"]
+        bound_refs = raw["bound_refs"]
+        if (
+            guard_id in seen
+            or not isinstance(satisfied, bool)
+            or not isinstance(reason, str)
+            or not reason
+            or not isinstance(authority_ref, str)
+            or not authority_ref
+            or not isinstance(bound_refs, list)
+            or any(not isinstance(value, str) for value in bound_refs)
+        ):
+            raise HistoricalTransitionProvenanceError(
+                "transition guard entry is duplicate or malformed"
+            )
+        seen.add(guard_id)
+        observation = GuardObservation(
+            guard_id=guard_id,
+            semantic_owner=semantic_owner,
+            satisfied=satisfied,
+            reason=reason,
+            authority_ref=authority_ref,
+            bound_refs=tuple(bound_refs),
+        )
+        observations.append(observation)
+        if guard_id is GuardId.G_CURRENT:
+            if (
+                semantic_owner is not GuardSemanticOwner.P1_4_SYSTEM
+                or not satisfied
+                or reason != "CURRENT_STATE_VERSION_MATCH"
+                or authority_ref != "AISCC_SYSTEM_CURRENT_PROJECTION"
+                or bound_refs
+            ):
+                raise HistoricalTransitionProvenanceError("G_CURRENT provenance is not canonical")
+            continue
+        if semantic_owner is not GUARD_OWNER_POLICY[guard_id] or tuple(
+            bound_refs
+        ) != required_bound_refs(guard_id, request):
+            raise HistoricalTransitionProvenanceError(
+                "required guard owner or request binding is not canonical"
+            )
+        facts.append(
+            TrustedGuardFact(
+                guard_id=guard_id,
+                semantic_owner=semantic_owner,
+                satisfied=satisfied,
+                reason=reason,
+                authority_ref=authority_ref,
+                bound_refs=tuple(bound_refs),
+                task_contract_id=request.task_contract_id,
+                task_contract_version=request.task_contract_version,
+                work_run_id=request.work_run_id,
+                state_version=request.observed_state_version,
+                _issuer_token=_HISTORICAL_RECONSTRUCTION_TOKEN,
+            )
+        )
+
+    expected_guard_ids = {GuardId.G_CURRENT, *required}
+    if seen != expected_guard_ids:
+        raise HistoricalTransitionProvenanceError(
+            "durable guard set does not match the exact P1-4 transition matrix"
+        )
+    if not all(observation.satisfied for observation in observations):
+        raise HistoricalTransitionProvenanceError(
+            "an admitted transition contains an unsatisfied required guard"
+        )
+    if row.missing_guards:
+        raise HistoricalTransitionProvenanceError(
+            "an admitted transition contains missing required guards"
+        )
+    return (
+        TransitionEvaluation(
+            transition_evaluation_id=row.transition_evaluation_id,
+            transition_request_id=row.transition_request_id,
+            authoritative_state=(
+                WorkflowState(row.authoritative_state) if row.authoritative_state else None
+            ),
+            authoritative_state_version=row.authoritative_state_version,
+            guards=tuple(observations),
+            missing_guards=(),
+            evaluated_at=_aware(row.evaluated_at),
+        ),
+        tuple(facts),
+    )
 
 
 def _history_query(work_run_id: str) -> Select[tuple[TransitionDecisionRow]]:
@@ -1831,6 +2179,18 @@ def _operation_event(
 async def acquire_work_run_transaction_lock(session: AsyncSession, work_run_id: str) -> None:
     """Canonical P1-4 WorkRun transaction lock shared by dependent authorities."""
     await _advisory_lock(session, f"run:{work_run_id}")
+
+
+async def acquire_human_result_transaction_lock(
+    session: AsyncSession, human_result_id: str
+) -> None:
+    """Global P1-7 immutable HumanResult identity lock, acquired after the WorkRun lock."""
+    await _advisory_lock(session, f"aiscc:p1-7:human-result:{human_result_id}")
+
+
+async def acquire_judgment_transaction_lock(session: AsyncSession, judgment_id: str) -> None:
+    """Global P1-7 immutable Judgment identity lock, acquired after the WorkRun lock."""
+    await _advisory_lock(session, f"aiscc:p1-7:judgment:{judgment_id}")
 
 
 async def _advisory_lock(session: AsyncSession, key: str) -> None:

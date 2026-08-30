@@ -7,10 +7,23 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 from aiscc.persistence import PostgresTransitionRepository, create_engine, create_session_factory
+from aiscc.persistence.models import (
+    TransitionDecisionRow,
+    TransitionEvaluationRow,
+    TransitionRequestRow,
+)
+from aiscc.persistence.repository import (
+    HistoricalTransitionProvenanceError,
+    _historical_evaluation_from_row,
+    _request_fingerprint,
+    _transition_request_from_row,
+    acquire_work_run_transaction_lock,
+    verify_historical_transition_provenance,
+)
 from aiscc.workflow.evaluator import TransitionEvaluator
 from aiscc.workflow.guards import (
     GUARD_OWNER_POLICY,
@@ -216,7 +229,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                assert revision == "20260829_0003"
+                assert revision == "20260829_0004"
         finally:
             await engine.dispose()
 
@@ -261,6 +274,340 @@ def test_authoritative_mutation_restart_durability_and_consistency(database_url:
             assert verified == projection
         finally:
             await restarted_engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+def test_canonical_historical_transition_provenance_is_rooted_in_workrun_history(
+    database_url: str,
+) -> None:
+    async def scenario() -> None:
+        run_id = f"run-historical-root-{uuid4()}"
+        kernel, _, authority, engine = build_kernel(database_url)
+        sessions = create_session_factory(engine)
+        try:
+            steps = (
+                request(run_id=run_id, source=None, version=0, target=WorkflowState.READY),
+                request(
+                    run_id=run_id,
+                    source=WorkflowState.READY,
+                    version=1,
+                    target=WorkflowState.RUNNING,
+                ),
+                request(
+                    run_id=run_id,
+                    source=WorkflowState.RUNNING,
+                    version=2,
+                    target=WorkflowState.ADMISSION_PENDING,
+                ),
+                request(
+                    run_id=run_id,
+                    source=WorkflowState.ADMISSION_PENDING,
+                    version=3,
+                    target=WorkflowState.HUMAN_REQUIRED,
+                ),
+                request(
+                    run_id=run_id,
+                    source=WorkflowState.HUMAN_REQUIRED,
+                    version=4,
+                    target=WorkflowState.BLOCKED,
+                ),
+            )
+            decisions = [await admit(kernel, authority, step) for step in steps]
+            opening = steps[3]
+            opening_decision = decisions[3]
+
+            async def verify() -> Any:
+                async with sessions() as session, session.begin():
+                    await acquire_work_run_transaction_lock(session, run_id)
+                    return await verify_historical_transition_provenance(
+                        session, opening.transition_request_id
+                    )
+
+            verified = await verify()
+            assert verified.request == opening
+            assert verified.decision == opening_decision
+            assert verified.work_run.state is WorkflowState.BLOCKED
+            assert verified.work_run.state_version == 5
+            assert {item.guard_id for item in verified.evaluation.guards} == {
+                GuardId.G_CURRENT,
+                GuardId.G_HUMAN_REQUIRED,
+            }
+            human_guard = next(
+                item
+                for item in verified.evaluation.guards
+                if item.guard_id is GuardId.G_HUMAN_REQUIRED
+            )
+            assert human_guard.semantic_owner is GuardSemanticOwner.P1_7_HUMAN
+            assert human_guard.satisfied is True
+
+            async with sessions() as session:
+                request_row = await session.get(TransitionRequestRow, opening.transition_request_id)
+                evaluation_row = await session.scalar(
+                    select(TransitionEvaluationRow).where(
+                        TransitionEvaluationRow.transition_request_id
+                        == opening.transition_request_id
+                    )
+                )
+                decision_row = await session.get(
+                    TransitionDecisionRow, opening_decision.transition_decision_id
+                )
+                assert request_row is not None
+                assert evaluation_row is not None
+                assert decision_row is not None
+                original_fingerprint = request_row.request_fingerprint
+                original_guards = list(evaluation_row.guards)
+                original_missing = list(evaluation_row.missing_guards)
+                original_owner = decision_row.admitting_owner
+                original_kernel = decision_row.kernel_version
+                original_sequence = decision_row.event_sequence
+
+            async def restore() -> None:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    request_row = await session.get(
+                        TransitionRequestRow, opening.transition_request_id
+                    )
+                    evaluation_row = await session.scalar(
+                        select(TransitionEvaluationRow).where(
+                            TransitionEvaluationRow.transition_request_id
+                            == opening.transition_request_id
+                        )
+                    )
+                    decision_row = await session.get(
+                        TransitionDecisionRow, opening_decision.transition_decision_id
+                    )
+                    assert request_row is not None
+                    assert evaluation_row is not None
+                    assert decision_row is not None
+                    request_row.request_fingerprint = original_fingerprint
+                    evaluation_row.guards = original_guards
+                    evaluation_row.missing_guards = original_missing
+                    decision_row.admitting_owner = original_owner
+                    decision_row.kernel_version = original_kernel
+                    decision_row.event_sequence = original_sequence
+
+            try:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    row = await session.get(TransitionRequestRow, opening.transition_request_id)
+                    assert row is not None
+                    row.request_fingerprint = "0" * 64
+                with pytest.raises(HistoricalTransitionProvenanceError, match="fingerprint"):
+                    await verify()
+            finally:
+                await restore()
+
+            for mutation in ("missing", "owner", "unsatisfied", "missing-set"):
+                try:
+                    async with sessions() as session, session.begin():
+                        await session.execute(text("SET LOCAL session_replication_role = replica"))
+                        row = await session.scalar(
+                            select(TransitionEvaluationRow).where(
+                                TransitionEvaluationRow.transition_request_id
+                                == opening.transition_request_id
+                            )
+                        )
+                        assert row is not None
+                        guards = [dict(item) for item in row.guards]
+                        human_index = next(
+                            index
+                            for index, item in enumerate(guards)
+                            if item["guard_id"] == GuardId.G_HUMAN_REQUIRED.value
+                        )
+                        if mutation == "missing":
+                            guards.pop(human_index)
+                        elif mutation == "owner":
+                            guards[human_index]["semantic_owner"] = (
+                                GuardSemanticOwner.P1_4_SYSTEM.value
+                            )
+                        elif mutation == "unsatisfied":
+                            guards[human_index]["satisfied"] = False
+                        else:
+                            row.missing_guards = [GuardId.G_HUMAN_REQUIRED.value]
+                        row.guards = guards
+                    with pytest.raises(HistoricalTransitionProvenanceError):
+                        await verify()
+                finally:
+                    await restore()
+
+            for field, corrupt_value in (
+                ("admitting_owner", "UNTRUSTED_OWNER"),
+                ("kernel_version", "UNTRUSTED_KERNEL"),
+            ):
+                try:
+                    async with sessions() as session, session.begin():
+                        await session.execute(text("SET LOCAL session_replication_role = replica"))
+                        decision_record = await session.get(
+                            TransitionDecisionRow, opening_decision.transition_decision_id
+                        )
+                        assert decision_record is not None
+                        setattr(decision_record, field, corrupt_value)
+                    with pytest.raises(HistoricalTransitionProvenanceError, match="admitted"):
+                        await verify()
+                finally:
+                    await restore()
+
+            try:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    decision_record = await session.get(
+                        TransitionDecisionRow, opening_decision.transition_decision_id
+                    )
+                    assert decision_record is not None
+                    decision_record.event_sequence = original_sequence + 1_000_000_000
+                with pytest.raises(HistoricalTransitionProvenanceError, match="history"):
+                    await verify()
+            finally:
+                await restore()
+
+            surrounding = steps[1]
+            surrounding_decision = decisions[1]
+            async with sessions() as session:
+                surrounding_request_row = await session.get(
+                    TransitionRequestRow, surrounding.transition_request_id
+                )
+                surrounding_evaluation_row = await session.scalar(
+                    select(TransitionEvaluationRow).where(
+                        TransitionEvaluationRow.transition_request_id
+                        == surrounding.transition_request_id
+                    )
+                )
+                surrounding_decision_row = await session.get(
+                    TransitionDecisionRow, surrounding_decision.transition_decision_id
+                )
+                assert surrounding_request_row is not None
+                assert surrounding_evaluation_row is not None
+                assert surrounding_decision_row is not None
+                surrounding_original = {
+                    "project_id": surrounding_request_row.project_id,
+                    "task_contract_version": surrounding_request_row.task_contract_version,
+                    "runtime_mode": surrounding_request_row.runtime_mode,
+                    "request_fingerprint": surrounding_request_row.request_fingerprint,
+                    "guards": list(surrounding_evaluation_row.guards),
+                    "admitting_owner": surrounding_decision_row.admitting_owner,
+                    "kernel_version": surrounding_decision_row.kernel_version,
+                }
+
+            async def restore_surrounding() -> None:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    request_record = await session.get(
+                        TransitionRequestRow, surrounding.transition_request_id
+                    )
+                    evaluation_record = await session.scalar(
+                        select(TransitionEvaluationRow).where(
+                            TransitionEvaluationRow.transition_request_id
+                            == surrounding.transition_request_id
+                        )
+                    )
+                    decision_record = await session.get(
+                        TransitionDecisionRow, surrounding_decision.transition_decision_id
+                    )
+                    assert request_record is not None
+                    assert evaluation_record is not None
+                    assert decision_record is not None
+                    request_record.project_id = str(surrounding_original["project_id"])
+                    request_record.task_contract_version = str(
+                        surrounding_original["task_contract_version"]
+                    )
+                    request_record.runtime_mode = str(surrounding_original["runtime_mode"])
+                    request_record.request_fingerprint = str(
+                        surrounding_original["request_fingerprint"]
+                    )
+                    evaluation_record.guards = list(surrounding_original["guards"])
+                    decision_record.admitting_owner = str(surrounding_original["admitting_owner"])
+                    decision_record.kernel_version = str(surrounding_original["kernel_version"])
+
+            async def corrupt_identity(field: str, value: str) -> None:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    request_record = await session.get(
+                        TransitionRequestRow, surrounding.transition_request_id
+                    )
+                    evaluation_record = await session.scalar(
+                        select(TransitionEvaluationRow).where(
+                            TransitionEvaluationRow.transition_request_id
+                            == surrounding.transition_request_id
+                        )
+                    )
+                    assert request_record is not None
+                    assert evaluation_record is not None
+                    setattr(request_record, field, value)
+                    reconstructed = _transition_request_from_row(request_record)
+                    _, facts = _historical_evaluation_from_row(evaluation_record, reconstructed)
+                    request_record.request_fingerprint = _request_fingerprint(reconstructed, facts)
+
+            for field, corrupt_value in (
+                ("task_contract_version", "foreign-task-version"),
+                ("project_id", "foreign-project"),
+                ("runtime_mode", RuntimeMode.PUBLIC_RECORDED_REPLAY.value),
+            ):
+                try:
+                    await corrupt_identity(field, corrupt_value)
+                    with pytest.raises(HistoricalTransitionProvenanceError, match="history"):
+                        await verify()
+                finally:
+                    await restore_surrounding()
+
+            try:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    request_record = await session.get(
+                        TransitionRequestRow, surrounding.transition_request_id
+                    )
+                    assert request_record is not None
+                    request_record.request_fingerprint = "1" * 64
+                with pytest.raises(HistoricalTransitionProvenanceError, match="history"):
+                    await verify()
+            finally:
+                await restore_surrounding()
+
+            try:
+                async with sessions() as session, session.begin():
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    evaluation_record = await session.scalar(
+                        select(TransitionEvaluationRow).where(
+                            TransitionEvaluationRow.transition_request_id
+                            == surrounding.transition_request_id
+                        )
+                    )
+                    assert evaluation_record is not None
+                    guards = [dict(item) for item in evaluation_record.guards]
+                    non_current_index = next(
+                        index
+                        for index, item in enumerate(guards)
+                        if item["guard_id"] != GuardId.G_CURRENT.value
+                    )
+                    guards[non_current_index]["semantic_owner"] = (
+                        GuardSemanticOwner.P1_7_HUMAN.value
+                    )
+                    evaluation_record.guards = guards
+                with pytest.raises(HistoricalTransitionProvenanceError, match="history"):
+                    await verify()
+            finally:
+                await restore_surrounding()
+
+            for field, corrupt_value in (
+                ("admitting_owner", "FOREIGN_TRANSITION_OWNER"),
+                ("kernel_version", "FOREIGN_KERNEL"),
+            ):
+                try:
+                    async with sessions() as session, session.begin():
+                        await session.execute(text("SET LOCAL session_replication_role = replica"))
+                        decision_record = await session.get(
+                            TransitionDecisionRow,
+                            surrounding_decision.transition_decision_id,
+                        )
+                        assert decision_record is not None
+                        setattr(decision_record, field, corrupt_value)
+                    with pytest.raises(HistoricalTransitionProvenanceError, match="history"):
+                        await verify()
+                finally:
+                    await restore_surrounding()
+        finally:
+            await engine.dispose()
 
     run(scenario())
 

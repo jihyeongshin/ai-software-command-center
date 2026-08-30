@@ -4,13 +4,14 @@ import asyncio
 import hashlib
 import os
 from collections.abc import Coroutine
+from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
 import aiscc.evidence.repository as evidence_repository_module
@@ -57,8 +58,13 @@ from aiscc.evidence.models import (
     FreshnessPolicyKind,
     HumanEvidenceProducerCategory,
     RequirementObligation,
+    canonical_hash,
 )
-from aiscc.evidence.repository import PostgresEvidenceRepository
+from aiscc.evidence.repository import (
+    HistoricalEvidenceProvenanceError,
+    PostgresEvidenceRepository,
+    verify_historical_set_attestation_provenance,
+)
 from aiscc.evidence.requirements import TaskContractEvidenceAuthority
 from aiscc.evidence.service import EvidenceAdmissionService
 from aiscc.evidence.set_evaluator import EvidenceSetEvaluator
@@ -68,7 +74,21 @@ from aiscc.persistence import (
     create_engine,
     create_session_factory,
 )
-from aiscc.persistence.models import WorkRunRow
+from aiscc.persistence.models import (
+    AdmittedEvidenceRow,
+    EvidenceAdmissionDecisionRow,
+    EvidenceAdmissionRequestRow,
+    EvidenceCandidateRow,
+    EvidenceCheckpointRow,
+    EvidenceEvaluationRow,
+    EvidenceRequirementSetRow,
+    EvidenceReuseConsumptionRow,
+    EvidenceSetAttestationRow,
+    EvidenceSetEvaluationRow,
+    ExecutionAttemptRow,
+    ExecutionOutputRefRow,
+    WorkRunRow,
+)
 from aiscc.workflow.evaluator import TransitionEvaluator
 from aiscc.workflow.guards import (
     GUARD_OWNER_POLICY,
@@ -452,6 +472,14 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
             checkpoint_id="post-human",
             source=WorkflowState.HUMAN_REQUIRED,
         )
+        empty = checkpoint(
+            task_id=task_id,
+            set_id=set_id,
+            checkpoint_id="empty-historical",
+            source=WorkflowState.ADMISSION_PENDING,
+            target=None,
+            purpose="EMPTY_HISTORICAL_PROOF",
+        )
         static = requirement(
             task_id=task_id,
             set_id=set_id,
@@ -497,10 +525,10 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
             task_id=task_id,
             set_id=set_id,
             requirements=(static, human, not_required, forbidden),
-            checkpoints=(pre, same_state_other_use, post),
+            checkpoints=(pre, same_state_other_use, post, empty),
         )
         static, _, _, _ = requirements
-        pre, same_state_other_use, _ = checkpoints
+        pre, same_state_other_use, _, empty = checkpoints
         repository = PostgresEvidenceRepository(sessions)
         await repository.register_authority(
             requirement_set=requirement_set,
@@ -671,6 +699,659 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
         assert evaluation.outcome is EvidenceSetOutcome.SATISFIED
         assert attestation is not None
 
+        async with sessions() as session:
+            assert (
+                await verify_historical_set_attestation_provenance(
+                    session, attestation.serialized_ref
+                )
+                == attestation
+            )
+
+        empty_evaluation, empty_attestation = await set_evaluator.evaluate(
+            work_run_id=run_id,
+            checkpoint_ref=empty.ref,
+            source_state=WorkflowState.ADMISSION_PENDING,
+            state_version=3,
+            now=NOW,
+        )
+        assert empty_evaluation.outcome is EvidenceSetOutcome.SATISFIED
+        assert empty_evaluation.ordered_applicable_requirement_refs == ()
+        assert empty_evaluation.requirement_results == ()
+        assert empty_evaluation.checkpoint_subset_root_hash == canonical_hash([])
+        assert empty_evaluation.admitted_ref_root_hash == canonical_hash([])
+        assert empty_attestation is not None
+        async with sessions() as session:
+            assert (
+                await verify_historical_set_attestation_provenance(
+                    session, empty_attestation.serialized_ref
+                )
+                == empty_attestation
+            )
+
+        async with sessions() as session:
+            checkpoint_row = await session.get(
+                EvidenceCheckpointRow, attestation.checkpoint_ref.serialized()
+            )
+            requirement_set_row = await session.get(
+                EvidenceRequirementSetRow,
+                f"{attestation.requirement_set_id}@{attestation.requirement_set_version}",
+            )
+            evaluation_row = await session.get(
+                EvidenceSetEvaluationRow, attestation.evidence_set_evaluation_id
+            )
+            attestation_row = await session.scalar(
+                select(EvidenceSetAttestationRow).where(
+                    EvidenceSetAttestationRow.serialized_ref == attestation.serialized_ref
+                )
+            )
+            candidate_row = await session.get(EvidenceCandidateRow, candidate.candidate_id)
+            request_row = await session.get(
+                EvidenceAdmissionRequestRow, first_request.admission_request_id
+            )
+            admission_evaluation_row = await session.scalar(
+                select(EvidenceEvaluationRow).where(
+                    EvidenceEvaluationRow.admission_request_id == first_request.admission_request_id
+                )
+            )
+            decision_row = await session.get(
+                EvidenceAdmissionDecisionRow, first_decision.decision_id
+            )
+            admitted_row = await session.get(
+                AdmittedEvidenceRow, first_admitted.admitted_evidence_id
+            )
+            assert checkpoint_row is not None
+            assert requirement_set_row is not None
+            assert evaluation_row is not None
+            assert attestation_row is not None
+            assert candidate_row is not None
+            assert request_row is not None
+            assert admission_evaluation_row is not None
+            assert decision_row is not None
+            assert admitted_row is not None
+            historical_original: dict[str, Any] = {
+                "checkpoint_target": checkpoint_row.target_state,
+                "checkpoint_set": checkpoint_row.requirement_set_ref,
+                "checkpoint_fingerprint": checkpoint_row.fingerprint,
+                "checkpoint_payload": deepcopy(checkpoint_row.payload),
+                "set_root": requirement_set_row.requirement_root_hash,
+                "set_fingerprint": requirement_set_row.fingerprint,
+                "set_payload": deepcopy(requirement_set_row.payload),
+                "evaluation_full_root": evaluation_row.full_requirement_root_hash,
+                "evaluation_subset_root": evaluation_row.checkpoint_subset_root_hash,
+                "evaluation_admitted_root": evaluation_row.admitted_ref_root_hash,
+                "evaluation_payload": deepcopy(evaluation_row.payload),
+                "attestation_payload": deepcopy(attestation_row.payload),
+            }
+            issuance_original: dict[str, dict[str, Any]] = {
+                "candidate": {
+                    "candidate_version": candidate_row.candidate_version,
+                    "candidate_fingerprint": candidate_row.candidate_fingerprint,
+                    "task_contract_id": candidate_row.task_contract_id,
+                    "task_contract_version": candidate_row.task_contract_version,
+                    "checkpoint_ref": candidate_row.checkpoint_ref,
+                    "issuer_type": candidate_row.issuer_type,
+                    "sensitivity": candidate_row.sensitivity,
+                    "content_hash": candidate_row.content_hash,
+                    "human_ingress_record_ref": candidate_row.human_ingress_record_ref,
+                    "payload": deepcopy(candidate_row.payload),
+                    "created_at": candidate_row.created_at,
+                },
+                "request": {
+                    "request_fingerprint": request_row.request_fingerprint,
+                    "candidate_id": request_row.candidate_id,
+                    "requirement_ref": request_row.requirement_ref,
+                    "requirement_set_ref": request_row.requirement_set_ref,
+                    "work_run_id": request_row.work_run_id,
+                    "checkpoint_ref": request_row.checkpoint_ref,
+                    "observed_state": request_row.observed_state,
+                    "observed_state_version": request_row.observed_state_version,
+                    "payload": deepcopy(request_row.payload),
+                    "created_at": request_row.created_at,
+                },
+                "evaluation": {
+                    "evaluation_id": admission_evaluation_row.evaluation_id,
+                    "dimension_results": deepcopy(admission_evaluation_row.dimension_results),
+                    "authority_version": admission_evaluation_row.authority_version,
+                    "evaluated_at": admission_evaluation_row.evaluated_at,
+                },
+                "decision": {
+                    "admission_request_id": decision_row.admission_request_id,
+                    "evaluation_id": decision_row.evaluation_id,
+                    "outcome": decision_row.outcome,
+                    "reason": decision_row.reason,
+                    "secondary_reasons": deepcopy(decision_row.secondary_reasons),
+                    "admitting_authority_version": decision_row.admitting_authority_version,
+                    "decided_at": decision_row.decided_at,
+                },
+                "admitted": {
+                    "decision_id": admitted_row.decision_id,
+                    "candidate_id": admitted_row.candidate_id,
+                    "requirement_ref": admitted_row.requirement_ref,
+                    "work_run_id": admitted_row.work_run_id,
+                    "checkpoint_ref": admitted_row.checkpoint_ref,
+                    "content_hash": admitted_row.content_hash,
+                    "coverage": deepcopy(admitted_row.coverage),
+                    "payload": deepcopy(admitted_row.payload),
+                    "admitted_at": admitted_row.admitted_at,
+                },
+            }
+
+        async def restore_historical_graph() -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                checkpoint_row = await session.get(
+                    EvidenceCheckpointRow, attestation.checkpoint_ref.serialized()
+                )
+                requirement_set_row = await session.get(
+                    EvidenceRequirementSetRow,
+                    f"{attestation.requirement_set_id}@{attestation.requirement_set_version}",
+                )
+                evaluation_row = await session.get(
+                    EvidenceSetEvaluationRow, attestation.evidence_set_evaluation_id
+                )
+                attestation_row = await session.scalar(
+                    select(EvidenceSetAttestationRow).where(
+                        EvidenceSetAttestationRow.serialized_ref == attestation.serialized_ref
+                    )
+                )
+                assert checkpoint_row is not None
+                assert requirement_set_row is not None
+                assert evaluation_row is not None
+                assert attestation_row is not None
+                checkpoint_row.target_state = historical_original["checkpoint_target"]
+                checkpoint_row.requirement_set_ref = str(historical_original["checkpoint_set"])
+                checkpoint_row.fingerprint = str(historical_original["checkpoint_fingerprint"])
+                checkpoint_row.payload = deepcopy(historical_original["checkpoint_payload"])
+                requirement_set_row.requirement_root_hash = str(historical_original["set_root"])
+                requirement_set_row.fingerprint = str(historical_original["set_fingerprint"])
+                requirement_set_row.payload = deepcopy(historical_original["set_payload"])
+                evaluation_row.full_requirement_root_hash = str(
+                    historical_original["evaluation_full_root"]
+                )
+                evaluation_row.checkpoint_subset_root_hash = str(
+                    historical_original["evaluation_subset_root"]
+                )
+                evaluation_row.admitted_ref_root_hash = str(
+                    historical_original["evaluation_admitted_root"]
+                )
+                evaluation_row.payload = deepcopy(historical_original["evaluation_payload"])
+                attestation_row.payload = deepcopy(historical_original["attestation_payload"])
+
+        async def historical_verification() -> None:
+            async with sessions() as session:
+                await verify_historical_set_attestation_provenance(
+                    session, attestation.serialized_ref
+                )
+
+        async def mutate_historical_graph(mutator: Any) -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                checkpoint_row = await session.get(
+                    EvidenceCheckpointRow, attestation.checkpoint_ref.serialized()
+                )
+                requirement_set_row = await session.get(
+                    EvidenceRequirementSetRow,
+                    f"{attestation.requirement_set_id}@{attestation.requirement_set_version}",
+                )
+                evaluation_row = await session.get(
+                    EvidenceSetEvaluationRow, attestation.evidence_set_evaluation_id
+                )
+                attestation_row = await session.scalar(
+                    select(EvidenceSetAttestationRow).where(
+                        EvidenceSetAttestationRow.serialized_ref == attestation.serialized_ref
+                    )
+                )
+                assert checkpoint_row is not None
+                assert requirement_set_row is not None
+                assert evaluation_row is not None
+                assert attestation_row is not None
+                mutator(
+                    checkpoint_row,
+                    requirement_set_row,
+                    evaluation_row,
+                    attestation_row,
+                )
+
+        def corrupt_checkpoint_target(
+            checkpoint_row: Any, _set_row: Any, _evaluation_row: Any, _attestation_row: Any
+        ) -> None:
+            checkpoint_row.target_state = WorkflowState.REJECTED.value
+
+        def corrupt_full_root(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            forged = "a" * 64
+            evaluation_row.full_requirement_root_hash = forged
+            evaluation_payload = deepcopy(evaluation_row.payload)
+            evaluation_payload["full_requirement_root_hash"] = forged
+            evaluation_row.payload = evaluation_payload
+            attestation_payload = deepcopy(attestation_row.payload)
+            attestation_payload["full_requirement_root_hash"] = forged
+            attestation_row.payload = attestation_payload
+
+        def corrupt_set_order(
+            _checkpoint_row: Any, set_row: Any, _evaluation_row: Any, _attestation_row: Any
+        ) -> None:
+            payload = deepcopy(set_row.payload)
+            payload["ordered_requirement_refs"] = list(
+                reversed(payload["ordered_requirement_refs"])
+            )
+            set_row.payload = payload
+
+        def corrupt_applicable_list(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            forged_refs = [static.ref.serialized()]
+            evaluation_payload = deepcopy(evaluation_row.payload)
+            evaluation_payload["ordered_applicable_requirement_refs"] = forged_refs
+            evaluation_row.payload = evaluation_payload
+            attestation_payload = deepcopy(attestation_row.payload)
+            attestation_payload["ordered_applicable_requirement_refs"] = forged_refs
+            attestation_row.payload = attestation_payload
+
+        def corrupt_applicable_list_and_root(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            forged_refs = [static.ref.serialized()]
+            forged_root = canonical_hash([(static.ref.serialized(), static.fingerprint)])
+            evaluation_row.checkpoint_subset_root_hash = forged_root
+            evaluation_payload = deepcopy(evaluation_row.payload)
+            evaluation_payload["ordered_applicable_requirement_refs"] = forged_refs
+            evaluation_payload["checkpoint_subset_root_hash"] = forged_root
+            evaluation_row.payload = evaluation_payload
+            attestation_payload = deepcopy(attestation_row.payload)
+            attestation_payload["ordered_applicable_requirement_refs"] = forged_refs
+            attestation_payload["checkpoint_subset_root_hash"] = forged_root
+            attestation_row.payload = attestation_payload
+
+        def mutate_results(
+            evaluation_row: Any,
+            attestation_row: Any,
+            transform: Any,
+            *,
+            update_roots: bool = False,
+        ) -> None:
+            evaluation_payload = deepcopy(evaluation_row.payload)
+            results = deepcopy(evaluation_payload["requirement_results"])
+            transform(results)
+            evaluation_payload["requirement_results"] = results
+            if update_roots:
+                admitted_root = canonical_hash(
+                    [
+                        (
+                            item["requirement_ref"],
+                            item["admitted_evidence_refs"],
+                            item["coverage"],
+                        )
+                        for item in results
+                    ]
+                )
+                evaluation_payload["admitted_ref_root_hash"] = admitted_root
+                evaluation_row.admitted_ref_root_hash = admitted_root
+                admitted_refs = sorted(
+                    {
+                        admitted_ref
+                        for item in results
+                        for admitted_ref in item["admitted_evidence_refs"]
+                    }
+                )
+                attestation_payload = deepcopy(attestation_row.payload)
+                attestation_payload["admitted_ref_root_hash"] = admitted_root
+                attestation_payload["ordered_admitted_evidence_refs"] = admitted_refs
+                attestation_row.payload = attestation_payload
+            evaluation_row.payload = evaluation_payload
+
+        def duplicate_result(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            mutate_results(
+                evaluation_row,
+                attestation_row,
+                lambda results: results.append(deepcopy(results[0])),
+            )
+
+        def foreign_result(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            def transform(results: list[dict[str, object]]) -> None:
+                results[0]["requirement_ref"] = f"foreign-requirement-{uuid4()}@v1"
+
+            mutate_results(evaluation_row, attestation_row, transform)
+
+        def omitted_result(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            mutate_results(
+                evaluation_row,
+                attestation_row,
+                lambda results: results.pop(0),
+            )
+
+        def corrupt_ordered_admitted_refs(
+            _checkpoint_row: Any, _set_row: Any, _evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            payload = deepcopy(attestation_row.payload)
+            payload["ordered_admitted_evidence_refs"] = [
+                f"p1-6-admitted:{EVIDENCE_AUTHORITY_VERSION}:missing-{uuid4()}"
+            ]
+            attestation_row.payload = payload
+
+        def corrupt_admitted_root(
+            _checkpoint_row: Any, _set_row: Any, evaluation_row: Any, attestation_row: Any
+        ) -> None:
+            forged = "b" * 64
+            evaluation_row.admitted_ref_root_hash = forged
+            evaluation_payload = deepcopy(evaluation_row.payload)
+            evaluation_payload["admitted_ref_root_hash"] = forged
+            evaluation_row.payload = evaluation_payload
+            attestation_payload = deepcopy(attestation_row.payload)
+            attestation_payload["admitted_ref_root_hash"] = forged
+            attestation_row.payload = attestation_payload
+
+        def admitted_ref_substitution(substitute_ref: str) -> Any:
+            def mutate(
+                _checkpoint_row: Any,
+                _set_row: Any,
+                evaluation_row: Any,
+                attestation_row: Any,
+            ) -> None:
+                def transform(results: list[dict[str, object]]) -> None:
+                    results[0]["admitted_evidence_refs"] = [substitute_ref]
+
+                mutate_results(
+                    evaluation_row,
+                    attestation_row,
+                    transform,
+                    update_roots=True,
+                )
+
+            return mutate
+
+        corruptions = (
+            corrupt_checkpoint_target,
+            corrupt_full_root,
+            corrupt_set_order,
+            corrupt_applicable_list,
+            corrupt_applicable_list_and_root,
+            duplicate_result,
+            foreign_result,
+            omitted_result,
+            corrupt_ordered_admitted_refs,
+            corrupt_admitted_root,
+            admitted_ref_substitution(
+                f"p1-6-admitted:{EVIDENCE_AUTHORITY_VERSION}:missing-{uuid4()}"
+            ),
+            admitted_ref_substitution(
+                AdmittedEvidenceRef(
+                    other_admitted.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
+                ).serialized()
+            ),
+        )
+        for corruption in corruptions:
+            try:
+                await mutate_historical_graph(corruption)
+                with pytest.raises(HistoricalEvidenceProvenanceError):
+                    await historical_verification()
+            finally:
+                await restore_historical_graph()
+        await historical_verification()
+
+        async def restore_issuance_graph() -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                candidate_row = await session.get(EvidenceCandidateRow, candidate.candidate_id)
+                request_row = await session.get(
+                    EvidenceAdmissionRequestRow, first_request.admission_request_id
+                )
+                admission_evaluation_row = await session.get(
+                    EvidenceEvaluationRow,
+                    str(issuance_original["evaluation"]["evaluation_id"]),
+                )
+                decision_row = await session.get(
+                    EvidenceAdmissionDecisionRow, first_decision.decision_id
+                )
+                admitted_row = await session.get(
+                    AdmittedEvidenceRow, first_admitted.admitted_evidence_id
+                )
+                assert candidate_row is not None
+                assert request_row is not None
+                assert decision_row is not None
+                assert admitted_row is not None
+                for field, value in issuance_original["candidate"].items():
+                    setattr(candidate_row, field, deepcopy(value))
+                for field, value in issuance_original["request"].items():
+                    setattr(request_row, field, deepcopy(value))
+                if admission_evaluation_row is None:
+                    admission_evaluation_row = EvidenceEvaluationRow(
+                        evaluation_id=str(issuance_original["evaluation"]["evaluation_id"]),
+                        admission_request_id=first_request.admission_request_id,
+                        dimension_results=deepcopy(
+                            issuance_original["evaluation"]["dimension_results"]
+                        ),
+                        authority_version=str(issuance_original["evaluation"]["authority_version"]),
+                        evaluated_at=issuance_original["evaluation"]["evaluated_at"],
+                    )
+                    session.add(admission_evaluation_row)
+                else:
+                    for field, value in issuance_original["evaluation"].items():
+                        setattr(admission_evaluation_row, field, deepcopy(value))
+                for field, value in issuance_original["decision"].items():
+                    setattr(decision_row, field, deepcopy(value))
+                for field, value in issuance_original["admitted"].items():
+                    setattr(admitted_row, field, deepcopy(value))
+
+        async def mutate_issuance_graph(mutator: Any) -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                candidate_row = await session.get(EvidenceCandidateRow, candidate.candidate_id)
+                request_row = await session.get(
+                    EvidenceAdmissionRequestRow, first_request.admission_request_id
+                )
+                admission_evaluation_row = await session.get(
+                    EvidenceEvaluationRow,
+                    str(issuance_original["evaluation"]["evaluation_id"]),
+                )
+                decision_row = await session.get(
+                    EvidenceAdmissionDecisionRow, first_decision.decision_id
+                )
+                admitted_row = await session.get(
+                    AdmittedEvidenceRow, first_admitted.admitted_evidence_id
+                )
+                assert candidate_row is not None
+                assert request_row is not None
+                assert admission_evaluation_row is not None
+                assert decision_row is not None
+                assert admitted_row is not None
+                mutator(
+                    candidate_row,
+                    request_row,
+                    admission_evaluation_row,
+                    decision_row,
+                    admitted_row,
+                )
+
+        def mutate_candidate_fingerprint(
+            candidate_row: Any, _request: Any, _evaluation: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            candidate_row.candidate_fingerprint = "1" * 64
+
+        def mutate_candidate_payload(
+            candidate_row: Any, _request: Any, _evaluation: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            payload = deepcopy(candidate_row.payload)
+            payload["subject_id"] = "forged-subject"
+            candidate_row.payload = payload
+
+        def mutate_admitted_candidate_identity(
+            _candidate: Any, _request: Any, _evaluation: Any, _decision: Any, admitted_row: Any
+        ) -> None:
+            payload = deepcopy(admitted_row.payload)
+            payload["candidate_version"] = "forged-version"
+            payload["candidate_fingerprint"] = "2" * 64
+            admitted_row.payload = payload
+
+        def mutate_request_candidate(
+            _candidate: Any, request_row: Any, _evaluation: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            request_row.candidate_id = other_use_candidate.candidate_id
+
+        def request_field(field: str, value: object) -> Any:
+            def mutate(
+                _candidate: Any,
+                request_row: Any,
+                _evaluation: Any,
+                _decision: Any,
+                _admitted: Any,
+            ) -> None:
+                setattr(request_row, field, value)
+
+            return mutate
+
+        def mutate_request_authority_roots(
+            _candidate: Any, request_row: Any, _evaluation: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            payload = deepcopy(request_row.payload)
+            payload["requirement_fingerprint"] = "3" * 64
+            payload["requirement_root_hash"] = "4" * 64
+            payload["checkpoint_fingerprint"] = "5" * 64
+            request_row.payload = payload
+
+        def mutate_request_fingerprint(
+            _candidate: Any, request_row: Any, _evaluation: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            request_row.request_fingerprint = "6" * 64
+
+        def mutate_evaluation_omitted(
+            _candidate: Any, _request: Any, evaluation_row: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            values = deepcopy(evaluation_row.dimension_results)
+            values.pop()
+            evaluation_row.dimension_results = values
+
+        def mutate_evaluation_duplicate(
+            _candidate: Any, _request: Any, evaluation_row: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            values = deepcopy(evaluation_row.dimension_results)
+            values[-1] = deepcopy(values[0])
+            evaluation_row.dimension_results = values
+
+        def mutate_evaluation_unknown(
+            _candidate: Any, _request: Any, evaluation_row: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            values = deepcopy(evaluation_row.dimension_results)
+            values[-1]["dimension"] = "UNKNOWN_DIMENSION"
+            evaluation_row.dimension_results = values
+
+        def mutate_evaluation_non_positive(
+            _candidate: Any, _request: Any, evaluation_row: Any, _decision: Any, _admitted: Any
+        ) -> None:
+            values = deepcopy(evaluation_row.dimension_results)
+            values[0]["outcome"] = "FAIL"
+            evaluation_row.dimension_results = values
+
+        def mutate_decision_rejected(
+            _candidate: Any, _request: Any, _evaluation: Any, decision_row: Any, _admitted: Any
+        ) -> None:
+            decision_row.outcome = EvidenceAdmissionOutcome.REJECTED.value
+            decision_row.reason = EvidenceRejectionReason.AUTHORITY_CONFLICT.value
+
+        def decision_field(field: str, value: object) -> Any:
+            def mutate(
+                _candidate: Any,
+                _request: Any,
+                _evaluation: Any,
+                decision_row: Any,
+                _admitted: Any,
+            ) -> None:
+                setattr(decision_row, field, value)
+
+            return mutate
+
+        def mutate_admitted_content(
+            _candidate: Any, _request: Any, _evaluation: Any, _decision: Any, admitted_row: Any
+        ) -> None:
+            admitted_row.content_hash = "7" * 64
+
+        def mutate_admitted_coverage(
+            _candidate: Any, _request: Any, _evaluation: Any, _decision: Any, admitted_row: Any
+        ) -> None:
+            admitted_row.coverage = ["forged-coverage"]
+
+        issuance_corruptions = (
+            mutate_candidate_fingerprint,
+            mutate_candidate_payload,
+            mutate_admitted_candidate_identity,
+            mutate_request_candidate,
+            request_field("requirement_ref", "forged-requirement@v1"),
+            request_field("requirement_set_ref", "forged-set@v1"),
+            request_field("checkpoint_ref", "forged-checkpoint@v1"),
+            request_field("work_run_id", "forged-run"),
+            mutate_request_authority_roots,
+            mutate_request_fingerprint,
+            mutate_evaluation_omitted,
+            mutate_evaluation_duplicate,
+            mutate_evaluation_unknown,
+            mutate_evaluation_non_positive,
+            mutate_decision_rejected,
+            decision_field("admission_request_id", "forged-request"),
+            decision_field("evaluation_id", "forged-evaluation"),
+            decision_field("admitting_authority_version", "forged-authority"),
+            decision_field("decided_at", NOW + timedelta(seconds=1)),
+            mutate_admitted_content,
+            mutate_admitted_coverage,
+        )
+        for corruption in issuance_corruptions:
+            try:
+                await mutate_issuance_graph(corruption)
+                with pytest.raises(HistoricalEvidenceProvenanceError):
+                    await historical_verification()
+            finally:
+                await restore_issuance_graph()
+
+        try:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                admission_evaluation_row = await session.get(
+                    EvidenceEvaluationRow,
+                    str(issuance_original["evaluation"]["evaluation_id"]),
+                )
+                assert admission_evaluation_row is not None
+                await session.delete(admission_evaluation_row)
+            with pytest.raises(HistoricalEvidenceProvenanceError):
+                await historical_verification()
+        finally:
+            await restore_issuance_graph()
+
+        async with sessions() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                await session.execute(
+                    text(
+                        "ALTER TABLE evidence_evaluations DROP CONSTRAINT "
+                        "evidence_evaluations_admission_request_id_key"
+                    )
+                )
+                session.add(
+                    EvidenceEvaluationRow(
+                        evaluation_id=f"duplicate-evaluation-{uuid4()}",
+                        admission_request_id=first_request.admission_request_id,
+                        dimension_results=deepcopy(
+                            issuance_original["evaluation"]["dimension_results"]
+                        ),
+                        authority_version=str(issuance_original["evaluation"]["authority_version"]),
+                        evaluated_at=issuance_original["evaluation"]["evaluated_at"],
+                    )
+                )
+                await session.flush()
+                with pytest.raises(HistoricalEvidenceProvenanceError):
+                    await verify_historical_set_attestation_provenance(
+                        session, attestation.serialized_ref
+                    )
+            finally:
+                await transaction.rollback()
+        await historical_verification()
+
         supplemental = system_candidate(
             candidate_id=f"supplemental-{uuid4()}",
             run_id=run_id,
@@ -752,6 +1433,13 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
         assert event["affected_mappings"]
         fresh_repository = PostgresEvidenceRepository(sessions)
         assert await fresh_repository.load_effective_attestation(attestation.serialized_ref) is None
+        async with sessions() as session:
+            assert (
+                await verify_historical_set_attestation_provenance(
+                    session, attestation.serialized_ref
+                )
+                == attestation
+            )
         assert await fresh_repository.load_admitted(first_ref) is None
         assert await fresh_repository.load_admitted(corrected_ref) is not None
         corrected_eval, corrected_attestation = await EvidenceSetEvaluator(
@@ -1523,6 +2211,103 @@ def test_finite_reuse_maximum_is_durable_concurrent_and_restart_safe(
         one_decision, one_admitted = await submit_reuse(one_candidate, one, one_request_id)
         assert one_decision.outcome is EvidenceAdmissionOutcome.ADMITTED
         assert one_admitted is not None
+        one_ref = AdmittedEvidenceRef(
+            one_admitted.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
+        ).serialized()
+
+        async def verify_reuse_history() -> None:
+            async with sessions() as session:
+                verified = await evidence_repository_module._verify_historical_admitted_ref(
+                    session, serialized_ref=one_ref
+                )
+                assert verified == one_admitted
+
+        await verify_reuse_history()
+        async with sessions() as session:
+            with pytest.raises(HistoricalEvidenceProvenanceError, match="contains a cycle"):
+                await evidence_repository_module._verify_historical_admitted_ref(
+                    session,
+                    serialized_ref=one_ref,
+                    visited_admitted_refs=frozenset({one_ref}),
+                )
+            consumption = await session.scalar(
+                select(EvidenceReuseConsumptionRow).where(
+                    EvidenceReuseConsumptionRow.admitted_evidence_id
+                    == one_admitted.admitted_evidence_id
+                )
+            )
+            assert consumption is not None
+            reuse_original = {
+                "prior_admitted_evidence_ref": consumption.prior_admitted_evidence_ref,
+                "requirement_ref": consumption.requirement_ref,
+                "work_run_id": consumption.work_run_id,
+                "checkpoint_ref": consumption.checkpoint_ref,
+                "policy_maximum": consumption.policy_maximum,
+                "consumption_ordinal": consumption.consumption_ordinal,
+                "consumed_at": consumption.consumed_at,
+            }
+
+        async def corrupt_reuse_ledger(field: str, value: Any) -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                consumption = await session.scalar(
+                    select(EvidenceReuseConsumptionRow).where(
+                        EvidenceReuseConsumptionRow.admitted_evidence_id
+                        == one_admitted.admitted_evidence_id
+                    )
+                )
+                assert consumption is not None
+                setattr(consumption, field, value)
+            with pytest.raises(HistoricalEvidenceProvenanceError):
+                await verify_reuse_history()
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                consumption = await session.scalar(
+                    select(EvidenceReuseConsumptionRow).where(
+                        EvidenceReuseConsumptionRow.admitted_evidence_id
+                        == one_admitted.admitted_evidence_id
+                    )
+                )
+                assert consumption is not None
+                for original_field, original_value in reuse_original.items():
+                    setattr(consumption, original_field, original_value)
+
+        for field, value in (
+            ("prior_admitted_evidence_ref", f"p1-6-admitted:forged:{uuid4()}"),
+            ("requirement_ref", f"forged-requirement-{uuid4()}@v1"),
+            ("work_run_id", f"foreign-run-{uuid4()}"),
+            ("checkpoint_ref", f"foreign-checkpoint-{uuid4()}@v1"),
+            ("policy_maximum", 99),
+            ("consumption_ordinal", 2),
+            ("consumed_at", NOW + timedelta(seconds=1)),
+        ):
+            await corrupt_reuse_ledger(field, value)
+        await verify_reuse_history()
+        async with sessions() as session:
+            prior_row = await session.get(AdmittedEvidenceRow, prior_admitted.admitted_evidence_id)
+            assert prior_row is not None
+            prior_payload_original = deepcopy(prior_row.payload)
+        try:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                prior_row = await session.get(
+                    AdmittedEvidenceRow, prior_admitted.admitted_evidence_id
+                )
+                assert prior_row is not None
+                payload = deepcopy(prior_row.payload)
+                payload["candidate_fingerprint"] = "b" * 64
+                prior_row.payload = payload
+            with pytest.raises(HistoricalEvidenceProvenanceError):
+                await verify_reuse_history()
+        finally:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                prior_row = await session.get(
+                    AdmittedEvidenceRow, prior_admitted.admitted_evidence_id
+                )
+                assert prior_row is not None
+                prior_row.payload = prior_payload_original
+        await verify_reuse_history()
         with pytest.raises(DBAPIError, match="append-only"):
             async with engine.begin() as connection:
                 await connection.execute(
@@ -2167,6 +2952,106 @@ def test_p1_5_immutable_ref_is_verified_candidate_input_not_admission(
         assert decision.outcome is EvidenceAdmissionOutcome.ADMITTED
         assert admitted is not None
         assert (await repository.counts())["admitted"] == baseline_admitted + 1
+        set_evaluation, attestation = await EvidenceSetEvaluator(repository).evaluate(
+            work_run_id=run_id,
+            checkpoint_ref=pre.ref,
+            source_state=WorkflowState.ADMISSION_PENDING,
+            state_version=3,
+            now=NOW,
+        )
+        assert set_evaluation.outcome is EvidenceSetOutcome.SATISFIED
+        assert attestation is not None
+
+        async def verify_historical() -> None:
+            async with sessions() as session:
+                assert (
+                    await verify_historical_set_attestation_provenance(
+                        session, attestation.serialized_ref
+                    )
+                    == attestation
+                )
+
+        await verify_historical()
+        assert (
+            await execution_repository.transition_attempt(
+                attempt_id,
+                "EXECUTION_FAILED",
+                refs={"failure_class": "WORKFLOW_LEFT_RUNNING"},
+            )
+        ).value == "EXECUTION_FAILED"
+        await verify_historical()
+        async with sessions() as session:
+            output = await session.get(ExecutionOutputRefRow, output_ref_id)
+            attempt = await session.get(ExecutionAttemptRow, attempt_id)
+            assert output is not None and attempt is not None
+            output_original = {
+                "execution_attempt_id": output.execution_attempt_id,
+                "ref_kind": output.ref_kind,
+                "content_hash": output.content_hash,
+                "storage_ref": output.storage_ref,
+            }
+            attempt_original = {
+                "work_run_id": attempt.work_run_id,
+                "task_contract_id": attempt.task_contract_id,
+                "task_contract_version": attempt.task_contract_version,
+            }
+
+        async def corrupt_and_reject(
+            model: type[Any], identity: str, field: str, value: Any
+        ) -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                row = await session.get(model, identity)
+                assert row is not None
+                setattr(row, field, value)
+            with pytest.raises(HistoricalEvidenceProvenanceError):
+                await verify_historical()
+
+        async def restore_producer() -> None:
+            async with sessions() as session, session.begin():
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                output = await session.get(ExecutionOutputRefRow, output_ref_id)
+                attempt = await session.get(ExecutionAttemptRow, attempt_id)
+                assert output is not None and attempt is not None
+                for field, value in output_original.items():
+                    setattr(output, field, value)
+                for field, value in attempt_original.items():
+                    setattr(attempt, field, value)
+
+        producer_corruptions = (
+            (
+                ExecutionOutputRefRow,
+                output_ref_id,
+                "execution_attempt_id",
+                f"missing-attempt-{uuid4()}",
+            ),
+            (ExecutionOutputRefRow, output_ref_id, "ref_kind", "ToolOutputRef"),
+            (ExecutionOutputRefRow, output_ref_id, "content_hash", "8" * 64),
+            (ExecutionOutputRefRow, output_ref_id, "storage_ref", "public://forged"),
+            (ExecutionAttemptRow, attempt_id, "work_run_id", f"foreign-{uuid4()}"),
+            (ExecutionAttemptRow, attempt_id, "task_contract_id", f"foreign-{uuid4()}"),
+            (ExecutionAttemptRow, attempt_id, "task_contract_version", "forged"),
+        )
+        for model, identity, field, value in producer_corruptions:
+            try:
+                await corrupt_and_reject(model, identity, field, value)
+            finally:
+                await restore_producer()
+        async with sessions() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                output = await session.get(ExecutionOutputRefRow, output_ref_id)
+                assert output is not None
+                await session.delete(output)
+                await session.flush()
+                with pytest.raises(HistoricalEvidenceProvenanceError):
+                    await verify_historical_set_attestation_provenance(
+                        session, attestation.serialized_ref
+                    )
+            finally:
+                await transaction.rollback()
+        await verify_historical()
         await engine.dispose()
 
     run(scenario())

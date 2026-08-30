@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from aiscc.workflow.guards import TrustedGuardFact
 from aiscc.workflow.models import TransitionDecision, TransitionRequest, WorkRun
-from aiscc.workflow.ports import FailureInjector, TransitionRepository
+from aiscc.workflow.ports import (
+    FailureInjector,
+    TransitionRepository,
+    TransitionTransactionParticipant,
+)
 
 
 class WorkflowKernel:
@@ -20,11 +24,13 @@ class WorkflowKernel:
         facts: tuple[TrustedGuardFact, ...],
         *,
         failure_injector: FailureInjector | None = None,
+        transaction_participant: TransitionTransactionParticipant | None = None,
     ) -> TransitionDecision:
         return await self._repository.decide(
             request,
             facts,
             failure_injector=failure_injector,
+            transaction_participant=transaction_participant,
         )
 
     async def load(self, work_run_id: str) -> WorkRun | None:
