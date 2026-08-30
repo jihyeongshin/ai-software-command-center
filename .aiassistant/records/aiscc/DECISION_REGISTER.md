@@ -643,3 +643,36 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P2 remains `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing accepted Cycle eligibility, memory source-to-content authority, lineage/current-tip behavior, historical/current separation, NextAction enrollment/selection ownership, Task issuance boundary, or predecessor non-substitution requires a separate Human-accepted P1-8 baseline update.
+
+## AISCC-P1-6-DURABLE-EVIDENCE-CONTENT-EXTENSION-DESIGN-V1
+
+- decision: Adopt the exact Human-accepted P1-6 Durable Evidence Content Authority Extension design as the bounded canonical contract for restart-safe structured evidence content required by P1-8 reconstruction.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - P1-8 baseline-gap HOLD: `.aiassistant/records/aiscc/cycles/20260830_2130_aiscc-p1-8-runtime-durable-evidence-content-baseline-gap-hold-1.cycle.md`;
+  - baseline design Task: `20260830_2130_aiscc-p1-6-durable-evidence-content-authority-baseline-design-1`;
+  - fingerprint-compatibility HOLD: `.aiassistant/records/aiscc/cycles/20260830_2308_aiscc-p1-6-durable-content-requirement-fingerprint-backward-compatibility-hold-1.cycle.md`;
+  - compatibility rework Task: `20260830_2308_aiscc-p1-6-durable-content-requirement-fingerprint-compatibility-design-rework-1`;
+  - Human final design review: `ACCEPTED`;
+  - accepted design persistence commit: `32e88234ad7a7cbaa545e12f8c7e03b5897202cb`;
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260830_2357_aiscc-p1-6-durable-evidence-content-design-final-acceptance-1.cycle.md`.
+- canonical owner: `.aiassistant/rules/AISCC_DURABLE_EVIDENCE_CONTENT_AUTHORITY.md`
+- accepted design SHA-256: `ab54948fb8c253309d5a8c228e31fca1b9afb9e19f0faf9be9cda8d14b735411`
+- implementation_status: `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`
+- verification_status: semantic design and Human acceptance complete; runtime evidence `HUMAN_PENDING`
+- exact authority contract:
+  - bounded canonical content is stored as PostgreSQL `bytea` with a 65,536-byte hard cap;
+  - V1 durable kinds are `INLINE_CANONICAL_STRUCTURED_BODY`, `DATABASE_OBSERVATION_REF`, and `RUNTIME_OBSERVATION_REF`;
+  - V1 durable sensitivities are `PUBLIC_SAFE` and `INTERNAL`; `PRIVATE_SENSITIVE` is non-durable and `SECRET_FORBIDDEN` is never stored;
+  - only the P1-6 content owner may write durable bytes; P1-8 and callers are read-only consumers;
+  - restart-safe historical resolution is projection-independent and separates content integrity from current evidence effectiveness;
+  - legacy Requirement V1 canonical bytes, fingerprints, RequirementSet roots, and dependent historical identities remain exact and are never rewritten or recomputed;
+  - only prospectively enrolled durable-capable Requirements use the explicit persisted V2 fingerprint schema and `REQUIRED` durable-content semantics;
+  - legacy metadata-only evidence receives no caller-byte backfill and is not automatically promoted to a P1-8 structured source.
+- predecessor boundary: existing P1-6 admission and `G_EVIDENCE`, P1-4 transition, P1-7 Human/Judgment, and P1-8 Cycle/Memory/NextAction authority semantics remain unchanged.
+- release/next-phase effect:
+  - next action is `P1-6 Durable Evidence Content Extension Runtime Implementation`;
+  - P1-8 Runtime is `BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`;
+  - P2/P3 remain `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: changing the store/cap, allowlists, writer ownership, canonicalization/integrity contract, V1/V2 identity compatibility, no-backfill rule, or historical/current separation requires a separate Human-accepted P1-6 durable-content baseline update.

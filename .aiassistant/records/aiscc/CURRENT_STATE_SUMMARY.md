@@ -22,10 +22,12 @@
 | P1-5 Agent Provider and Tool Execution | `ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-6 Evidence Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-6 Durable Evidence Content Extension Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-6 Durable Evidence Content Extension Runtime | `NOT_STARTED / IMPLEMENTATION_AUTHORIZED` |
 | P1-7 Human Gate and Judgment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-7 Human Gate and Judgment Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Project Memory and Cycle Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-8 Project Memory and Cycle Admission Runtime | `NOT_STARTED / IMPLEMENTATION_AUTHORIZED` |
+| P1-8 Project Memory and Cycle Admission Runtime | `BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE` |
 
 ## P0-4 provenance
 
@@ -483,6 +485,48 @@ At P1-6 runtime terminal judgment time, P1-7 Human Gate and Judgment remained `N
 the next phase. Its later terminal design judgment and current runtime next action are recorded below.
 P1-8 remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`.
 
+## P1-6 terminal durable evidence-content extension design
+
+Human final design review:
+
+```text
+HUMAN_PROVIDED
+P1-6 Durable Evidence Content Extension Design: ACCEPTED / CLOSED
+```
+
+Canonical owner and accepted identity:
+
+```text
+.aiassistant/rules/AISCC_DURABLE_EVIDENCE_CONTENT_AUTHORITY.md
+
+SHA-256:
+ab54948fb8c253309d5a8c228e31fca1b9afb9e19f0faf9be9cda8d14b735411
+
+design persistence commit:
+32e88234ad7a7cbaa545e12f8c7e03b5897202cb
+```
+
+Accepted bounded contract:
+
+```text
+PostgreSQL bytea / 65,536-byte hard cap
+durable kinds = INLINE_CANONICAL_STRUCTURED_BODY | DATABASE_OBSERVATION_REF | RUNTIME_OBSERVATION_REF
+durable sensitivity = PUBLIC_SAFE | INTERNAL
+SECRET_FORBIDDEN = never stored
+P1-6-only durable writer
+projection-independent restart-safe historical resolver
+legacy Requirement V1 fingerprint and RequirementSet root unchanged
+new durable-capable Requirement = explicit persisted V2 fingerprint schema
+legacy metadata-only evidence = no automatic structured-source promotion
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260830_2357_aiscc-p1-6-durable-evidence-content-design-final-acceptance-1.cycle.md`
+
+The extension runtime is `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`. P1-8 Runtime remains
+`BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`.
+
 ## P1-7 terminal Human Gate and Judgment design
 
 Human final design review:
@@ -600,7 +644,8 @@ Terminal Cycle:
 `.aiassistant/records/aiscc/cycles/20260830_1712_aiscc-p1-7-human-gate-and-judgment-runtime-final-acceptance-1.cycle.md`
 
 P1-8 Design is now `HUMAN_PROVIDED / ACCEPTED / CLOSED`; P1-8 Runtime is
-`NOT_STARTED / IMPLEMENTATION_AUTHORIZED`. Public Bounded Live remains `NOT_RELEASED`.
+`BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`.
+Public Bounded Live remains `NOT_RELEASED`.
 
 ## P1-8 terminal Project Memory and Cycle Admission design
 
@@ -644,8 +689,8 @@ Terminal Cycle:
 `.aiassistant/records/aiscc/cycles/20260830_2130_aiscc-p1-8-project-memory-and-cycle-admission-design-final-acceptance-1.cycle.md`
 
 All three P1-8 design HOLD findings are closed by the accepted design. P1-8 Runtime is
-`NOT_STARTED / IMPLEMENTATION_AUTHORIZED`; P2 remains `NOT_STARTED`; Public Bounded Live remains
-`NOT_RELEASED`.
+`BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`; P2 remains
+`NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
 
 ## blockers and next action
 
@@ -662,6 +707,10 @@ All three P1-8 design HOLD findings are closed by the accepted design. P1-8 Runt
 - P1-6 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-6 runtime: `21 paths / a583647cc94028874aaf78727e854b537dd033a3670332737aaa7fa53d6469f9`
 - P1-6 runtime acceptance commit: `f36f19f5b84cef9bc1452e7cb9e9e36c4ae2873e`
+- P1-6 Durable Evidence Content Extension Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted extension design: `ab54948fb8c253309d5a8c228e31fca1b9afb9e19f0faf9be9cda8d14b735411`
+- extension design persistence commit: `32e88234ad7a7cbaa545e12f8c7e03b5897202cb`
+- P1-6 Durable Evidence Content Extension Runtime: `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`
 - P1-7 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-7 design: `22851cd0a6476fe613a3cc7a86a4096ace7236b4bafdd3c7c5a25e701a3b1549`
 - P1-7 design acceptance commit: `238b0b41460c2504fd3244eadb06809d8692a60f`
@@ -671,8 +720,8 @@ All three P1-8 design HOLD findings are closed by the accepted design. P1-8 Runt
 - P1-8 Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - accepted P1-8 design: `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a`
 - P1-8 design acceptance commit: `c108e9c02f222cf51ce833e311465584447b3571`
-- current next action: `P1-8 Runtime Implementation`
-- P1-8 Runtime: `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`
+- current next action: `P1-6 Durable Evidence Content Extension Runtime Implementation`
+- P1-8 Runtime: `BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`
 
 ## non-substitution statement
 
