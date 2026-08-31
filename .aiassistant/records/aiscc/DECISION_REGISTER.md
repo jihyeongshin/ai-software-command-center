@@ -639,7 +639,7 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - exact Task issuance owner is `EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY`.
 - predecessor boundary: P1-4/P1-6/P1-7 authority semantics remain unchanged and are consumed only by exact immutable reference.
 - release/next-phase effect:
-  - P1-8 Runtime is `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`;
+  - P1-8 Runtime is `NOT_STARTED / RESUME_AUTHORIZED / NEXT_ACTION` after acceptance of the required P1-6 durable-content runtime;
   - P2 remains `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing accepted Cycle eligibility, memory source-to-content authority, lineage/current-tip behavior, historical/current separation, NextAction enrollment/selection ownership, Task issuance boundary, or predecessor non-substitution requires a separate Human-accepted P1-8 baseline update.
@@ -658,8 +658,8 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260830_2357_aiscc-p1-6-durable-evidence-content-design-final-acceptance-1.cycle.md`.
 - canonical owner: `.aiassistant/rules/AISCC_DURABLE_EVIDENCE_CONTENT_AUTHORITY.md`
 - accepted design SHA-256: `ab54948fb8c253309d5a8c228e31fca1b9afb9e19f0faf9be9cda8d14b735411`
-- implementation_status: `NOT_STARTED / IMPLEMENTATION_AUTHORIZED`
-- verification_status: semantic design and Human acceptance complete; runtime evidence `HUMAN_PENDING`
+- implementation_status: `IMPLEMENTED / ACCEPTED / CLOSED`
+- verification_status: exact runtime `13 paths / 2290da92d56d47336de410fd8848177d71f3965f2556d4363cde9dfa40749721`; Human final runtime review `ACCEPTED`
 - exact authority contract:
   - bounded canonical content is stored as PostgreSQL `bytea` with a 65,536-byte hard cap;
   - V1 durable kinds are `INLINE_CANONICAL_STRUCTURED_BODY`, `DATABASE_OBSERVATION_REF`, and `RUNTIME_OBSERVATION_REF`;
@@ -671,8 +671,36 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - legacy metadata-only evidence receives no caller-byte backfill and is not automatically promoted to a P1-8 structured source.
 - predecessor boundary: existing P1-6 admission and `G_EVIDENCE`, P1-4 transition, P1-7 Human/Judgment, and P1-8 Cycle/Memory/NextAction authority semantics remain unchanged.
 - release/next-phase effect:
-  - next action is `P1-6 Durable Evidence Content Extension Runtime Implementation`;
-  - P1-8 Runtime is `BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`;
+  - the P1-8 durable-content prerequisite is `SATISFIED`;
+  - next action is `P1-8 Runtime Resume`;
+  - P1-8 Runtime is `NOT_STARTED / RESUME_AUTHORIZED / NEXT_ACTION`;
   - P2/P3 remain `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing the store/cap, allowlists, writer ownership, canonicalization/integrity contract, V1/V2 identity compatibility, no-backfill rule, or historical/current separation requires a separate Human-accepted P1-6 durable-content baseline update.
+
+## AISCC-P1-6-DURABLE-EVIDENCE-CONTENT-EXTENSION-RUNTIME-V1
+
+- decision: Adopt the exact Human-reviewed 13-path P1-6 Durable Evidence Content Extension runtime as the canonical implementation baseline required for P1-8 structured historical-source reconstruction.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - Human runtime final review: `ACCEPTED`;
+  - accepted runtime commit: `8320a3c567a58bab5f728a88d5c88862392d187c`;
+  - accepted runtime identity: `13 paths / 2290da92d56d47336de410fd8848177d71f3965f2556d4363cde9dfa40749721`;
+  - writer/read capability HOLD: `.aiassistant/records/aiscc/cycles/20260831_0103_aiscc-p1-6-durable-content-runtime-writer-and-read-capability-authority-hold-1.cycle.md`;
+  - complete-repository evidence HOLD: `.aiassistant/records/aiscc/cycles/20260831_0813_aiscc-p1-6-durable-content-runtime-complete-repository-regression-evidence-hold-1.cycle.md`;
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260831_0912_aiscc-p1-6-durable-evidence-content-runtime-final-acceptance-1.cycle.md`.
+- implementation_status: `IMPLEMENTED / ACCEPTED / CLOSED`
+- verification_status: `195/195 PASS` complete repository evidence reused; P1-4/P1-6/P1-7 PostgreSQL regressions `18/7/2 PASS`; PostgreSQL `17.6`; Alembic `20260830_0005`; ruff `PASS`; mypy `67 source files PASS`
+- accepted authority:
+  - PostgreSQL `bytea` stores only allowlisted canonical structured content under the 65,536-byte hard cap;
+  - configured P1-6 owner capability is the sole writer;
+  - P1-8 receives only an owner-issued `P1_8_STRUCTURED_RESULT_V1` historical read capability for `PUBLIC_SAFE` and `INTERNAL` content, without write/export authority;
+  - Requirement V1 historical fingerprints and RequirementSet roots remain exact; only prospective durable-capable Requirements use V2;
+  - legacy metadata-only evidence remains P1-6 historically valid and P1-8 structured-source ineligible.
+- lifecycle boundary: the 2130 P1-8 Task under `tasks/done` records Executor Task completion after `IMPLEMENTATION_BASELINE_GAP`; it does not record P1-8 runtime implementation or acceptance.
+- release/next-phase effect:
+  - P1-8 durable-content prerequisite is `SATISFIED`;
+  - P1-8 Runtime is `NOT_STARTED / RESUME_AUTHORIZED / NEXT_ACTION`;
+  - P2 remains `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: weakening the accepted durable-content owner capability, size/kind/sensitivity bounds, restart-safe historical resolver, V1 identity preservation, V2 prospective enrollment, legacy no-backfill, or read-only P1-8 boundary requires a separate Human-accepted baseline update.
