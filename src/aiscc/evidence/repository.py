@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from sqlalchemy import func, or_, select, text
@@ -13,11 +15,31 @@ from aiscc.evidence.admission import (
     EvidenceAdmissionEvaluator,
     make_admission_request,
 )
+from aiscc.evidence.content import (
+    CANONICALIZATION_V1,
+    DURABLE_CONTENT_AUTHORITY_ID,
+    DURABLE_CONTENT_AUTHORITY_REVISION,
+    DURABLE_CONTENT_AUTHORITY_VERSION,
+    DURABLE_CONTENT_IDENTITY_SCHEMA,
+    DURABLE_CONTENT_KINDS,
+    DURABLE_CONTENT_PAYLOAD_SCHEMA,
+    DURABLE_CONTENT_RETENTION_POLICY,
+    MAX_DURABLE_CONTENT_BYTES,
+    P1_6DurableContentAuthority,
+    P1_6HistoricalContentAccessAuthority,
+    PreparedDurableEvidenceContent,
+    canonicalize_structured_json,
+    source_owner_authority_fingerprint,
+)
 from aiscc.evidence.issuers import candidate_fingerprint, human_ingress_fingerprint
 from aiscc.evidence.models import (
     AdmittedEvidence,
     AdmittedEvidenceRef,
     AuthoritativeWorkRunSnapshot,
+    DurableContentError,
+    DurableContentErrorCode,
+    DurableContentRequirement,
+    DurableEvidenceContentObject,
     EvidenceAdmissionDecision,
     EvidenceAdmissionDimension,
     EvidenceAdmissionOutcome,
@@ -25,6 +47,7 @@ from aiscc.evidence.models import (
     EvidenceAuthorityConflictError,
     EvidenceAuthorityEventKind,
     EvidenceCandidate,
+    EvidenceCandidateDurableContentBinding,
     EvidenceCandidateRef,
     EvidenceCheckpoint,
     EvidenceCheckpointRef,
@@ -49,11 +72,15 @@ from aiscc.evidence.models import (
     EvidenceSetSatisfactionAttestation,
     FreshnessPolicy,
     FreshnessPolicyKind,
+    HistoricalContentAccessGrant,
     HumanDirectEvidenceIngress,
     HumanDirectEvidenceIngressRef,
     HumanEvidenceProducerCategory,
+    RequirementFingerprintSchema,
     RequirementObligation,
     RequirementSatisfaction,
+    VerifiedHistoricalContent,
+    VerifiedHistoricalContentMetadata,
     canonical_hash,
 )
 from aiscc.evidence.requirements import (
@@ -67,8 +94,10 @@ from aiscc.persistence.models import (
     EvidenceAdmissionDecisionRow,
     EvidenceAdmissionRequestRow,
     EvidenceAuthorityEventRow,
+    EvidenceCandidateContentBindingRow,
     EvidenceCandidateRow,
     EvidenceCheckpointRow,
+    EvidenceContentObjectRow,
     EvidenceEvaluationRow,
     EvidenceRequirementRow,
     EvidenceRequirementSatisfactionRow,
@@ -93,8 +122,24 @@ class HistoricalEvidenceProvenanceError(EvidenceAuthorityConflictError):
 
 
 class PostgresEvidenceRepository:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        session_factory: async_sessionmaker[AsyncSession],
+        *,
+        durable_content_authority: P1_6DurableContentAuthority | None = None,
+        historical_content_access_authority: (
+            P1_6HistoricalContentAccessAuthority | None
+        ) = None,
+    ) -> None:
         self._session_factory = session_factory
+        self._durable_content_authority = durable_content_authority
+        self._historical_content_access_authority = historical_content_access_authority
+
+    def is_configured_durable_content_authority(
+        self, authority: P1_6DurableContentAuthority | None
+    ) -> bool:
+        """Construction-time identity check; authority IDs/versions are not capabilities."""
+        return authority is self._durable_content_authority
 
     async def register_authority(
         self,
@@ -221,6 +266,7 @@ class PostgresEvidenceRepository:
         candidate: EvidenceCandidate,
         evaluator: EvidenceAdmissionEvaluator,
         now: datetime | None = None,
+        prepared_durable_content: PreparedDurableEvidenceContent | None = None,
     ) -> tuple[EvidenceAdmissionDecision, AdmittedEvidence | None]:
         if request.candidate_ref != EvidenceCandidateRef(
             candidate.candidate_id,
@@ -228,6 +274,14 @@ class PostgresEvidenceRepository:
             candidate.candidate_fingerprint,
         ):
             raise EvidenceIdentityConflictError("request candidate ref mismatch")
+        if prepared_durable_content is not None and (
+            self._durable_content_authority is None
+            or not self._durable_content_authority.recognizes(prepared_durable_content)
+        ):
+            raise DurableContentError(
+                DurableContentErrorCode.ACCESS_DENIED,
+                "durable write requires the configured P1-6 writer capability",
+            )
         async with self._session_factory() as session, session.begin():
             await _acquire_work_run_transaction_lock(session, request.work_run_id)
             await _lock(session, f"evidence-request:{request.admission_request_id}")
@@ -235,6 +289,12 @@ class PostgresEvidenceRepository:
                 session,
                 f"evidence-task:{request.task_contract_id}:{request.task_contract_version}",
             )
+            if prepared_durable_content is not None:
+                await _lock(
+                    session,
+                    "evidence-content:"
+                    + prepared_durable_content.content.content_identity_key,
+                )
             await _lock(
                 session,
                 ":".join(
@@ -303,6 +363,33 @@ class PostgresEvidenceRepository:
             requirement = (
                 _requirement_from_row(requirement_row) if requirement_row is not None else None
             )
+            durable_required = bool(
+                requirement is not None
+                and requirement.fingerprint_schema
+                is RequirementFingerprintSchema.V2_DURABLE_CONTENT
+                and requirement.durable_content_requirement
+                is DurableContentRequirement.REQUIRED
+            )
+            if prepared_durable_content is not None and not durable_required:
+                raise DurableContentError(
+                    DurableContentErrorCode.REQUIREMENT_LEGACY_IDENTITY_CONFLICT,
+                    "durable content cannot be attached to a non-V2 Requirement",
+                )
+            if durable_required and prepared_durable_content is not None:
+                if requirement is None or requirement_set is None:
+                    raise DurableContentError(
+                        DurableContentErrorCode.REQUIRED,
+                        "durable content lacks Requirement authority",
+                    )
+                await _persist_durable_content_and_binding(
+                    session,
+                    prepared=prepared_durable_content,
+                    candidate=candidate,
+                    request=request,
+                    requirement=requirement,
+                    requirement_set=requirement_set,
+                    bound_at=(now or datetime.now(UTC)).astimezone(UTC),
+                )
             authority_current = bool(
                 set_row
                 and checkpoint_row
@@ -323,19 +410,26 @@ class PostgresEvidenceRepository:
                     prior_effective = not await _has_invalidating_event(
                         session, candidate.prior_admitted_evidence_ref
                     )
-            evaluation, decision = await evaluator.evaluate(
-                request=request,
-                candidate=candidate,
-                requirement=requirement,
-                checkpoint=checkpoint,
-                requirement_set=requirement_set,
-                prior_admitted=prior,
-                prior_effective=prior_effective,
-                authoritative_work_run=authoritative_work_run,
-                reuse_consumed=reuse_consumed,
-                authority_current=authority_current,
-                now=now,
-            )
+            evaluator_arguments: dict[str, Any] = {
+                "request": request,
+                "candidate": candidate,
+                "requirement": requirement,
+                "checkpoint": checkpoint,
+                "requirement_set": requirement_set,
+                "prior_admitted": prior,
+                "prior_effective": prior_effective,
+                "authoritative_work_run": authoritative_work_run,
+                "reuse_consumed": reuse_consumed,
+                "authority_current": authority_current,
+                "now": now,
+            }
+            if durable_required:
+                evaluator_arguments["authoritative_content_body"] = (
+                    prepared_durable_content.content.canonical_body_bytes
+                    if prepared_durable_content is not None
+                    else None
+                )
+            evaluation, decision = await evaluator.evaluate(**evaluator_arguments)
             session.add(_request_row(request))
             await session.flush()
             session.add(_evaluation_row(evaluation))
@@ -511,6 +605,8 @@ class PostgresEvidenceRepository:
             for name, model in (
                 ("human_ingress", HumanDirectEvidenceIngressRow),
                 ("candidates", EvidenceCandidateRow),
+                ("durable_content_objects", EvidenceContentObjectRow),
+                ("durable_content_bindings", EvidenceCandidateContentBindingRow),
                 ("requests", EvidenceAdmissionRequestRow),
                 ("decisions", EvidenceAdmissionDecisionRow),
                 ("admitted", AdmittedEvidenceRow),
@@ -523,6 +619,117 @@ class PostgresEvidenceRepository:
                     await session.scalar(select(func.count()).select_from(model)) or 0
                 )
             return result
+
+    async def verify_historical_content_ref(
+        self,
+        content_ref: EvidenceContentRef,
+        *,
+        expected_payload_fingerprint: str | None = None,
+    ) -> VerifiedHistoricalContentMetadata:
+        """Verify immutable PostgreSQL content without consulting current effectiveness."""
+        async with self._session_factory() as session:
+            return await _verify_historical_content_in_session(
+                session,
+                content_ref,
+                expected_payload_fingerprint=expected_payload_fingerprint,
+            )
+
+    async def resolve_historical_canonical_body(
+        self,
+        content_ref: EvidenceContentRef,
+        *,
+        access_grant: HistoricalContentAccessGrant,
+    ) -> VerifiedHistoricalContent:
+        """Opt-in exact-body resolution; caller bytes are never an input."""
+        metadata = await self.verify_historical_content_ref(content_ref)
+        content = metadata.content
+        if not _historical_content_access_allowed(
+            content, access_grant, self._historical_content_access_authority
+        ):
+            raise DurableContentError(
+                DurableContentErrorCode.ACCESS_DENIED,
+                "consumer grant does not authorize exact historical bytes",
+            )
+        return VerifiedHistoricalContent(metadata, bytes(content.canonical_body_bytes))
+
+    async def verify_historical_admitted_evidence_with_content(
+        self,
+        *,
+        admitted_evidence_ref: str,
+        exact_terminal_attestation_ref: str,
+        access_grant: HistoricalContentAccessGrant,
+    ) -> VerifiedHistoricalContent:
+        """Verify terminal-consumed P1-6 admission plus its original V2 content binding."""
+        async with self._session_factory() as session:
+            attestation = await verify_historical_set_attestation_provenance(
+                session, exact_terminal_attestation_ref
+            )
+            terminal_refs = set(attestation.ordered_admitted_evidence_refs)
+            if admitted_evidence_ref not in terminal_refs:
+                raise DurableContentError(
+                    DurableContentErrorCode.INTEGRITY_MISMATCH,
+                    "admitted evidence is not a member of the exact terminal attestation",
+                )
+            admitted = await _verify_historical_admitted_ref(
+                session,
+                serialized_ref=admitted_evidence_ref,
+                value=attestation,
+            )
+            admitted_row = await _admitted_by_ref(session, admitted_evidence_ref)
+            if admitted_row is None:
+                raise DurableContentError(
+                    DurableContentErrorCode.MISSING,
+                    "terminal admitted evidence row is absent",
+                )
+            binding_row = await session.get(
+                EvidenceCandidateContentBindingRow, admitted_row.candidate_id
+            )
+            if binding_row is None:
+                raise DurableContentError(
+                    DurableContentErrorCode.P1_8_SOURCE_NOT_DURABLE,
+                    "historical admission lacks an original V2 durable binding",
+                )
+            binding = await _verify_durable_binding_in_session(session, binding_row)
+            if (
+                binding.requirement_ref != admitted.requirement_ref.serialized()
+                or binding.requirement_root_hash != attestation.full_requirement_root_hash
+            ):
+                raise DurableContentError(
+                    DurableContentErrorCode.INTEGRITY_MISMATCH,
+                    "durable binding differs from terminal-consumed Requirement authority",
+                )
+            metadata = await _verify_historical_content_in_session(
+                session,
+                admitted.content_ref,
+                expected_payload_fingerprint=(
+                    binding.durable_content_payload_fingerprint
+                ),
+            )
+            if not _historical_content_access_allowed(
+                metadata.content,
+                access_grant,
+                self._historical_content_access_authority,
+            ):
+                raise DurableContentError(
+                    DurableContentErrorCode.ACCESS_DENIED,
+                    "consumer grant does not authorize exact historical bytes",
+                )
+            return VerifiedHistoricalContent(
+                metadata, bytes(metadata.content.canonical_body_bytes)
+            )
+
+    async def require_p1_8_structured_source_binding(
+        self, candidate_id: str
+    ) -> EvidenceCandidateDurableContentBinding:
+        """Read-only eligibility cut: legacy metadata-only candidates fail closed."""
+        async with self._session_factory() as session:
+            row = await session.get(EvidenceCandidateContentBindingRow, candidate_id)
+            if row is None:
+                raise DurableContentError(
+                    DurableContentErrorCode.P1_8_SOURCE_NOT_DURABLE,
+                    "candidate lacks original V2 REQUIRED durable binding",
+                )
+            return await _verify_durable_binding_in_session(session, row)
 
     async def evaluate_set(
         self,
@@ -1321,33 +1528,7 @@ async def _historical_authority_graph(
         payload = requirement_row.payload
         if (
             not isinstance(payload, dict)
-            or set(payload)
-            != {
-                "task_contract_id",
-                "task_contract_version",
-                "applicable_checkpoint_refs",
-                "evidence_type_id",
-                "evidence_type_version",
-                "allowed_issuer_types",
-                "allowed_issuer_ids",
-                "allowed_human_categories",
-                "allowed_content_kinds",
-                "schema_id",
-                "schema_version",
-                "subject_id",
-                "scope_id",
-                "resource_id",
-                "freshness_kind",
-                "freshness_max_age_seconds",
-                "freshness_config_version",
-                "required_coverage",
-                "reuse_maximum",
-                "compatible_requirement_refs",
-                "maximum_sensitivity",
-                "public_export_allowed",
-                "revoked_at",
-                "supersedes_requirement_ref",
-            }
+            or not _historical_requirement_payload_shape_valid(requirement_row)
             or any(
                 not _is_string_list(payload.get(key))
                 for key in (
@@ -2494,6 +2675,62 @@ def _historical_datetime(value: object) -> datetime:
     return _aware(datetime.fromisoformat(value))
 
 
+_V1_REQUIREMENT_ROW_PAYLOAD_KEYS = {
+    "task_contract_id",
+    "task_contract_version",
+    "applicable_checkpoint_refs",
+    "evidence_type_id",
+    "evidence_type_version",
+    "allowed_issuer_types",
+    "allowed_issuer_ids",
+    "allowed_human_categories",
+    "allowed_content_kinds",
+    "schema_id",
+    "schema_version",
+    "subject_id",
+    "scope_id",
+    "resource_id",
+    "freshness_kind",
+    "freshness_max_age_seconds",
+    "freshness_config_version",
+    "required_coverage",
+    "reuse_maximum",
+    "compatible_requirement_refs",
+    "maximum_sensitivity",
+    "public_export_allowed",
+    "revoked_at",
+    "supersedes_requirement_ref",
+}
+_V2_REQUIREMENT_ROW_PAYLOAD_KEYS = _V1_REQUIREMENT_ROW_PAYLOAD_KEYS | {
+    "fingerprint_schema",
+    "durable_content_requirement",
+    "durable_content_policy_ref",
+    "durable_content_policy_fingerprint",
+}
+
+
+def _historical_requirement_payload_shape_valid(row: EvidenceRequirementRow) -> bool:
+    payload = row.payload
+    if row.fingerprint_schema == RequirementFingerprintSchema.V1.value:
+        return set(payload) == _V1_REQUIREMENT_ROW_PAYLOAD_KEYS
+    if row.fingerprint_schema == RequirementFingerprintSchema.V2_DURABLE_CONTENT.value:
+        policy_ref = payload.get("durable_content_policy_ref")
+        policy_hash = payload.get("durable_content_policy_fingerprint")
+        return bool(
+            set(payload) == _V2_REQUIREMENT_ROW_PAYLOAD_KEYS
+            and payload.get("fingerprint_schema") == row.fingerprint_schema
+            and payload.get("durable_content_requirement")
+            == DurableContentRequirement.REQUIRED.value
+            and isinstance(policy_ref, str)
+            and policy_ref
+            and isinstance(policy_hash, str)
+            and len(policy_hash) == 64
+            and policy_hash.lower() == policy_hash
+            and all(character in "0123456789abcdef" for character in policy_hash)
+        )
+    return False
+
+
 def _is_string_list(value: object) -> bool:
     return isinstance(value, list) and all(isinstance(item, str) for item in value)
 
@@ -2533,6 +2770,278 @@ def _authoritative_work_run_snapshot(row: WorkRunRow) -> AuthoritativeWorkRunSna
         authority_ref=f"AISCC_SYSTEM_WORKRUN:{row.work_run_id}",
         authority_version=f"state-version:{row.state_version}",
     )
+
+
+async def _persist_durable_content_and_binding(
+    session: AsyncSession,
+    *,
+    prepared: PreparedDurableEvidenceContent,
+    candidate: EvidenceCandidate,
+    request: EvidenceAdmissionRequest,
+    requirement: EvidenceRequirement,
+    requirement_set: EvidenceRequirementSet,
+    bound_at: datetime,
+) -> None:
+    content = prepared.content
+    if candidate.content_ref != prepared.content_ref:
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "candidate EvidenceContentRef differs from the prepared durable object",
+        )
+    if (
+        requirement.fingerprint_schema
+        is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
+        or requirement.durable_content_requirement is not DurableContentRequirement.REQUIRED
+        or requirement.durable_content_policy_ref is None
+        or requirement.durable_content_policy_fingerprint is None
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.REQUIRED,
+            "Requirement lacks original REQUIRED durable enrollment",
+        )
+    sensitivity_allowed = bool(
+        content.sensitivity is EvidenceSensitivity.PUBLIC_SAFE
+        or (
+            content.sensitivity is EvidenceSensitivity.INTERNAL
+            and requirement.maximum_sensitivity is EvidenceSensitivity.INTERNAL
+        )
+    )
+    if (
+        content.source_owner_authority_ref != candidate.issuer.authority_ref
+        or content.source_owner_authority_fingerprint
+        != source_owner_authority_fingerprint(candidate)
+        or content.content_kind not in DURABLE_CONTENT_KINDS
+        or content.content_kind not in requirement.allowed_content_kinds
+        or content.canonicalization != CANONICALIZATION_V1
+        or content.schema_id != requirement.schema_id
+        or content.schema_version != requirement.schema_version
+        or not sensitivity_allowed
+        or content.retention_policy != DURABLE_CONTENT_RETENTION_POLICY
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.SCHEMA_MISMATCH,
+            "durable object differs from Requirement-enrolled owner/content policy",
+        )
+    _verify_durable_object_value(content, candidate.content_ref)
+
+    existing = await session.get(EvidenceContentObjectRow, content.serialized_ref)
+    if existing is None:
+        conflicting_identity = await session.scalar(
+            select(EvidenceContentObjectRow).where(
+                EvidenceContentObjectRow.owner_id == content.owner_id,
+                EvidenceContentObjectRow.owner_version == content.owner_version,
+                EvidenceContentObjectRow.object_id == content.object_id,
+                EvidenceContentObjectRow.object_version == content.object_version,
+            )
+        )
+        if conflicting_identity is not None:
+            raise DurableContentError(
+                DurableContentErrorCode.IDENTITY_CONFLICT,
+                "owner/object identity already has different immutable content",
+            )
+        session.add(_durable_content_row(content))
+        await session.flush()
+    elif _durable_content_from_row(existing) != content:
+        raise DurableContentError(
+            DurableContentErrorCode.IDENTITY_CONFLICT,
+            "durable content identity replay differs from stored immutable payload",
+        )
+
+    content_ref_fingerprint = canonical_hash(_content_payload(candidate.content_ref))
+    binding = EvidenceCandidateDurableContentBinding(
+        candidate_id=candidate.candidate_id,
+        candidate_version=candidate.candidate_version,
+        candidate_fingerprint=candidate.candidate_fingerprint,
+        durable_content_ref=content.serialized_ref,
+        durable_content_payload_fingerprint=content.payload_fingerprint,
+        content_ref_metadata_fingerprint=content_ref_fingerprint,
+        requirement_ref=request.requirement_ref.serialized(),
+        requirement_fingerprint_schema=requirement.fingerprint_schema,
+        requirement_fingerprint=requirement.fingerprint,
+        requirement_set_ref=(
+            f"{requirement_set.requirement_set_id}@{requirement_set.requirement_set_version}"
+        ),
+        requirement_root_hash=requirement_set.requirement_root_hash,
+        durable_content_policy_ref=requirement.durable_content_policy_ref,
+        durable_content_policy_fingerprint=requirement.durable_content_policy_fingerprint,
+        bound_at=bound_at,
+        binding_fingerprint="",
+    )
+    binding = replace(
+        binding, binding_fingerprint=canonical_hash(_durable_binding_payload(binding))
+    )
+    existing_binding = await session.get(
+        EvidenceCandidateContentBindingRow, candidate.candidate_id
+    )
+    if existing_binding is None:
+        session.add(_durable_binding_row(binding))
+        await session.flush()
+    elif _durable_binding_from_row(existing_binding) != binding:
+        raise DurableContentError(
+            DurableContentErrorCode.IDENTITY_CONFLICT,
+            "candidate durable-content binding identity conflict",
+        )
+
+
+async def _verify_historical_content_in_session(
+    session: AsyncSession,
+    content_ref: EvidenceContentRef,
+    *,
+    expected_payload_fingerprint: str | None = None,
+) -> VerifiedHistoricalContentMetadata:
+    identity_key = canonical_hash(
+        {
+            "identity_schema": DURABLE_CONTENT_IDENTITY_SCHEMA,
+            "owner_id": content_ref.owner_id,
+            "owner_version": content_ref.owner_version,
+            "object_id": content_ref.object_id,
+            "object_version": content_ref.object_version,
+        }
+    )
+    serialized_ref = f"p1-6-durable-content:v1:{identity_key}"
+    row = await session.get(EvidenceContentObjectRow, serialized_ref)
+    if row is None:
+        raise DurableContentError(
+            DurableContentErrorCode.MISSING,
+            "durable content row is absent",
+        )
+    try:
+        content = _durable_content_from_row(row)
+        _verify_durable_object_value(content, content_ref)
+    except DurableContentError:
+        raise
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable content row contains malformed immutable values",
+        ) from exc
+    if (
+        expected_payload_fingerprint is not None
+        and content.payload_fingerprint != expected_payload_fingerprint
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable content payload fingerprint differs from expected binding",
+        )
+    return VerifiedHistoricalContentMetadata(content)
+
+
+def _historical_content_access_allowed(
+    content: DurableEvidenceContentObject,
+    access_grant: HistoricalContentAccessGrant,
+    authority: P1_6HistoricalContentAccessAuthority | None,
+) -> bool:
+    return bool(authority is not None and authority.allows_historical_read(access_grant, content))
+
+
+async def _verify_durable_binding_in_session(
+    session: AsyncSession, row: EvidenceCandidateContentBindingRow
+) -> EvidenceCandidateDurableContentBinding:
+    try:
+        binding = _durable_binding_from_row(row)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable candidate binding contains malformed immutable values",
+        ) from exc
+    if binding.binding_fingerprint != canonical_hash(_durable_binding_payload(binding)):
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable candidate binding fingerprint disagrees",
+        )
+    candidate = await _historical_candidate_from_row(session, binding.candidate_id)
+    requirement_row = await session.get(EvidenceRequirementRow, binding.requirement_ref)
+    set_row = await session.get(EvidenceRequirementSetRow, binding.requirement_set_ref)
+    content_row = await session.get(EvidenceContentObjectRow, binding.durable_content_ref)
+    if requirement_row is None or set_row is None or content_row is None:
+        raise DurableContentError(
+            DurableContentErrorCode.MISSING,
+            "durable binding authority graph is incomplete",
+        )
+    if not _historical_requirement_payload_shape_valid(requirement_row):
+        raise DurableContentError(
+            DurableContentErrorCode.REQUIREMENT_SCHEMA_UNKNOWN,
+            "persisted Requirement schema/row shape is unknown",
+        )
+    try:
+        requirement = _requirement_from_row(requirement_row)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DurableContentError(
+            DurableContentErrorCode.REQUIREMENT_SCHEMA_UNKNOWN,
+            "persisted Requirement cannot be reconstructed by its schema",
+        ) from exc
+    if requirement_row.fingerprint != canonical_hash(_requirement_payload(requirement)):
+        raise DurableContentError(
+            DurableContentErrorCode.REQUIREMENT_FINGERPRINT_MISMATCH,
+            "persisted Requirement differs from schema-selected canonical bytes",
+        )
+    try:
+        requirement_set = _set_from_row(set_row)
+        member_rows = {
+            member.requirement_ref: member
+            for member in await session.scalars(
+                select(EvidenceRequirementRow).where(
+                    EvidenceRequirementRow.requirement_set_ref
+                    == binding.requirement_set_ref
+                )
+            )
+        }
+        members = tuple(
+            _requirement_from_row(member_rows[member_ref])
+            for member_ref in requirement_set.ordered_requirement_refs
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable binding RequirementSet graph is malformed",
+        ) from exc
+    expected_root = canonical_hash(
+        [(member.ref.serialized(), member.fingerprint) for member in members]
+    )
+    if (
+        any(
+            not _historical_requirement_payload_shape_valid(
+                member_rows[member.ref.serialized()]
+            )
+            or member.fingerprint != canonical_hash(_requirement_payload(member))
+            for member in members
+        )
+        or
+        expected_root != requirement_set.requirement_root_hash
+        or set_row.fingerprint != canonical_hash(_set_payload(requirement_set))
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable binding RequirementSet root/fingerprint disagrees",
+        )
+    content = _durable_content_from_row(content_row)
+    await _verify_historical_content_in_session(
+        session,
+        candidate.content_ref,
+        expected_payload_fingerprint=binding.durable_content_payload_fingerprint,
+    )
+    if (
+        requirement.fingerprint_schema
+        is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
+        or requirement.durable_content_requirement is not DurableContentRequirement.REQUIRED
+        or requirement.ref.serialized() != binding.requirement_ref
+        or requirement.fingerprint != binding.requirement_fingerprint
+        or requirement.fingerprint_schema != binding.requirement_fingerprint_schema
+        or requirement.durable_content_policy_ref != binding.durable_content_policy_ref
+        or requirement.durable_content_policy_fingerprint
+        != binding.durable_content_policy_fingerprint
+        or set_row.requirement_root_hash != binding.requirement_root_hash
+        or candidate.candidate_version != binding.candidate_version
+        or candidate.candidate_fingerprint != binding.candidate_fingerprint
+        or canonical_hash(_content_payload(candidate.content_ref))
+        != binding.content_ref_metadata_fingerprint
+        or content.payload_fingerprint != binding.durable_content_payload_fingerprint
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable candidate binding differs from immutable authority graph",
+        )
+    return binding
 
 
 async def _persist_candidate(session: AsyncSession, candidate: EvidenceCandidate) -> None:
@@ -2746,40 +3255,53 @@ def _set_from_row(row: EvidenceRequirementSetRow) -> EvidenceRequirementSet:
 
 
 def _requirement_row(value: EvidenceRequirement) -> EvidenceRequirementRow:
+    payload: dict[str, object] = {
+        "task_contract_id": value.task_contract_id,
+        "task_contract_version": value.task_contract_version,
+        "applicable_checkpoint_refs": list(value.applicable_checkpoint_refs),
+        "evidence_type_id": value.evidence_type_id,
+        "evidence_type_version": value.evidence_type_version,
+        "allowed_issuer_types": sorted(item.value for item in value.allowed_issuer_types),
+        "allowed_issuer_ids": sorted(value.allowed_issuer_ids),
+        "allowed_human_categories": sorted(
+            item.value for item in value.allowed_human_categories
+        ),
+        "allowed_content_kinds": sorted(item.value for item in value.allowed_content_kinds),
+        "schema_id": value.schema_id,
+        "schema_version": value.schema_version,
+        "subject_id": value.subject_id,
+        "scope_id": value.scope_id,
+        "resource_id": value.resource_id,
+        "freshness_kind": value.freshness_policy.kind.value,
+        "freshness_max_age_seconds": value.freshness_policy.max_age_seconds,
+        "freshness_config_version": value.freshness_policy.config_version,
+        "required_coverage": sorted(value.required_coverage),
+        "reuse_maximum": value.reuse_maximum,
+        "compatible_requirement_refs": sorted(value.compatible_requirement_refs),
+        "maximum_sensitivity": value.maximum_sensitivity.value,
+        "public_export_allowed": value.public_export_allowed,
+        "revoked_at": value.revoked_at.isoformat() if value.revoked_at else None,
+        "supersedes_requirement_ref": value.supersedes_requirement_ref,
+    }
+    if value.fingerprint_schema is RequirementFingerprintSchema.V2_DURABLE_CONTENT:
+        payload.update(
+            {
+                "fingerprint_schema": value.fingerprint_schema.value,
+                "durable_content_requirement": value.durable_content_requirement.value,
+                "durable_content_policy_ref": value.durable_content_policy_ref,
+                "durable_content_policy_fingerprint": (
+                    value.durable_content_policy_fingerprint
+                ),
+            }
+        )
     return EvidenceRequirementRow(
         requirement_ref=value.ref.serialized(),
         requirement_set_ref=_set_ref(value.requirement_set_id, value.requirement_set_version),
         profile=value.profile.value,
         obligation=value.obligation.value,
+        fingerprint_schema=value.fingerprint_schema.value,
         fingerprint=value.fingerprint,
-        payload={
-            "task_contract_id": value.task_contract_id,
-            "task_contract_version": value.task_contract_version,
-            "applicable_checkpoint_refs": list(value.applicable_checkpoint_refs),
-            "evidence_type_id": value.evidence_type_id,
-            "evidence_type_version": value.evidence_type_version,
-            "allowed_issuer_types": sorted(item.value for item in value.allowed_issuer_types),
-            "allowed_issuer_ids": sorted(value.allowed_issuer_ids),
-            "allowed_human_categories": sorted(
-                item.value for item in value.allowed_human_categories
-            ),
-            "allowed_content_kinds": sorted(item.value for item in value.allowed_content_kinds),
-            "schema_id": value.schema_id,
-            "schema_version": value.schema_version,
-            "subject_id": value.subject_id,
-            "scope_id": value.scope_id,
-            "resource_id": value.resource_id,
-            "freshness_kind": value.freshness_policy.kind.value,
-            "freshness_max_age_seconds": value.freshness_policy.max_age_seconds,
-            "freshness_config_version": value.freshness_policy.config_version,
-            "required_coverage": sorted(value.required_coverage),
-            "reuse_maximum": value.reuse_maximum,
-            "compatible_requirement_refs": sorted(value.compatible_requirement_refs),
-            "maximum_sensitivity": value.maximum_sensitivity.value,
-            "public_export_allowed": value.public_export_allowed,
-            "revoked_at": value.revoked_at.isoformat() if value.revoked_at else None,
-            "supersedes_requirement_ref": value.supersedes_requirement_ref,
-        },
+        payload=payload,
         issued_at=value.issued_at,
     )
 
@@ -2788,6 +3310,7 @@ def _requirement_from_row(row: EvidenceRequirementRow) -> EvidenceRequirement:
     requirement_id, requirement_version = row.requirement_ref.rsplit("@", 1)
     set_id, set_version = row.requirement_set_ref.rsplit("@", 1)
     payload = row.payload
+    schema = RequirementFingerprintSchema(row.fingerprint_schema)
     return EvidenceRequirement(
         EvidenceRequirementRef(requirement_id, requirement_version),
         str(payload["task_contract_id"]),
@@ -2830,6 +3353,22 @@ def _requirement_from_row(row: EvidenceRequirementRow) -> EvidenceRequirement:
         row.fingerprint,
         _optional_datetime(payload.get("revoked_at")),
         _optional_str(payload.get("supersedes_requirement_ref")),
+        fingerprint_schema=schema,
+        durable_content_requirement=(
+            DurableContentRequirement(str(payload["durable_content_requirement"]))
+            if schema is RequirementFingerprintSchema.V2_DURABLE_CONTENT
+            else DurableContentRequirement.NOT_APPLICABLE
+        ),
+        durable_content_policy_ref=(
+            _optional_str(payload.get("durable_content_policy_ref"))
+            if schema is RequirementFingerprintSchema.V2_DURABLE_CONTENT
+            else None
+        ),
+        durable_content_policy_fingerprint=(
+            _optional_str(payload.get("durable_content_policy_fingerprint"))
+            if schema is RequirementFingerprintSchema.V2_DURABLE_CONTENT
+            else None
+        ),
     )
 
 
@@ -2909,6 +3448,236 @@ def _content_from_payload(payload: dict[str, object]) -> EvidenceContentRef:
         EvidenceSensitivity(str(payload["sensitivity"])),
         str(payload["retention_policy"]),
         str(payload["access_policy"]),
+    )
+
+
+def _durable_content_metadata(value: DurableEvidenceContentObject) -> dict[str, object]:
+    return {
+        "serialized_ref": value.serialized_ref,
+        "content_identity_key": value.content_identity_key,
+        "owner_id": value.owner_id,
+        "owner_version": value.owner_version,
+        "source_owner_authority_ref": value.source_owner_authority_ref,
+        "source_owner_authority_fingerprint": value.source_owner_authority_fingerprint,
+        "object_id": value.object_id,
+        "object_version": value.object_version,
+        "content_kind": value.content_kind.value,
+        "canonicalization": value.canonicalization,
+        "schema_id": value.schema_id,
+        "schema_version": value.schema_version,
+        "byte_count": value.byte_count,
+        "content_hash_algorithm": value.content_hash_algorithm,
+        "content_hash": value.content_hash,
+        "sensitivity": value.sensitivity.value,
+        "retention_policy": value.retention_policy,
+        "access_policy": value.access_policy,
+        "created_at": value.created_at.isoformat(),
+        "content_authority_id": value.content_authority_id,
+        "content_authority_version": value.content_authority_version,
+        "content_authority_revision": value.content_authority_revision,
+        "payload_fingerprint_schema": value.payload_fingerprint_schema,
+    }
+
+
+def _verify_durable_object_value(
+    value: DurableEvidenceContentObject, content_ref: EvidenceContentRef
+) -> None:
+    expected_identity_key = canonical_hash(
+        {
+            "identity_schema": DURABLE_CONTENT_IDENTITY_SCHEMA,
+            "owner_id": value.owner_id,
+            "owner_version": value.owner_version,
+            "object_id": value.object_id,
+            "object_version": value.object_version,
+        }
+    )
+    expected_ref = f"p1-6-durable-content:v1:{expected_identity_key}"
+    body = bytes(value.canonical_body_bytes)
+    expected_content_ref = EvidenceContentRef(
+        value.content_kind,
+        value.owner_id,
+        value.owner_version,
+        value.object_id,
+        value.object_version,
+        value.canonicalization,
+        value.schema_id,
+        value.schema_version,
+        value.byte_count,
+        value.content_hash,
+        value.sensitivity,
+        value.retention_policy,
+        value.access_policy,
+    )
+    actual_content_ref = EvidenceContentRef(
+        content_ref.content_kind,
+        content_ref.owner_id,
+        content_ref.owner_version,
+        content_ref.object_id,
+        content_ref.object_version,
+        content_ref.canonicalization,
+        content_ref.schema_id,
+        content_ref.schema_version,
+        content_ref.byte_count,
+        content_ref.content_hash,
+        content_ref.sensitivity,
+        content_ref.retention_policy,
+        content_ref.access_policy,
+    )
+    if (
+        value.content_identity_key != expected_identity_key
+        or value.serialized_ref != expected_ref
+        or value.content_kind not in DURABLE_CONTENT_KINDS
+        or value.canonicalization != CANONICALIZATION_V1
+        or value.content_hash_algorithm != "SHA-256"
+        or value.content_authority_id != DURABLE_CONTENT_AUTHORITY_ID
+        or value.content_authority_version != DURABLE_CONTENT_AUTHORITY_VERSION
+        or value.content_authority_revision != DURABLE_CONTENT_AUTHORITY_REVISION
+        or value.payload_fingerprint_schema != DURABLE_CONTENT_PAYLOAD_SCHEMA
+        or value.retention_policy != DURABLE_CONTENT_RETENTION_POLICY
+        or not 1 <= len(body) <= MAX_DURABLE_CONTENT_BYTES
+        or value.byte_count != len(body)
+        or value.content_hash != hashlib.sha256(body).hexdigest()
+        or value.payload_fingerprint != canonical_hash(_durable_content_metadata(value))
+        or canonicalize_structured_json(body) != body
+        or expected_content_ref != actual_content_ref
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.INTEGRITY_MISMATCH,
+            "durable content identity, metadata, or canonical bytes disagree",
+        )
+
+
+def _durable_content_row(value: DurableEvidenceContentObject) -> EvidenceContentObjectRow:
+    return EvidenceContentObjectRow(
+        serialized_ref=value.serialized_ref,
+        content_identity_key=value.content_identity_key,
+        owner_id=value.owner_id,
+        owner_version=value.owner_version,
+        source_owner_authority_ref=value.source_owner_authority_ref,
+        source_owner_authority_fingerprint=value.source_owner_authority_fingerprint,
+        object_id=value.object_id,
+        object_version=value.object_version,
+        content_kind=value.content_kind.value,
+        canonicalization=value.canonicalization,
+        schema_id=value.schema_id,
+        schema_version=value.schema_version,
+        byte_count=value.byte_count,
+        content_hash_algorithm=value.content_hash_algorithm,
+        content_hash=value.content_hash,
+        sensitivity=value.sensitivity.value,
+        retention_policy=value.retention_policy,
+        access_policy=value.access_policy,
+        canonical_body=value.canonical_body_bytes,
+        created_at=value.created_at,
+        content_authority_id=value.content_authority_id,
+        content_authority_version=value.content_authority_version,
+        content_authority_revision=value.content_authority_revision,
+        payload_fingerprint_schema=value.payload_fingerprint_schema,
+        payload_fingerprint=value.payload_fingerprint,
+    )
+
+
+def _durable_content_from_row(row: EvidenceContentObjectRow) -> DurableEvidenceContentObject:
+    return DurableEvidenceContentObject(
+        serialized_ref=row.serialized_ref,
+        content_identity_key=row.content_identity_key,
+        owner_id=row.owner_id,
+        owner_version=row.owner_version,
+        source_owner_authority_ref=row.source_owner_authority_ref,
+        source_owner_authority_fingerprint=row.source_owner_authority_fingerprint,
+        object_id=row.object_id,
+        object_version=row.object_version,
+        content_kind=EvidenceContentKind(row.content_kind),
+        canonicalization=row.canonicalization,
+        schema_id=row.schema_id,
+        schema_version=row.schema_version,
+        byte_count=row.byte_count,
+        content_hash_algorithm=row.content_hash_algorithm,
+        content_hash=row.content_hash,
+        sensitivity=EvidenceSensitivity(row.sensitivity),
+        retention_policy=row.retention_policy,
+        access_policy=row.access_policy,
+        canonical_body_bytes=bytes(row.canonical_body),
+        created_at=_aware(row.created_at),
+        content_authority_id=row.content_authority_id,
+        content_authority_version=row.content_authority_version,
+        content_authority_revision=row.content_authority_revision,
+        payload_fingerprint_schema=row.payload_fingerprint_schema,
+        payload_fingerprint=row.payload_fingerprint,
+    )
+
+
+def _durable_binding_row(
+    value: EvidenceCandidateDurableContentBinding,
+) -> EvidenceCandidateContentBindingRow:
+    return EvidenceCandidateContentBindingRow(
+        candidate_id=value.candidate_id,
+        candidate_version=value.candidate_version,
+        candidate_fingerprint=value.candidate_fingerprint,
+        durable_content_ref=value.durable_content_ref,
+        durable_content_payload_fingerprint=value.durable_content_payload_fingerprint,
+        content_ref_metadata_fingerprint=value.content_ref_metadata_fingerprint,
+        requirement_ref=value.requirement_ref,
+        requirement_fingerprint_schema=value.requirement_fingerprint_schema.value,
+        requirement_fingerprint=value.requirement_fingerprint,
+        requirement_set_ref=value.requirement_set_ref,
+        requirement_root_hash=value.requirement_root_hash,
+        durable_content_policy_ref=value.durable_content_policy_ref,
+        durable_content_policy_fingerprint=value.durable_content_policy_fingerprint,
+        binding_fingerprint=value.binding_fingerprint,
+        bound_at=value.bound_at,
+    )
+
+
+def _durable_binding_payload(
+    value: EvidenceCandidateDurableContentBinding,
+) -> dict[str, object]:
+    return {
+        "candidate": [
+            value.candidate_id,
+            value.candidate_version,
+            value.candidate_fingerprint,
+        ],
+        "durable_content": [
+            value.durable_content_ref,
+            value.durable_content_payload_fingerprint,
+        ],
+        "content_ref_metadata_fingerprint": value.content_ref_metadata_fingerprint,
+        "requirement": [
+            value.requirement_ref,
+            value.requirement_fingerprint_schema.value,
+            value.requirement_fingerprint,
+        ],
+        "requirement_set": [value.requirement_set_ref, value.requirement_root_hash],
+        "policy": [
+            value.durable_content_policy_ref,
+            value.durable_content_policy_fingerprint,
+        ],
+        "bound_at": value.bound_at.isoformat(),
+    }
+
+
+def _durable_binding_from_row(
+    row: EvidenceCandidateContentBindingRow,
+) -> EvidenceCandidateDurableContentBinding:
+    return EvidenceCandidateDurableContentBinding(
+        candidate_id=row.candidate_id,
+        candidate_version=row.candidate_version,
+        candidate_fingerprint=row.candidate_fingerprint,
+        durable_content_ref=row.durable_content_ref,
+        durable_content_payload_fingerprint=row.durable_content_payload_fingerprint,
+        content_ref_metadata_fingerprint=row.content_ref_metadata_fingerprint,
+        requirement_ref=row.requirement_ref,
+        requirement_fingerprint_schema=RequirementFingerprintSchema(
+            row.requirement_fingerprint_schema
+        ),
+        requirement_fingerprint=row.requirement_fingerprint,
+        requirement_set_ref=row.requirement_set_ref,
+        requirement_root_hash=row.requirement_root_hash,
+        durable_content_policy_ref=row.durable_content_policy_ref,
+        durable_content_policy_fingerprint=row.durable_content_policy_fingerprint,
+        bound_at=_aware(row.bound_at),
+        binding_fingerprint=row.binding_fingerprint,
     )
 
 

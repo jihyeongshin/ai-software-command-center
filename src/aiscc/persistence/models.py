@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Identity,
+    Index,
     Integer,
     LargeBinary,
     String,
@@ -305,6 +306,28 @@ class EvidenceRequirementSetRow(Base):
 
 class EvidenceRequirementRow(Base):
     __tablename__ = "evidence_requirements"
+    __table_args__ = (
+        CheckConstraint(
+            "fingerprint_schema IN ("
+            "'P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V1',"
+            "'P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V2_DURABLE_CONTENT')",
+            name="ck_evidence_requirements_fingerprint_schema",
+        ),
+        CheckConstraint(
+            "((fingerprint_schema = 'P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V1' "
+            "AND NOT (payload ? 'fingerprint_schema') "
+            "AND NOT (payload ? 'durable_content_requirement') "
+            "AND NOT (payload ? 'durable_content_policy_ref') "
+            "AND NOT (payload ? 'durable_content_policy_fingerprint')) "
+            "OR (fingerprint_schema = "
+            "'P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V2_DURABLE_CONTENT' "
+            "AND payload->>'fingerprint_schema' = fingerprint_schema "
+            "AND payload->>'durable_content_requirement' = 'REQUIRED' "
+            "AND length(payload->>'durable_content_policy_ref') > 0 "
+            "AND payload->>'durable_content_policy_fingerprint' ~ '^[0-9a-f]{64}$'))",
+            name="ck_evidence_requirements_schema_payload_cut",
+        ),
+    )
 
     requirement_ref: Mapped[str] = mapped_column(String(224), primary_key=True)
     requirement_set_ref: Mapped[str] = mapped_column(
@@ -314,13 +337,113 @@ class EvidenceRequirementRow(Base):
     )
     profile: Mapped[str] = mapped_column(String(48), nullable=False)
     obligation: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint_schema: Mapped[str] = mapped_column(String(96), nullable=False)
     fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class EvidenceContentObjectRow(Base):
+    __tablename__ = "evidence_content_objects"
+    __table_args__ = (
+        Index("ix_evidence_content_objects_schema", "schema_id", "schema_version"),
+        Index("ix_evidence_content_objects_content_hash", "content_hash"),
+        UniqueConstraint(
+            "owner_id",
+            "owner_version",
+            "object_id",
+            "object_version",
+            name="uq_evidence_content_object_identity",
+        ),
+        CheckConstraint(
+            "byte_count >= 1 AND byte_count <= 65536",
+            name="ck_evidence_content_objects_byte_count",
+        ),
+        CheckConstraint(
+            "octet_length(canonical_body) = byte_count",
+            name="ck_evidence_content_objects_body_length",
+        ),
+        CheckConstraint(
+            "content_kind IN ('INLINE_CANONICAL_STRUCTURED_BODY',"
+            "'DATABASE_OBSERVATION_REF','RUNTIME_OBSERVATION_REF')",
+            name="ck_evidence_content_objects_kind",
+        ),
+        CheckConstraint(
+            "sensitivity IN ('PUBLIC_SAFE','INTERNAL')",
+            name="ck_evidence_content_objects_sensitivity",
+        ),
+    )
+
+    serialized_ref: Mapped[str] = mapped_column(String(96), primary_key=True)
+    content_identity_key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    owner_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_owner_authority_ref: Mapped[str] = mapped_column(String(320), nullable=False)
+    source_owner_authority_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    object_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    object_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonicalization: Mapped[str] = mapped_column(String(80), nullable=False)
+    schema_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    schema_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    byte_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_hash_algorithm: Mapped[str] = mapped_column(String(16), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    sensitivity: Mapped[str] = mapped_column(String(40), nullable=False)
+    retention_policy: Mapped[str] = mapped_column(String(96), nullable=False)
+    access_policy: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    content_authority_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    content_authority_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_authority_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_fingerprint_schema: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class EvidenceCandidateContentBindingRow(Base):
+    __tablename__ = "evidence_candidate_content_bindings"
+    __table_args__ = (
+        Index(
+            "ix_evidence_candidate_content_bindings_content_ref",
+            "durable_content_ref",
+        ),
+    )
+
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("evidence_candidates.candidate_id", ondelete="RESTRICT"), primary_key=True
+    )
+    candidate_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    candidate_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    durable_content_ref: Mapped[str] = mapped_column(
+        ForeignKey("evidence_content_objects.serialized_ref", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    durable_content_payload_fingerprint: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    content_ref_metadata_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    requirement_fingerprint_schema: Mapped[str] = mapped_column(String(96), nullable=False)
+    requirement_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    requirement_set_ref: Mapped[str] = mapped_column(String(224), nullable=False)
+    requirement_root_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    durable_content_policy_ref: Mapped[str] = mapped_column(String(320), nullable=False)
+    durable_content_policy_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    bound_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class EvidenceCheckpointRow(Base):
     __tablename__ = "evidence_checkpoints"
+    __table_args__ = (
+        CheckConstraint(
+            "(target_state IS NOT NULL) <> "
+            "(transition_purpose_id IS NOT NULL AND "
+            "transition_purpose_version IS NOT NULL)",
+            name="ck_evidence_checkpoint_exact_use",
+        ),
+    )
 
     checkpoint_ref: Mapped[str] = mapped_column(String(224), primary_key=True)
     requirement_set_ref: Mapped[str] = mapped_column(
@@ -418,7 +541,9 @@ class EvidenceAdmissionDecisionRow(Base):
     __tablename__ = "evidence_admission_decisions"
 
     decision_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), nullable=False)
+    event_sequence: Mapped[int] = mapped_column(
+        BigInteger, Identity(start=1), nullable=False, unique=True
+    )
     admission_request_id: Mapped[str] = mapped_column(
         ForeignKey("evidence_admission_requests.admission_request_id", ondelete="RESTRICT"),
         nullable=False,

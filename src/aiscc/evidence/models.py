@@ -61,6 +61,34 @@ class EvidenceSemanticOwner(StrEnum):
     P1_6_EVIDENCE = "P1_6_EVIDENCE"
 
 
+class RequirementFingerprintSchema(StrEnum):
+    V1 = "P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V1"
+    V2_DURABLE_CONTENT = "P1_6_EVIDENCE_REQUIREMENT_FINGERPRINT_V2_DURABLE_CONTENT"
+
+
+class DurableContentRequirement(StrEnum):
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    REQUIRED = "REQUIRED"
+
+
+class DurableContentErrorCode(StrEnum):
+    REQUIRED = "DURABLE_CONTENT_REQUIRED"
+    KIND_NOT_SUPPORTED = "DURABLE_CONTENT_KIND_NOT_SUPPORTED"
+    TOO_LARGE = "DURABLE_CONTENT_TOO_LARGE"
+    SENSITIVITY_DENIED = "DURABLE_CONTENT_SENSITIVITY_DENIED"
+    IDENTITY_CONFLICT = "DURABLE_CONTENT_IDENTITY_CONFLICT"
+    MISSING = "DURABLE_CONTENT_MISSING"
+    INTEGRITY_MISMATCH = "DURABLE_CONTENT_INTEGRITY_MISMATCH"
+    SCHEMA_MISMATCH = "DURABLE_CONTENT_SCHEMA_MISMATCH"
+    ACCESS_DENIED = "DURABLE_CONTENT_ACCESS_DENIED"
+    REQUIREMENT_SCHEMA_UNKNOWN = "DURABLE_CONTENT_REQUIREMENT_SCHEMA_UNKNOWN"
+    REQUIREMENT_FINGERPRINT_MISMATCH = "DURABLE_CONTENT_REQUIREMENT_FINGERPRINT_MISMATCH"
+    REQUIREMENT_LEGACY_IDENTITY_CONFLICT = (
+        "DURABLE_CONTENT_REQUIREMENT_LEGACY_IDENTITY_CONFLICT"
+    )
+    P1_8_SOURCE_NOT_DURABLE = "P1_8_STRUCTURED_SOURCE_NOT_DURABLE"
+
+
 class EvidenceIssuerType(StrEnum):
     P1_5_EXECUTION_SUBMISSION = "P1_5_EXECUTION_SUBMISSION"
     P1_5_AGENT_OUTPUT = "P1_5_AGENT_OUTPUT"
@@ -152,6 +180,14 @@ class EvidenceAuthorityConflictError(RuntimeError):
 
 class EvidenceIdentityConflictError(RuntimeError):
     """An immutable P1-6 identity was reused with different content."""
+
+
+class DurableContentError(EvidenceAuthorityConflictError):
+    """Typed fail-closed durable-content authority failure."""
+
+    def __init__(self, code: DurableContentErrorCode, message: str) -> None:
+        super().__init__(f"{code.value}: {message}")
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +296,12 @@ class EvidenceRequirement:
     revoked_at: datetime | None = None
     supersedes_requirement_ref: str | None = None
     _issuer_token: object = field(default=None, repr=False, compare=False)
+    fingerprint_schema: RequirementFingerprintSchema = RequirementFingerprintSchema.V1
+    durable_content_requirement: DurableContentRequirement = (
+        DurableContentRequirement.NOT_APPLICABLE
+    )
+    durable_content_policy_ref: str | None = None
+    durable_content_policy_fingerprint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -296,6 +338,72 @@ class EvidenceContentRef:
     retention_policy: str
     access_policy: str
     _owner_token: object = field(default=None, repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class DurableEvidenceContentObject:
+    serialized_ref: str
+    content_identity_key: str
+    owner_id: str
+    owner_version: str
+    source_owner_authority_ref: str
+    source_owner_authority_fingerprint: str
+    object_id: str
+    object_version: str
+    content_kind: EvidenceContentKind
+    canonicalization: str
+    schema_id: str
+    schema_version: str
+    byte_count: int
+    content_hash_algorithm: str
+    content_hash: str
+    sensitivity: EvidenceSensitivity
+    retention_policy: str
+    access_policy: str
+    canonical_body_bytes: bytes
+    created_at: datetime
+    content_authority_id: str
+    content_authority_version: str
+    content_authority_revision: int
+    payload_fingerprint_schema: str
+    payload_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceCandidateDurableContentBinding:
+    candidate_id: str
+    candidate_version: str
+    candidate_fingerprint: str
+    durable_content_ref: str
+    durable_content_payload_fingerprint: str
+    content_ref_metadata_fingerprint: str
+    requirement_ref: str
+    requirement_fingerprint_schema: RequirementFingerprintSchema
+    requirement_fingerprint: str
+    requirement_set_ref: str
+    requirement_root_hash: str
+    durable_content_policy_ref: str
+    durable_content_policy_fingerprint: str
+    bound_at: datetime
+    binding_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalContentAccessGrant:
+    consumer: str
+    purpose: str = ""
+    _capability_token: object = field(default_factory=object, repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedHistoricalContentMetadata:
+    content: DurableEvidenceContentObject
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedHistoricalContent:
+    metadata: VerifiedHistoricalContentMetadata
+    canonical_body_bytes: bytes
 
 
 EvidenceBodyRef = EvidenceContentRef

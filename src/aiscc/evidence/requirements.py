@@ -4,11 +4,17 @@ from dataclasses import replace
 from datetime import datetime
 
 from aiscc.evidence.models import (
+    DurableContentError,
+    DurableContentErrorCode,
+    DurableContentRequirement,
     EvidenceCheckpoint,
+    EvidenceContentKind,
     EvidenceRequirement,
     EvidenceRequirementProfile,
     EvidenceRequirementSet,
     EvidenceSemanticOwner,
+    EvidenceSensitivity,
+    RequirementFingerprintSchema,
     RequirementObligation,
     canonical_hash,
 )
@@ -20,6 +26,14 @@ _OBLIGATION = {
     EvidenceRequirementProfile.NOT_REQUIRED: RequirementObligation.NOT_REQUIRED,
     EvidenceRequirementProfile.FORBIDDEN: RequirementObligation.FORBIDDEN,
 }
+
+_DURABLE_KINDS = frozenset(
+    {
+        EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY,
+        EvidenceContentKind.DATABASE_OBSERVATION_REF,
+        EvidenceContentKind.RUNTIME_OBSERVATION_REF,
+    }
+)
 
 
 class TaskContractEvidenceAuthority:
@@ -37,6 +51,7 @@ class TaskContractEvidenceAuthority:
             raise ValueError("requirement semantic owner must be P1_6_EVIDENCE")
         if value.obligation is not _OBLIGATION[value.profile]:
             raise ValueError("requirement profile/obligation mismatch")
+        _validate_requirement_fingerprint_schema(value)
         payload = _requirement_payload(value)
         return replace(value, fingerprint=canonical_hash(payload), _issuer_token=self._issuer_token)
 
@@ -75,7 +90,7 @@ class TaskContractEvidenceAuthority:
 
 
 def _requirement_payload(value: EvidenceRequirement) -> dict[str, object]:
-    return {
+    payload: dict[str, object] = {
         "ref": value.ref.serialized(),
         "task": [value.task_contract_id, value.task_contract_version],
         "set": [value.requirement_set_id, value.requirement_set_version],
@@ -106,6 +121,53 @@ def _requirement_payload(value: EvidenceRequirement) -> dict[str, object]:
         "revoked_at": value.revoked_at.isoformat() if value.revoked_at else None,
         "supersedes": value.supersedes_requirement_ref,
     }
+    if value.fingerprint_schema is RequirementFingerprintSchema.V2_DURABLE_CONTENT:
+        payload.update(
+            {
+                "fingerprint_schema": value.fingerprint_schema.value,
+                "durable_content_requirement": value.durable_content_requirement.value,
+                "durable_content_policy_ref": value.durable_content_policy_ref,
+                "durable_content_policy_fingerprint": (
+                    value.durable_content_policy_fingerprint
+                ),
+            }
+        )
+    return payload
+
+
+def _validate_requirement_fingerprint_schema(value: EvidenceRequirement) -> None:
+    if value.fingerprint_schema is RequirementFingerprintSchema.V1:
+        if (
+            value.durable_content_requirement is not DurableContentRequirement.NOT_APPLICABLE
+            or value.durable_content_policy_ref is not None
+            or value.durable_content_policy_fingerprint is not None
+        ):
+            raise DurableContentError(
+                DurableContentErrorCode.REQUIREMENT_LEGACY_IDENTITY_CONFLICT,
+                "V1 Requirement cannot contain synthetic durable-content fields",
+            )
+        return
+    if value.fingerprint_schema is not RequirementFingerprintSchema.V2_DURABLE_CONTENT:
+        raise DurableContentError(
+            DurableContentErrorCode.REQUIREMENT_SCHEMA_UNKNOWN,
+            "unsupported Requirement fingerprint schema",
+        )
+    policy_hash = value.durable_content_policy_fingerprint or ""
+    if (
+        value.durable_content_requirement is not DurableContentRequirement.REQUIRED
+        or not value.durable_content_policy_ref
+        or len(policy_hash) != 64
+        or policy_hash.lower() != policy_hash
+        or any(character not in "0123456789abcdef" for character in policy_hash)
+        or not value.allowed_content_kinds
+        or not value.allowed_content_kinds <= _DURABLE_KINDS
+        or value.maximum_sensitivity
+        not in {EvidenceSensitivity.PUBLIC_SAFE, EvidenceSensitivity.INTERNAL}
+    ):
+        raise DurableContentError(
+            DurableContentErrorCode.SCHEMA_MISMATCH,
+            "V2 Requirement lacks exact REQUIRED durable-content enrollment",
+        )
 
 
 def _checkpoint_payload(value: EvidenceCheckpoint) -> dict[str, object]:

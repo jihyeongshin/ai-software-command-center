@@ -33,6 +33,8 @@ from aiscc.evidence.models import (
 )
 from aiscc.evidence.ports import EvidenceContentResolver
 
+_NO_CONTENT_OVERRIDE = object()
+
 EVIDENCE_AUTHORITY_VERSION = "AISCC-P1-6-EVIDENCE-AUTHORITY-V1"
 
 _SENSITIVITY_ORDER = {
@@ -81,6 +83,7 @@ class EvidenceAdmissionEvaluator:
         reuse_consumed: int = 0,
         authority_current: bool = True,
         now: datetime | None = None,
+        authoritative_content_body: bytes | None | object = _NO_CONTENT_OVERRIDE,
     ) -> tuple[EvidenceEvaluation, EvidenceAdmissionDecision]:
         evaluated_at = (now or datetime.now(UTC)).astimezone(UTC)
         results: dict[EvidenceAdmissionDimension, EvidenceDimensionResult] = {}
@@ -231,7 +234,13 @@ class EvidenceAdmissionEvaluator:
             else "NO_RESOURCE_REQUIRED",
         )
 
-        body = self._content.resolve(candidate)
+        body = (
+            self._content.resolve(candidate)
+            if authoritative_content_body is _NO_CONTENT_OVERRIDE
+            else authoritative_content_body
+        )
+        if body is not None and not isinstance(body, bytes):
+            body = None
         content_valid = bool(
             body is not None
             and len(body) == candidate.content_ref.byte_count

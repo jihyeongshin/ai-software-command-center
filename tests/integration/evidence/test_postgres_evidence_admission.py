@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import inspect
 import os
 from collections.abc import Coroutine
 from copy import deepcopy
@@ -24,7 +25,12 @@ from aiscc.evidence.admission import (
     make_admission_request,
 )
 from aiscc.evidence.attestation import EvidenceCheckpointUseRegistry, EvidenceGuardAuthority
-from aiscc.evidence.content import PrivateEvidenceContentStore
+from aiscc.evidence.content import (
+    P1_6DurableContentAuthority,
+    P1_6HistoricalContentAccessAuthority,
+    PrivateEvidenceContentStore,
+    source_owner_authority_fingerprint,
+)
 from aiscc.evidence.issuers import (
     AuthenticatedHumanPrincipal,
     AuthenticatedHumanPrincipalAuthority,
@@ -36,6 +42,9 @@ from aiscc.evidence.issuers import (
 )
 from aiscc.evidence.models import (
     AdmittedEvidenceRef,
+    DurableContentError,
+    DurableContentErrorCode,
+    DurableContentRequirement,
     EvidenceAdmissionOutcome,
     EvidenceAuthorityConflictError,
     EvidenceAuthorityEventKind,
@@ -43,6 +52,7 @@ from aiscc.evidence.models import (
     EvidenceCheckpoint,
     EvidenceCheckpointRef,
     EvidenceContentKind,
+    EvidenceContentRef,
     EvidenceIdentityConflictError,
     EvidenceIssuerType,
     EvidenceOwner,
@@ -56,7 +66,9 @@ from aiscc.evidence.models import (
     EvidenceSetOutcome,
     FreshnessPolicy,
     FreshnessPolicyKind,
+    HistoricalContentAccessGrant,
     HumanEvidenceProducerCategory,
+    RequirementFingerprintSchema,
     RequirementObligation,
     canonical_hash,
 )
@@ -78,9 +90,12 @@ from aiscc.persistence.models import (
     AdmittedEvidenceRow,
     EvidenceAdmissionDecisionRow,
     EvidenceAdmissionRequestRow,
+    EvidenceCandidateContentBindingRow,
     EvidenceCandidateRow,
     EvidenceCheckpointRow,
+    EvidenceContentObjectRow,
     EvidenceEvaluationRow,
+    EvidenceRequirementRow,
     EvidenceRequirementSetRow,
     EvidenceReuseConsumptionRow,
     EvidenceSetAttestationRow,
@@ -3052,6 +3067,565 @@ def test_p1_5_immutable_ref_is_verified_candidate_input_not_admission(
             finally:
                 await transaction.rollback()
         await verify_historical()
+        await engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
+    database_url: str,
+) -> None:
+    async def scenario() -> None:
+        task_id = f"task-durable-{uuid4()}"
+        set_id = f"set-durable-{uuid4()}"
+        run_id = f"run-durable-{uuid4()}"
+        engine = create_engine(database_url)
+        sessions = create_session_factory(engine)
+        workflow_authorities = WorkflowAuthorities()
+        kernel = WorkflowKernel(
+            PostgresTransitionRepository(
+                sessions,
+                TransitionEvaluator(
+                    workflow_authorities.system, workflow_authorities.future
+                ),
+            )
+        )
+        await move_to(
+            kernel,
+            workflow_authorities,
+            run_id=run_id,
+            task_id=task_id,
+            target=WorkflowState.ADMISSION_PENDING,
+        )
+        pre = checkpoint(
+            task_id=task_id,
+            set_id=set_id,
+            checkpoint_id="pre-human",
+            source=WorkflowState.ADMISSION_PENDING,
+        )
+        policy_hash = canonical_hash(
+            {
+                "policy": "P1_6_DURABLE_CONTENT_POLICY_V1",
+                "kind": EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY.value,
+                "schema": ["AISCC-PROOF", "v1"],
+                "limit": 65_536,
+            }
+        )
+        durable_requirement = replace(
+            requirement(
+                task_id=task_id,
+                set_id=set_id,
+                requirement_id="structured-result",
+                profile=EvidenceRequirementProfile.EXECUTOR_REQUIRED,
+                checkpoints=(pre.ref.serialized(),),
+                issuer_types=frozenset({EvidenceIssuerType.SYSTEM_STATIC_PROOF}),
+                issuer_ids=frozenset({"STATIC_ISSUER"}),
+                content_kinds=frozenset(
+                    {EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY}
+                ),
+            ),
+            ref=EvidenceRequirementRef(f"{task_id}:structured-result", "v2"),
+            fingerprint_schema=RequirementFingerprintSchema.V2_DURABLE_CONTENT,
+            durable_content_requirement=DurableContentRequirement.REQUIRED,
+            durable_content_policy_ref="P1_6_DURABLE_CONTENT_POLICY@v1",
+            durable_content_policy_fingerprint=policy_hash,
+        )
+        authority, requirement_set, requirements, checkpoints = seal_snapshot(
+            task_id=task_id,
+            set_id=set_id,
+            requirements=(durable_requirement,),
+            checkpoints=(pre,),
+        )
+        durable_requirement = requirements[0]
+        pre = checkpoints[0]
+        content_authority = P1_6DurableContentAuthority()
+        access_authority = P1_6HistoricalContentAccessAuthority()
+        repository = PostgresEvidenceRepository(
+            sessions,
+            durable_content_authority=content_authority,
+            historical_content_access_authority=access_authority,
+        )
+        await repository.register_authority(
+            requirement_set=requirement_set,
+            requirements=requirements,
+            checkpoints=checkpoints,
+            authority=authority,
+        )
+        issuer = TokenEvidenceIssuer(
+            EvidenceIssuerType.SYSTEM_STATIC_PROOF, "STATIC_ISSUER", "v1"
+        )
+        evaluator = EvidenceAdmissionEvaluator(
+            EvidenceIssuerRegistry((issuer,)), EvidenceContentRegistry(())
+        )
+        service = EvidenceAdmissionService(
+            repository,
+            evaluator,
+            durable_content_authority=content_authority,
+        )
+        rogue_authority = P1_6DurableContentAuthority()
+        with pytest.raises(DurableContentError) as split_configuration:
+            EvidenceAdmissionService(
+                repository,
+                evaluator,
+                durable_content_authority=rogue_authority,
+            )
+        assert split_configuration.value.code is DurableContentErrorCode.ACCESS_DENIED
+
+        def durable_candidate(
+            label: str,
+            value: object,
+            *,
+            object_id: str | None = None,
+            writer_authority: P1_6DurableContentAuthority = content_authority,
+            sensitivity: EvidenceSensitivity = EvidenceSensitivity.INTERNAL,
+        ) -> tuple[EvidenceCandidate, Any]:
+            dummy_ref = EvidenceContentRef(
+                EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY,
+                "durable-owner",
+                "v1",
+                object_id or f"object-{label}",
+                "v1",
+                "PENDING_P1_6_CANONICALIZATION",
+                "AISCC-PROOF",
+                "v1",
+                1,
+                "0" * 64,
+                sensitivity,
+                "PENDING_P1_6_RETENTION",
+                "PRIVATE_AUTHORITY_ONLY",
+            )
+            skeleton = EvidenceCandidate(
+                f"candidate-{label}-{uuid4()}",
+                "v1",
+                "",
+                EvidenceOwner(
+                    EvidenceIssuerType.SYSTEM_STATIC_PROOF,
+                    "STATIC_ISSUER",
+                    "v1",
+                    "STATIC_ISSUER@v1",
+                ),
+                run_id,
+                None,
+                None,
+                task_id,
+                "v1",
+                pre.ref,
+                WorkflowState.ADMISSION_PENDING,
+                3,
+                "aiscc-source",
+                "repository",
+                "repo@commit",
+                "AISCC_PROOF",
+                "v1",
+                dummy_ref,
+                NOW,
+                NOW,
+                frozenset({"result"}),
+                "system-proof-attestation",
+            )
+            prepared = writer_authority.prepare_structured(
+                owner_id="durable-owner",
+                owner_version="v1",
+                source_owner_authority_ref=skeleton.issuer.authority_ref,
+                source_owner_authority_fingerprint=(
+                    source_owner_authority_fingerprint(skeleton)
+                ),
+                object_id=object_id or f"object-{label}",
+                object_version="v1",
+                value=value,
+                kind=EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY,
+                schema_id="AISCC-PROOF",
+                schema_version="v1",
+                sensitivity=sensitivity,
+                created_at=NOW,
+            )
+            return issuer.issue(replace(skeleton, content_ref=prepared.content_ref)), prepared
+
+        candidate, prepared = durable_candidate(
+            "accepted",
+            {"result": "PASS"},
+            object_id="bootstrap-bound-object",
+        )
+        rogue_candidate, rogue_prepared = durable_candidate(
+            "rogue",
+            {"result": "PASS"},
+            object_id="bootstrap-bound-object",
+            writer_authority=rogue_authority,
+        )
+        assert rogue_prepared.content == prepared.content
+        assert rogue_prepared.content_ref == prepared.content_ref
+        assert not content_authority.recognizes(rogue_prepared)
+        rogue_request = admission_request(
+            request_id=f"request-rogue-{uuid4()}",
+            candidate=rogue_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        before_rogue = await repository.counts()
+        assert "durable_content_authority" not in inspect.signature(
+            repository.admit
+        ).parameters
+        with pytest.raises(DurableContentError) as unconfigured_write:
+            await PostgresEvidenceRepository(sessions).admit(
+                request=rogue_request,
+                candidate=rogue_candidate,
+                evaluator=evaluator,
+                now=NOW,
+                prepared_durable_content=rogue_prepared,
+            )
+        assert unconfigured_write.value.code is DurableContentErrorCode.ACCESS_DENIED
+        with pytest.raises(DurableContentError) as rogue_write:
+            await repository.admit(
+                request=rogue_request,
+                candidate=rogue_candidate,
+                evaluator=evaluator,
+                now=NOW,
+                prepared_durable_content=rogue_prepared,
+            )
+        assert rogue_write.value.code is DurableContentErrorCode.ACCESS_DENIED
+        after_rogue = await repository.counts()
+        assert after_rogue["durable_content_objects"] == before_rogue[
+            "durable_content_objects"
+        ]
+        assert after_rogue["durable_content_bindings"] == before_rogue[
+            "durable_content_bindings"
+        ]
+
+        request = admission_request(
+            request_id=f"request-durable-{uuid4()}",
+            candidate=candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        decision, admitted = await service.submit_durable(
+            request, candidate, prepared, now=NOW
+        )
+        assert decision.outcome is EvidenceAdmissionOutcome.ADMITTED
+        assert admitted is not None
+        admitted_ref = AdmittedEvidenceRef(
+            admitted.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
+        ).serialized()
+        set_evaluation, terminal_attestation = await EvidenceSetEvaluator(
+            repository
+        ).evaluate(
+            work_run_id=run_id,
+            checkpoint_ref=pre.ref,
+            source_state=WorkflowState.ADMISSION_PENDING,
+            state_version=3,
+            now=NOW,
+        )
+        assert set_evaluation.outcome is EvidenceSetOutcome.SATISFIED
+        assert terminal_attestation is not None
+        p1_8_grant = access_authority.issue_p1_8_structured_result_grant()
+        terminal_content = (
+            await repository.verify_historical_admitted_evidence_with_content(
+                admitted_evidence_ref=admitted_ref,
+                exact_terminal_attestation_ref=terminal_attestation.serialized_ref,
+                access_grant=p1_8_grant,
+            )
+        )
+        assert terminal_content.canonical_body_bytes == b'{"result":"PASS"}'
+        async with sessions() as session:
+            content_row = await session.get(
+                EvidenceContentObjectRow, prepared.content.serialized_ref
+            )
+            binding_row = await session.get(
+                EvidenceCandidateContentBindingRow, candidate.candidate_id
+            )
+            requirement_row = await session.get(
+                EvidenceRequirementRow, durable_requirement.ref.serialized()
+            )
+            assert content_row is not None and binding_row is not None
+            assert bytes(content_row.canonical_body) == b'{"result":"PASS"}'
+            assert requirement_row is not None
+            assert requirement_row.fingerprint_schema == (
+                RequirementFingerprintSchema.V2_DURABLE_CONTENT.value
+            )
+
+        public_candidate, public_prepared = durable_candidate(
+            "public-safe",
+            {"result": "PUBLIC"},
+            sensitivity=EvidenceSensitivity.PUBLIC_SAFE,
+        )
+        public_request = admission_request(
+            request_id=f"request-public-{uuid4()}",
+            candidate=public_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        public_decision, public_admitted = await service.submit_durable(
+            public_request, public_candidate, public_prepared, now=NOW
+        )
+        assert public_decision.outcome is EvidenceAdmissionOutcome.ADMITTED
+        assert public_admitted is not None
+
+        restarted_access_authority = P1_6HistoricalContentAccessAuthority()
+        restarted_repository = PostgresEvidenceRepository(
+            sessions,
+            historical_content_access_authority=restarted_access_authority,
+        )
+        restarted_p1_8_grant = (
+            restarted_access_authority.issue_p1_8_structured_result_grant()
+        )
+        resolved = await restarted_repository.resolve_historical_canonical_body(
+            candidate.content_ref,
+            access_grant=restarted_p1_8_grant,
+        )
+        assert resolved.canonical_body_bytes == b'{"result":"PASS"}'
+        assert (
+            await restarted_repository.resolve_historical_canonical_body(
+                public_candidate.content_ref,
+                access_grant=restarted_p1_8_grant,
+            )
+        ).canonical_body_bytes == b'{"result":"PUBLIC"}'
+        forged_grant = HistoricalContentAccessGrant(
+            restarted_p1_8_grant.consumer, restarted_p1_8_grant.purpose
+        )
+        with pytest.raises(DurableContentError) as forged_access_denied:
+            await restarted_repository.resolve_historical_canonical_body(
+                candidate.content_ref,
+                access_grant=forged_grant,
+            )
+        assert forged_access_denied.value.code is DurableContentErrorCode.ACCESS_DENIED
+        with pytest.raises(DurableContentError) as foreign_access_denied:
+            await restarted_repository.resolve_historical_canonical_body(
+                candidate.content_ref,
+                access_grant=p1_8_grant,
+            )
+        assert foreign_access_denied.value.code is DurableContentErrorCode.ACCESS_DENIED
+        assert not hasattr(restarted_p1_8_grant, "prepare_structured")
+        assert not hasattr(
+            restarted_p1_8_grant, "issue_p1_8_structured_result_grant"
+        )
+        assert not hasattr(restarted_p1_8_grant, "public_export_allowed")
+        assert (
+            await restarted_repository.require_p1_8_structured_source_binding(
+                candidate.candidate_id
+            )
+        ).durable_content_ref == prepared.content.serialized_ref
+
+        async def assert_content_corruption(field: str, value: object) -> None:
+            async with sessions() as session:
+                transaction = await session.begin()
+                try:
+                    await session.execute(text("SET LOCAL session_replication_role = replica"))
+                    row = await session.get(
+                        EvidenceContentObjectRow, prepared.content.serialized_ref
+                    )
+                    assert row is not None
+                    setattr(row, field, value)
+                    await session.flush()
+                    with pytest.raises(DurableContentError) as corruption:
+                        await evidence_repository_module._verify_historical_content_in_session(
+                            session, candidate.content_ref
+                        )
+                    assert corruption.value.code is DurableContentErrorCode.INTEGRITY_MISMATCH
+                finally:
+                    await transaction.rollback()
+
+        await assert_content_corruption("canonical_body", b'{"result":"FAIL"}')
+        await assert_content_corruption("content_hash", "9" * 64)
+        await assert_content_corruption("schema_id", "CORRUPTED-SCHEMA")
+        await assert_content_corruption("canonicalization", "CORRUPTED-CANONICALIZATION")
+        await assert_content_corruption("owner_id", "corrupted-owner")
+        await assert_content_corruption("payload_fingerprint", "8" * 64)
+        async with sessions() as session:
+            transaction = await session.begin()
+            try:
+                with pytest.raises(DBAPIError):
+                    await session.execute(
+                        text(
+                            "UPDATE evidence_content_objects "
+                            "SET byte_count = byte_count + 1 "
+                            "WHERE serialized_ref = :serialized_ref"
+                        ),
+                        {"serialized_ref": prepared.content.serialized_ref},
+                    )
+            finally:
+                await transaction.rollback()
+        async with sessions() as session:
+            transaction = await session.begin()
+            try:
+                await session.execute(text("SET LOCAL session_replication_role = replica"))
+                row = await session.get(
+                    EvidenceContentObjectRow, prepared.content.serialized_ref
+                )
+                assert row is not None
+                await session.delete(row)
+                await session.flush()
+                with pytest.raises(DurableContentError) as missing_row:
+                    await evidence_repository_module._verify_historical_content_in_session(
+                        session, candidate.content_ref
+                    )
+                assert missing_row.value.code is DurableContentErrorCode.MISSING
+            finally:
+                await transaction.rollback()
+        assert (
+            await restarted_repository.resolve_historical_canonical_body(
+                candidate.content_ref,
+                access_grant=restarted_p1_8_grant,
+            )
+        ).canonical_body_bytes == b'{"result":"PASS"}'
+
+        replay_candidate, replay_prepared = durable_candidate(
+            "replay", {"result": "PASS"}, object_id="shared-object"
+        )
+        replay_request = admission_request(
+            request_id=f"request-replay-{uuid4()}",
+            candidate=replay_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        replay_decision, _ = await service.submit_durable(
+            replay_request, replay_candidate, replay_prepared, now=NOW
+        )
+        assert replay_decision.outcome is EvidenceAdmissionOutcome.ADMITTED
+        same_candidate, same_prepared = durable_candidate(
+            "same", {"result": "PASS"}, object_id="shared-object"
+        )
+        same_request = admission_request(
+            request_id=f"request-same-{uuid4()}",
+            candidate=same_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        same_decision, _ = await service.submit_durable(
+            same_request, same_candidate, same_prepared, now=NOW
+        )
+        assert same_decision.outcome is EvidenceAdmissionOutcome.ADMITTED
+
+        conflicting_candidate, conflicting_prepared = durable_candidate(
+            "conflict", {"result": "FAIL"}, object_id="shared-object"
+        )
+        conflicting_request = admission_request(
+            request_id=f"request-conflict-{uuid4()}",
+            candidate=conflicting_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        with pytest.raises(DurableContentError) as conflict:
+            await service.submit_durable(
+                conflicting_request,
+                conflicting_candidate,
+                conflicting_prepared,
+                now=NOW,
+            )
+        assert conflict.value.code is DurableContentErrorCode.IDENTITY_CONFLICT
+
+        race_a, race_prepared_a = durable_candidate(
+            "race-a", {"result": "A"}, object_id="race-object"
+        )
+        race_b, race_prepared_b = durable_candidate(
+            "race-b", {"result": "B"}, object_id="race-object"
+        )
+        race_request_a = admission_request(
+            request_id=f"request-race-a-{uuid4()}",
+            candidate=race_a,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        race_request_b = admission_request(
+            request_id=f"request-race-b-{uuid4()}",
+            candidate=race_b,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        race_results = await asyncio.gather(
+            service.submit_durable(race_request_a, race_a, race_prepared_a, now=NOW),
+            service.submit_durable(race_request_b, race_b, race_prepared_b, now=NOW),
+            return_exceptions=True,
+        )
+        assert sum(isinstance(item, DurableContentError) for item in race_results) == 1
+        assert sum(isinstance(item, tuple) for item in race_results) == 1
+        race_error = next(
+            item for item in race_results if isinstance(item, DurableContentError)
+        )
+        assert race_error.code is DurableContentErrorCode.IDENTITY_CONFLICT
+
+        missing_candidate, missing_prepared = durable_candidate(
+            "missing", {"result": "MISSING"}
+        )
+        missing_request = admission_request(
+            request_id=f"request-missing-{uuid4()}",
+            candidate=missing_candidate,
+            requirement=durable_requirement,
+            requirement_set=requirement_set,
+            checkpoint=pre,
+            run_id=run_id,
+            state_version=3,
+        )
+        missing_decision, missing_admitted = await service.submit(
+            missing_request, missing_candidate, now=NOW
+        )
+        assert missing_decision.reason is EvidenceRejectionReason.CONTENT_MISSING
+        assert missing_admitted is None
+        async with sessions() as session:
+            assert (
+                await session.get(
+                    EvidenceContentObjectRow, missing_prepared.content.serialized_ref
+                )
+                is None
+            )
+
+        legacy_candidate = f"legacy-metadata-only-{uuid4()}"
+        with pytest.raises(DurableContentError) as legacy_cut:
+            await repository.require_p1_8_structured_source_binding(legacy_candidate)
+        assert legacy_cut.value.code is DurableContentErrorCode.P1_8_SOURCE_NOT_DURABLE
+
+        before_secret = (await repository.counts())["durable_content_objects"]
+        with pytest.raises(DurableContentError) as secret:
+            content_authority.prepare_structured(
+                owner_id="durable-owner",
+                owner_version="v1",
+                source_owner_authority_ref="STATIC_ISSUER@v1",
+                source_owner_authority_fingerprint="3" * 64,
+                object_id=f"secret-{uuid4()}",
+                object_version="v1",
+                value={"secret": "must-not-persist"},
+                kind=EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY,
+                schema_id="AISCC-PROOF",
+                schema_version="v1",
+                sensitivity=EvidenceSensitivity.SECRET_FORBIDDEN,
+                created_at=NOW,
+            )
+        assert secret.value.code is DurableContentErrorCode.SENSITIVITY_DENIED
+        assert (await repository.counts())["durable_content_objects"] == before_secret
+        await service.invalidate_authority(
+            subject_ref=admitted_ref,
+            reason="CURRENT_EFFECTIVENESS_REVOKED_FOR_REGRESSION",
+        )
+        assert await repository.load_admitted(admitted_ref) is None
+        assert (
+            await restarted_repository.resolve_historical_canonical_body(
+                candidate.content_ref,
+                access_grant=restarted_p1_8_grant,
+            )
+        ).canonical_body_bytes == b'{"result":"PASS"}'
         await engine.dispose()
 
     run(scenario())

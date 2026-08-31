@@ -6,12 +6,39 @@ from aiscc.evidence.models import (
     EvidenceCandidate,
     EvidenceContentRef,
     EvidenceIssuerType,
+    HistoricalContentAccessGrant,
     HumanDirectEvidenceIngress,
+    VerifiedHistoricalContent,
+    VerifiedHistoricalContentMetadata,
 )
 
 
 class EvidenceContentResolver(Protocol):
     def resolve(self, ref: EvidenceContentRef) -> bytes | None: ...
+
+
+class DurableHistoricalContentResolver(Protocol):
+    async def verify_historical_content_ref(
+        self,
+        content_ref: EvidenceContentRef,
+        *,
+        expected_payload_fingerprint: str | None = None,
+    ) -> VerifiedHistoricalContentMetadata: ...
+
+    async def resolve_historical_canonical_body(
+        self,
+        content_ref: EvidenceContentRef,
+        *,
+        access_grant: HistoricalContentAccessGrant,
+    ) -> VerifiedHistoricalContent: ...
+
+    async def verify_historical_admitted_evidence_with_content(
+        self,
+        *,
+        admitted_evidence_ref: str,
+        exact_terminal_attestation_ref: str,
+        access_grant: HistoricalContentAccessGrant,
+    ) -> VerifiedHistoricalContent: ...
 
 
 class EvidenceIssuerVerifier(Protocol):

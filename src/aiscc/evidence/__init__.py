@@ -5,7 +5,12 @@ from aiscc.evidence.admission import (
     make_admission_request,
 )
 from aiscc.evidence.attestation import EvidenceCheckpointUseRegistry, EvidenceGuardAuthority
-from aiscc.evidence.content import PrivateEvidenceContentStore
+from aiscc.evidence.content import (
+    P1_6DurableContentAuthority,
+    P1_6HistoricalContentAccessAuthority,
+    PrivateEvidenceContentStore,
+    canonicalize_structured_json,
+)
 from aiscc.evidence.models import *  # noqa: F403
 from aiscc.evidence.repository import PostgresEvidenceRepository
 from aiscc.evidence.requirements import TaskContractEvidenceAuthority
@@ -21,7 +26,10 @@ __all__ = [
     "EvidenceGuardAuthority",
     "EvidenceSetEvaluator",
     "PostgresEvidenceRepository",
+    "P1_6DurableContentAuthority",
+    "P1_6HistoricalContentAccessAuthority",
     "PrivateEvidenceContentStore",
     "TaskContractEvidenceAuthority",
     "make_admission_request",
+    "canonicalize_structured_json",
 ]
