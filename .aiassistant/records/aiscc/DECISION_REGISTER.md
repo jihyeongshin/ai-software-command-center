@@ -704,3 +704,36 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P2 remains `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: weakening the accepted durable-content owner capability, size/kind/sensitivity bounds, restart-safe historical resolver, V1 identity preservation, V2 prospective enrollment, legacy no-backfill, or read-only P1-8 boundary requires a separate Human-accepted baseline update.
+
+## AISCC-P1-8-NEXT-ACTION-CONTEXT-SOURCE-AUTHORITY-DESIGN-V1
+
+- decision: Adopt the exact Human-accepted `NEXT_ACTION_CONTEXT` source-authority design as the canonical cross-owner contract for external Task planning context, P1-6 structured-result carriage, P1-8 contextual Memory derivation and accepted ranking compatibility.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - source-authority baseline-gap HOLD: `.aiassistant/records/aiscc/cycles/20260831_1514_aiscc-p1-8-next-action-context-source-authority-baseline-gap-hold-1.cycle.md`;
+  - source-authority design Task: `20260831_1514_aiscc-p1-8-next-action-context-source-authority-design-freeze-1`;
+  - ranking-compatibility HOLD: `.aiassistant/records/aiscc/cycles/20260831_1514_aiscc-p1-8-next-action-context-ranking-authority-compatibility-hold-1.cycle.md`;
+  - ranking-compatibility rework Task: `20260831_1514_aiscc-p1-8-next-action-context-ranking-authority-compatibility-design-rework-1`;
+  - Human-review recommendation Cycle: `.aiassistant/records/aiscc/cycles/20260831_1619_aiscc-p1-8-next-action-context-source-authority-human-final-review-recommendation-1.cycle.md`;
+  - Human final review: `ACCEPTED`;
+  - accepted design persistence commit: `35901125cc5842734cf1e8eb3374d10e4ee866e3`;
+  - terminal Cycle: `.aiassistant/records/aiscc/cycles/20260831_1619_aiscc-p1-8-next-action-context-source-authority-final-acceptance-1.cycle.md`.
+- canonical owner: `.aiassistant/rules/AISCC_NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY.md`
+- accepted design SHA-256: `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1`
+- parent P1-8 design SHA-256: `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a`
+- exact authority contract:
+  - semantic owner is `EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY / NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1`;
+  - P1-6 owns bytes, schema, admission and terminal-consumed provenance only;
+  - `CURRENT ProjectMemoryEntry` is contextual/eligibility input and is not priority authority;
+  - exact externally enrolled `NextActionContextRefV1` owns priority classification and canonical ordinal;
+  - `P1_8_NEXT_ACTION_SELECTION_POLICY_AUTHORITY_V1` owns class-to-rank mapping;
+  - accepted ranking tuple remains `(authoritative_priority_rank, policy_dependency_ordinal, enrolled_critical_path_ordinal, descriptor_policy_ordinal, ActionRef lexical, proposal_id lexical)`;
+  - carrier owner-event H is `AUTHORING_SNAPSHOT_PROVENANCE_ONLY`;
+  - terminal external-context currentness is `NOT_REQUIRED_V1` and historical provenance remains separate from current applicability;
+  - no P1-6 Requirement fingerprint-schema extension is required.
+- release/next-phase effect:
+  - prerequisite owner-authority exact-contract incorporation remains `BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION`;
+  - P1-8 Runtime remains `BLOCKED_REQUIRED_EVIDENCE` at exact uncommitted identity `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`;
+  - P2/P3 remain `NOT_STARTED`;
+  - Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: changing source ownership, TaskContract scope, carrier/source equality, contextual-only Memory role, source enrollment, class-to-rank ownership, accepted tuple, authoring-snapshot boundary or historical/current separation requires a separate Human-accepted baseline update.

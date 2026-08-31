@@ -27,7 +27,9 @@
 | P1-7 Human Gate and Judgment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-7 Human Gate and Judgment Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Project Memory and Cycle Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-8 Project Memory and Cycle Admission Runtime | `NOT_STARTED / RESUME_AUTHORIZED / NEXT_ACTION` |
+| P1-8 NEXT_ACTION_CONTEXT Source Authority Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-8 Prerequisite Owner Authority Design | `BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION` |
+| P1-8 Project Memory and Cycle Admission Runtime | `BLOCKED_REQUIRED_EVIDENCE` |
 
 ## P0-4 provenance
 
@@ -736,6 +738,52 @@ All three P1-8 design HOLD findings were closed by the accepted design. At that 
 was `BLOCKED_REQUIRED_EVIDENCE / WAITING_FOR_P1_6_DURABLE_CONTENT_RUNTIME_ACCEPTANCE`; P2 was `NOT_STARTED` and
 Public Bounded Live was `NOT_RELEASED`.
 
+## P1-8 terminal NEXT_ACTION_CONTEXT source-authority design
+
+Human final design review:
+
+```text
+HUMAN_PROVIDED
+P1-8 NEXT_ACTION_CONTEXT Source Authority Design: ACCEPTED / CLOSED
+```
+
+Accepted owner:
+
+```text
+.aiassistant/rules/AISCC_NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY.md
+```
+
+Accepted identity:
+
+```text
+SHA-256:
+19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1
+
+design acceptance commit:
+35901125cc5842734cf1e8eb3374d10e4ee866e3
+```
+
+Terminal semantics:
+
+```text
+semantic owner = EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY / NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1
+P1-8 ProjectMemory = contextual eligibility input only != priority authority
+priority source = exact externally enrolled NextActionContextRefV1
+class-to-rank owner = P1_8_NEXT_ACTION_SELECTION_POLICY_AUTHORITY_V1
+carrier owner-event H = AUTHORING_SNAPSHOT_PROVENANCE_ONLY
+terminal external-context currentness = NOT_REQUIRED_V1
+historical provenance != current applicability
+P1-6 Requirement fingerprint-schema extension = NOT_REQUIRED
+```
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260831_1619_aiscc-p1-8-next-action-context-source-authority-final-acceptance-1.cycle.md`
+
+This closes only the source-authority design. The prerequisite owner-authority exact contract remains
+`BLOCKED_REQUIRED_EVIDENCE`; the exact blocked P1-8 runtime remains unaccepted and uncommitted at
+`19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`.
+
 ## blockers and next action
 
 - P1-1: `ACCEPTED / CLOSED`
@@ -767,8 +815,13 @@ Public Bounded Live was `NOT_RELEASED`.
 - accepted P1-8 design: `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a`
 - P1-8 design acceptance commit: `c108e9c02f222cf51ce833e311465584447b3571`
 - P1-8 durable-content prerequisite: `SATISFIED / BLOCKER_RESOLVED`
-- current next action: `P1-8 Runtime Resume`
-- P1-8 Runtime: `NOT_STARTED / RESUME_AUTHORIZED / NEXT_ACTION`
+- P1-8 NEXT_ACTION_CONTEXT Source Authority Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- accepted source-authority design: `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1`
+- source-authority design acceptance commit: `35901125cc5842734cf1e8eb3374d10e4ee866e3`
+- current next action: `P1-8 prerequisite owner-authority exact-contract design resume`
+- P1-8 prerequisite owner-authority design: `BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION`
+- P1-8 Runtime: `BLOCKED_REQUIRED_EVIDENCE`
+- blocked P1-8 runtime: `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
 - P2: `NOT_STARTED`
 
 ## non-substitution statement
