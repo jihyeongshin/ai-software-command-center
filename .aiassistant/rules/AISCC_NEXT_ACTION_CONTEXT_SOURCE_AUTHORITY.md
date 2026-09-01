@@ -4,15 +4,16 @@
 
 | field | value |
 |---|---|
-| document_id | `AISCC-NEXT-ACTION-CONTEXT-SOURCE-AUTHORITY-DESIGN-1` |
-| task_id | `20260831_1514_aiscc-p1-8-next-action-context-ranking-authority-compatibility-design-rework-1` |
+| document_id | `AISCC-NEXT-ACTION-CONTEXT-SOURCE-AUTHORITY-DESIGN-2` |
+| task_id | `20260901_1652_aiscc-p1-8-jcs-safe-integer-cross-contract-fingerprint-reconciliation-design-rework-1` |
 | work_type | `DESIGN_REWORK` |
-| design_status | `CANDIDATE / HUMAN_REVIEW_REQUIRED` |
+| design_status | `REWORK_CANDIDATE / HUMAN_REVIEW_REQUIRED` |
 | acceptance_owner | `Human` |
 | implementation_status | `DESIGN_ONLY / NOT_IMPLEMENTED` |
 | accepted P1-8 design SHA-256 | `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a` |
 | predecessor prerequisite design SHA-256 | `556faad8a77d917fcbfc9ab7b0ba62bd65f985a6f4a1e585c08af668dd14393c` |
 | predecessor source-authority design SHA-256 | `7dd7274f96d6565233c65f8ade5e81acd8b53f9d7425e377df148d5337d8f4e6` |
+| historical accepted predecessor SHA-256 | `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1` |
 | blocked P1-8 runtime | `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42` |
 
 이 문서는 `NEXT_ACTION_CONTEXT`의 missing semantic source owner만 동결하는 candidate다. Human acceptance 전에는 runtime authority, accepted prerequisite rule의 replacement, migration authorization 또는 P1-8 runtime resume authorization이 아니다.
@@ -67,7 +68,7 @@ V1은 다음 grammar를 사용한다.
 | `CONTEXT_LOCAL_ID_V1` | ASCII lowercase regex `^[a-z0-9][a-z0-9._:@-]{0,159}$` |
 | `CONTEXT_SLOT_ID_V1` | ASCII lowercase regex `^[a-z0-9][a-z0-9._-]{0,63}$` |
 | fingerprint | exactly 64 lowercase hexadecimal characters |
-| sequence | JSON integer `1..9,223,372,036,854,775,807` |
+| sequence | JSON integer `1..9,007,199,254,740,991` |
 | timestamp | UTC `YYYY-MM-DDTHH:MM:SS.ffffffZ`, exactly six fractional digits; leap second forbidden |
 | null | JSON `null`; empty string, `NONE`, omitted conditionally applicable field are forbidden where a variant requires null |
 
@@ -78,13 +79,13 @@ All immutable semantic payloads use UTF-8, Unicode NFC strings, no BOM and `JCS_
 `NEXT_ACTION_CONTEXT_SOURCE_CONTRACT_V1` is the immutable schema contract that the external owner issues and P1-8 policy enrolls by exact fingerprint.
 
 ```json
-{"canonicalization":"AISCC_CANONICAL_STRUCTURED_JSON_V1","class_to_rank_owner":"P1_8_NEXT_ACTION_SELECTION_POLICY_AUTHORITY_V1","context_ref_schema_fingerprint":"c840402637e48de4914e28bf3e26802d7402915fa60fcc17d5a6b2098c72a11c","contract_id":"NEXT_ACTION_CONTEXT_SOURCE_CONTRACT_V1","contract_version":"v1","critical_path_ordinal":{"maximum":1000000,"minimum":1,"ordering":"LOWER_VALUE_PRECEDES_WITHIN_SAME_PRIORITY_CLASS"},"cycle_id_in_owner_object":false,"event_schema_fingerprint":"d210552fa3bd27688ed74ad45a9869dc42dad6228dee8f5d0b8d850c758a50ea","owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY","owner_extension":"NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1","priority_authority_role":"EXTERNAL_CANONICAL_PRIORITY_CLASSIFICATION_SOURCE","priority_classes":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"],"priority_source_enrollment_contract_fingerprint":"f2b090057ae3f5f00ed4ef878a41664e2322988190969458e6a6544f76932f6b","privacy_class":"PRIVATE_INTERNAL","producer_high_watermark_role":"AUTHORING_SNAPSHOT_PROVENANCE_ONLY","project_memory_role":"CURRENT_CONTEXTUAL_ELIGIBILITY_INPUT_NOT_PRIORITY_AUTHORITY","ranking_ordinal_name":"enrolled_critical_path_ordinal","result_schema_fingerprint":"f3aa618cc1fa06b73fa4467b73032f5d59dc1e6e4fe39fbc12c2bf0b5ae6a89b","result_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","result_schema_version":"v1","scope_kind":"TASK_CONTRACT","security_class":"INTERNAL_REFERENCE_ONLY","selector":"/next_action_context","terminal_currentness_requirement":"NOT_REQUIRED_V1"}
+{"canonicalization":"AISCC_CANONICAL_STRUCTURED_JSON_V1","class_to_rank_owner":"P1_8_NEXT_ACTION_SELECTION_POLICY_AUTHORITY_V1","context_ref_schema_fingerprint":"842ac2619a3069a0b844cbaf89d36ceb252bfe1f1ec149097727f224a6cdc307","contract_id":"NEXT_ACTION_CONTEXT_SOURCE_CONTRACT_V1","contract_version":"v1","critical_path_ordinal":{"maximum":1000000,"minimum":1,"ordering":"LOWER_VALUE_PRECEDES_WITHIN_SAME_PRIORITY_CLASS"},"cycle_id_in_owner_object":false,"event_schema_fingerprint":"59e695623329908fdabce214a1d80be4249b4767c86844749de93094aeb7fce4","owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY","owner_extension":"NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1","priority_authority_role":"EXTERNAL_CANONICAL_PRIORITY_CLASSIFICATION_SOURCE","priority_classes":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"],"priority_source_enrollment_contract_fingerprint":"f2b090057ae3f5f00ed4ef878a41664e2322988190969458e6a6544f76932f6b","privacy_class":"PRIVATE_INTERNAL","producer_high_watermark_role":"AUTHORING_SNAPSHOT_PROVENANCE_ONLY","project_memory_role":"CURRENT_CONTEXTUAL_ELIGIBILITY_INPUT_NOT_PRIORITY_AUTHORITY","ranking_ordinal_name":"enrolled_critical_path_ordinal","result_schema_fingerprint":"db08fb7cbe1b55b7c686df28ffccbaf8462dd27dea7416e9b4478ae40e6cd67f","result_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","result_schema_version":"v1","scope_kind":"TASK_CONTRACT","security_class":"INTERNAL_REFERENCE_ONLY","selector":"/next_action_context","terminal_currentness_requirement":"NOT_REQUIRED_V1"}
 ```
 
 Canonical SHA-256:
 
 ```text
-c43c8560f785d765c677a8bce4310a4ae166e2a35913acc10ffc72ee883fa395
+988cdd4c71aca75e3434652044b50ffd703fb32ba4568219c56d52e498cd8698
 ```
 
 Caller, environment, P1-8 bootstrap configuration 또는 raw Markdown가 이 contract payload를 정의하거나 수정할 수 없다. Human-accepted exact payload를 external owner의 private composition이 issue한다. P1-8 Memory policy는 schema/derivation contract를 enroll할 뿐 priority를 만들지 않으며, priority 사용에는 section 4.1의 current eligibility-policy-owned descriptor enrollment가 별도로 필요하다.
@@ -110,7 +111,7 @@ priority_classification_source_kind = NEXT_ACTION_CONTEXT_REF_V1
 priority_classification_source_ref = exact context_ref
 priority_classification_source_hash = exact context fingerprint
 priority_classification_source_contract_ref = exact NEXT_ACTION_CONTEXT_SOURCE_CONTRACT_V1 ref
-priority_classification_source_contract_fingerprint = c43c8560...
+priority_classification_source_contract_fingerprint = 988cdd4c...
 critical_path_ordinal = exact owner ordinal copied as enrollment equality value
 descriptor_policy_ordinal = existing descriptor-local policy tie-break
 ```
@@ -171,7 +172,7 @@ critical_path_ordinal
 
 context_payload_schema_id = P1_8_NEXT_ACTION_CONTEXT_RESULT_V1
 context_payload_schema_version = v1
-context_payload_schema_fingerprint = f3aa618cc1fa06b73fa4467b73032f5d59dc1e6e4fe39fbc12c2bf0b5ae6a89b
+context_payload_schema_fingerprint = db08fb7cbe1b55b7c686df28ffccbaf8462dd27dea7416e9b4478ae40e6cd67f
 
 privacy_class = PRIVATE_INTERNAL
 security_class = INTERNAL_REFERENCE_ONLY
@@ -221,13 +222,13 @@ smaller integer ranks before larger integer
 Ref schema contract canonical SHA-256:
 
 ```text
-c840402637e48de4914e28bf3e26802d7402915fa60fcc17d5a6b2098c72a11c
+842ac2619a3069a0b844cbaf89d36ceb252bfe1f1ec149097727f224a6cdc307
 ```
 
 Hash input canonical payload:
 
 ```json
-{"canonicalization":"JCS_RFC8785","context_logical_id_grammar":"^next-action-context-lineage:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","context_ref_grammar":"^next-action-context:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","context_slot_id_grammar":"^[a-z0-9][a-z0-9._-]{0,63}$","critical_path_ordinal":{"maximum":1000000,"minimum":1},"fields":["context_ref","context_ref_id","context_ref_version","fingerprint_schema","context_owner","authority_ref","authority_version","authority_revision","context_logical_id","project_id","scope_kind","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal","context_payload_schema_id","context_payload_schema_version","context_payload_schema_fingerprint","privacy_class","security_class","issued_at","issuance_sequence","effective_sequence"],"fingerprint_schema":"next-action-context-ref-v1","fixed_values":{"context_owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY","context_payload_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","context_payload_schema_version":"v1","context_ref_version":"v1","privacy_class":"PRIVATE_INTERNAL","scope_kind":"TASK_CONTRACT","security_class":"INTERNAL_REFERENCE_ONLY"},"id_grammar":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","priority_class":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"],"result_schema_fingerprint":"f3aa618cc1fa06b73fa4467b73032f5d59dc1e6e4fe39fbc12c2bf0b5ae6a89b","schema_id":"NEXT_ACTION_CONTEXT_REF_SCHEMA_V1"}
+{"canonicalization":"JCS_RFC8785","context_logical_id_grammar":"^next-action-context-lineage:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","context_ref_grammar":"^next-action-context:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","context_slot_id_grammar":"^[a-z0-9][a-z0-9._-]{0,63}$","critical_path_ordinal":{"maximum":1000000,"minimum":1},"fields":["context_ref","context_ref_id","context_ref_version","fingerprint_schema","context_owner","authority_ref","authority_version","authority_revision","context_logical_id","project_id","scope_kind","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal","context_payload_schema_id","context_payload_schema_version","context_payload_schema_fingerprint","privacy_class","security_class","issued_at","issuance_sequence","effective_sequence"],"fingerprint_schema":"next-action-context-ref-v1","fixed_values":{"context_owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY","context_payload_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","context_payload_schema_version":"v1","context_ref_version":"v1","privacy_class":"PRIVATE_INTERNAL","scope_kind":"TASK_CONTRACT","security_class":"INTERNAL_REFERENCE_ONLY"},"id_grammar":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","priority_class":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"],"result_schema_fingerprint":"db08fb7cbe1b55b7c686df28ffccbaf8462dd27dea7416e9b4478ae40e6cd67f","schema_id":"NEXT_ACTION_CONTEXT_REF_SCHEMA_V1"}
 ```
 
 `fingerprint`를 제외한 section 5.2의 모든 field를 가진 exact object에 대해:
@@ -281,13 +282,13 @@ event_fingerprint = sha256(UTF8(JCS_RFC8785(payload_without_event_fingerprint)))
 Event schema canonical SHA-256:
 
 ```text
-d210552fa3bd27688ed74ad45a9869dc42dad6228dee8f5d0b8d850c758a50ea
+59e695623329908fdabce214a1d80be4249b4767c86844749de93094aeb7fce4
 ```
 
 Hash input canonical payload:
 
 ```json
-{"canonicalization":"JCS_RFC8785","event_kinds":["ISSUED","SUPERSEDED","REVOKED"],"fields":["event_ref","event_id","event_version","fingerprint_schema","event_kind","context_ref","context_fingerprint","replacement_context_ref","replacement_context_fingerprint","project_id","task_contract_id","task_contract_version","context_logical_id","context_slot_id","authority_ref","authority_version","authority_revision","event_sequence","effective_sequence","effective_at","current_projection_disposition"],"fingerprint_schema":"next-action-context-authority-event-v1","schema_id":"NEXT_ACTION_CONTEXT_AUTHORITY_EVENT_SCHEMA_V1","sequence_bounds":{"maximum":9223372036854775807,"minimum":1},"variant_rules":{"ISSUED":{"disposition":"RETAIN_CURRENT","replacement":"NULL"},"REVOKED":{"disposition":"WITHDRAW_CURRENT","replacement":"NULL"},"SUPERSEDED":{"disposition":"WITHDRAW_CURRENT","replacement":"REQUIRED"}}}
+{"canonicalization":"JCS_RFC8785","event_kinds":["ISSUED","SUPERSEDED","REVOKED"],"fields":["event_ref","event_id","event_version","fingerprint_schema","event_kind","context_ref","context_fingerprint","replacement_context_ref","replacement_context_fingerprint","project_id","task_contract_id","task_contract_version","context_logical_id","context_slot_id","authority_ref","authority_version","authority_revision","event_sequence","effective_sequence","effective_at","current_projection_disposition"],"fingerprint_schema":"next-action-context-authority-event-v1","schema_id":"NEXT_ACTION_CONTEXT_AUTHORITY_EVENT_SCHEMA_V1","sequence_bounds":{"maximum":9007199254740991,"minimum":1},"variant_rules":{"ISSUED":{"disposition":"RETAIN_CURRENT","replacement":"NULL"},"REVOKED":{"disposition":"WITHDRAW_CURRENT","replacement":"NULL"},"SUPERSEDED":{"disposition":"WITHDRAW_CURRENT","replacement":"REQUIRED"}}}
 ```
 
 Variant matrix:
@@ -365,13 +366,13 @@ diagnostic/free-text fields = NOT_SUPPORTED_V1
 Exact JSON Schema canonical payload:
 
 ```json
-{"$id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"next_action_context":{"additionalProperties":false,"properties":{"context_authority_event_high_watermark":{"maximum":9223372036854775807,"minimum":1,"type":"integer"},"context_fingerprint":{"pattern":"^[0-9a-f]{64}$","type":"string"},"context_introduction_event_fingerprint":{"pattern":"^[0-9a-f]{64}$","type":"string"},"context_introduction_event_ref":{"pattern":"^next-action-context-event:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_logical_id":{"pattern":"^next-action-context-lineage:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_ref":{"pattern":"^next-action-context:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_slot_id":{"pattern":"^[a-z0-9][a-z0-9._-]{0,63}$","type":"string"},"critical_path_ordinal":{"maximum":1000000,"minimum":1,"type":"integer"},"priority_class":{"enum":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"]},"project_id":{"pattern":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","type":"string"},"result_schema_id":{"const":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1"},"result_schema_version":{"const":"v1"},"task_contract_id":{"pattern":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","type":"string"},"task_contract_version":{"maxLength":64,"minLength":1,"pattern":"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$","type":"string"}},"required":["result_schema_id","result_schema_version","context_ref","context_fingerprint","context_logical_id","context_introduction_event_ref","context_introduction_event_fingerprint","context_authority_event_high_watermark","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"type":"object"}},"required":["next_action_context"],"type":"object"}
+{"$id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","$schema":"https://json-schema.org/draft/2020-12/schema","additionalProperties":false,"properties":{"next_action_context":{"additionalProperties":false,"properties":{"context_authority_event_high_watermark":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"context_fingerprint":{"pattern":"^[0-9a-f]{64}$","type":"string"},"context_introduction_event_fingerprint":{"pattern":"^[0-9a-f]{64}$","type":"string"},"context_introduction_event_ref":{"pattern":"^next-action-context-event:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_logical_id":{"pattern":"^next-action-context-lineage:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_ref":{"pattern":"^next-action-context:v1:[a-z0-9][a-z0-9._:@-]{0,159}$","type":"string"},"context_slot_id":{"pattern":"^[a-z0-9][a-z0-9._-]{0,63}$","type":"string"},"critical_path_ordinal":{"maximum":1000000,"minimum":1,"type":"integer"},"priority_class":{"enum":["ACCEPTED_CORE_CRITICAL_PATH","OPERATIONAL_HARDENING","OPTIONAL_OPTIMIZATION"]},"project_id":{"pattern":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","type":"string"},"result_schema_id":{"const":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1"},"result_schema_version":{"const":"v1"},"task_contract_id":{"pattern":"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,159}$","type":"string"},"task_contract_version":{"maxLength":64,"minLength":1,"pattern":"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$","type":"string"}},"required":["result_schema_id","result_schema_version","context_ref","context_fingerprint","context_logical_id","context_introduction_event_ref","context_introduction_event_fingerprint","context_authority_event_high_watermark","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"type":"object"}},"required":["next_action_context"],"type":"object"}
 ```
 
 Schema canonical SHA-256:
 
 ```text
-f3aa618cc1fa06b73fa4467b73032f5d59dc1e6e4fe39fbc12c2bf0b5ae6a89b
+db08fb7cbe1b55b7c686df28ffccbaf8462dd27dea7416e9b4478ae40e6cd67f
 ```
 
 `context_introduction_event_ref/fingerprint`는 origin `ISSUED` 또는 해당 ref를 도입한 `SUPERSEDED` event를 가리킨다. `context_authority_event_high_watermark`는 producer가 body를 만들 때 external owner에서 resolve한 exact certified H다. 이 세 필드는 authoring snapshot provenance이며 semantic priority를 스스로 만들지 않는다.
@@ -442,13 +443,13 @@ existing P1-6 Requirement schema_id + schema_version
 P1-8 policy-owned derivation contract canonical SHA-256:
 
 ```text
-82cdb2a5eab5dee63fd2050c6a23ea005be7147e292f1a6faadfc8d5f892a7a5
+6de3e66a0d16a1dc0038838eb58b9ca0ca6c2d790ab3a5cdcab3802b5093b508
 ```
 
 Hash input canonical payload:
 
 ```json
-{"contract_id":"P1_8_NEXT_ACTION_CONTEXT_MEMORY_DERIVATION_V1","contract_version":"v1","equality_fields":["context_ref","context_fingerprint","context_logical_id","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"event_provenance_fields":["context_introduction_event_ref","context_introduction_event_fingerprint","context_authority_event_high_watermark"],"memory_content_fingerprint_schema":"p1-8-memory-content-v1","normalized_fields":["context_ref","context_fingerprint","context_logical_id","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"p1_6_result_schema_fingerprint":"f3aa618cc1fa06b73fa4467b73032f5d59dc1e6e4fe39fbc12c2bf0b5ae6a89b","p1_6_result_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","p1_6_result_schema_version":"v1","priority_source_enrollment_contract_fingerprint":"f2b090057ae3f5f00ed4ef878a41664e2322988190969458e6a6544f76932f6b","privacy_ceiling":"PRIVATE_INTERNAL","producer_high_watermark_role":"AUTHORING_SNAPSHOT_PROVENANCE_ONLY","project_memory_role":"CURRENT_CONTEXTUAL_ELIGIBILITY_INPUT_NOT_PRIORITY_AUTHORITY","selector":"/next_action_context","source_contract_fingerprint":"c43c8560f785d765c677a8bce4310a4ae166e2a35913acc10ffc72ee883fa395","source_owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY/NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1","terminal_context_currentness":"NOT_REQUIRED_V1"}
+{"contract_id":"P1_8_NEXT_ACTION_CONTEXT_MEMORY_DERIVATION_V1","contract_version":"v1","equality_fields":["context_ref","context_fingerprint","context_logical_id","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"event_provenance_fields":["context_introduction_event_ref","context_introduction_event_fingerprint","context_authority_event_high_watermark"],"memory_content_fingerprint_schema":"p1-8-memory-content-v1","normalized_fields":["context_ref","context_fingerprint","context_logical_id","project_id","task_contract_id","task_contract_version","context_slot_id","priority_class","critical_path_ordinal"],"p1_6_result_schema_fingerprint":"db08fb7cbe1b55b7c686df28ffccbaf8462dd27dea7416e9b4478ae40e6cd67f","p1_6_result_schema_id":"P1_8_NEXT_ACTION_CONTEXT_RESULT_V1","p1_6_result_schema_version":"v1","priority_source_enrollment_contract_fingerprint":"f2b090057ae3f5f00ed4ef878a41664e2322988190969458e6a6544f76932f6b","privacy_ceiling":"PRIVATE_INTERNAL","producer_high_watermark_role":"AUTHORING_SNAPSHOT_PROVENANCE_ONLY","project_memory_role":"CURRENT_CONTEXTUAL_ELIGIBILITY_INPUT_NOT_PRIORITY_AUTHORITY","selector":"/next_action_context","source_contract_fingerprint":"988cdd4c71aca75e3434652044b50ffd703fb32ba4568219c56d52e498cd8698","source_owner":"EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY/NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1","terminal_context_currentness":"NOT_REQUIRED_V1"}
 ```
 
 Exact pipeline:
@@ -652,15 +653,21 @@ Prospective only:
 | 9 | Section 13 graph proves original CURRENT Memory, ActionRef/descriptor enrollment, external payload/currentness at selection H, class/ordinal, policy mapping and accepted tuple. |
 | 10 | Carrier H proves only the exact external owner prefix observed at body authoring. It proves neither later P1-6 admission nor terminal currentness. |
 | 11 | External context currentness at terminal is `NOT_REQUIRED_V1`. Later events affect current applicability; future terminal binding would require a separate terminal observation authority. |
-| 12 | Source contract changed to `c43c8560...`; Memory derivation changed to `82cdb2a5...`; new enrollment contract is `f2b09005...`. Ref/event/result schema hashes remain unchanged. |
+| 12 | The historical accepted predecessor used source contract `c43c8560...` and Memory derivation `82cdb2a5...`. This JCS-safe candidate uses `988cdd4c...` and `6de3e66a...`; enrollment remains `f2b09005...`, while ref/event/result schema hashes are reconciled transitively. |
 | 13 | Yes. Existing P1-6 Requirement identity and the section 9 sufficiency decision remain unchanged. |
 | 14 | Human must accept/rework/reject this candidate. External owner runtime and later prerequisite descriptor/policy/catalog incorporation remain open; no compatibility semantic choice is intentionally unresolved. |
 
-## 16. acceptance and runtime gate
+## 16. JCS correction lineage, acceptance and runtime gate
+
+The historical Human acceptance remains bound to predecessor SHA-256
+`19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1`. The current edited bytes are a
+prospective narrow JCS safe-integer and dependent-fingerprint correction; they are not covered by that historical
+acceptance and require a new Human review. All normative sequence/high-watermark JSON integers in this candidate
+are bounded by `9007199254740991`; arbitrary-precision lexical hashing and a custom JCS dialect remain forbidden.
 
 ```text
 NEXT_ACTION_CONTEXT source authority design:
-CANDIDATE / HUMAN_REVIEW_REQUIRED
+REWORK_CANDIDATE / HUMAN_REVIEW_REQUIRED
 
 P1-8 prerequisite owner-authority design:
 BLOCKED_REQUIRED_EVIDENCE
