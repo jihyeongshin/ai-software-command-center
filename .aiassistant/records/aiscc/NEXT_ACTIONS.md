@@ -24,7 +24,8 @@ P1-6 Durable Evidence Content Extension Runtime → HUMAN_PROVIDED / ACCEPTED / 
 P1-7 Human Gate and Judgment Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-7 Human Gate and Judgment Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 Project Memory and Cycle Admission Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
-P1-8 NEXT_ACTION_CONTEXT Source Authority Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision → HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -32,16 +33,17 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 
 ## canonical queue
 
-The source-authority contract is accepted. The prerequisite owner-authority exact contract must now incorporate it
-before runtime resume:
+The corrected source-authority contract and prerequisite owner-authority exact contract are jointly accepted. The
+separate runtime reconciliation may now resume from the exact preserved candidate:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-6 Durable Evidence Content Extension Runtime -> HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 durable-content prerequisite -> SATISFIED / BLOCKER_RESOLVED
-P1-8 NEXT_ACTION_CONTEXT Source Authority Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
-P1-8 prerequisite owner-authority exact-contract design -> BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION
-P1-8 Runtime -> BLOCKED_REQUIRED_EVIDENCE
+P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision -> HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-8 prerequisite owner-authority exact-contract/source-enrollment design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-8 prerequisite design blocker -> CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN
+P1-8 Runtime -> NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED
 ```
 
 1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
@@ -50,9 +52,9 @@ P1-8 Runtime -> BLOCKED_REQUIRED_EVIDENCE
 4. `P1-7 Design` — Human Gate and Judgment (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 5. `P1-7 Runtime` — Human Gate and Judgment Implementation + Verification (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 6. `P1-8 Design` — Project Memory and Cycle Admission (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
-7. `P1-8 NEXT_ACTION_CONTEXT Source Authority Design` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
-8. `P1-8 Prerequisite Owner Authority Exact Contract` (`BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION`)
-9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`BLOCKED_REQUIRED_EVIDENCE`)
+7. `P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
+8. `P1-8 Prerequisite Owner Authority Exact Contract` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
+9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED`)
 10. `P2-1` — Command Center Web UI
 11. `P2-2` — Synthetic Demo Repository
 12. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
@@ -129,35 +131,35 @@ P1-8 NEXT_ACTION_CONTEXT Source Authority design:
 HUMAN_PROVIDED / ACCEPTED / CLOSED
 
 P1-8 prerequisite owner-authority exact-contract design:
-BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION
+HUMAN_PROVIDED / ACCEPTED / CLOSED
 
 P1-8 Project Memory and Cycle Admission runtime:
-BLOCKED_REQUIRED_EVIDENCE
+NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 ```
 
-The prerequisite owner-authority exact contract, P1-8 runtime and later demo/release verification remain required.
-The P1-8 source-authority design is now `HUMAN_PROVIDED / ACCEPTED / CLOSED`.
+The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime remains
+unaccepted and later demo/release verification remains required.
 
 ## current next action
 
 ```text
 phase:
-P1-8 Prerequisite Owner Authority Exact-Contract Design Resume
+P1-8 Runtime Reconciliation Resume
 
 title:
-Prerequisite Owner Authority Exact Contract and Source Enrollment Incorporation
+P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume
 
 status:
-BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION
+SEPARATE_REWORK_RESUME_AUTHORIZED / NEXT_ACTION
 
 first subtask:
-freeze TaskConstraint exact event/scope/currentness authority and P1-4 blocker taxonomy/resumability/G_BLOCKER_RESOLVED durable binding
+start from exact preserved `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
 
 pre-step:
-incorporate accepted NextActionContextRefV1 source enrollment into P1_8_POLICY_ACTION_CATALOG_V1, descriptors and selection-policy authority; recompute every affected catalog/descriptor/policy fingerprint
+read Commit A exact accepted rules; reconcile runtime schemas, persistence, owner events, guards and tests; require separate Command Center and Human runtime acceptance
 ```
 
 ## P1-6 outer authority already inherited
@@ -237,10 +239,12 @@ The accepted runtime is commit `b4ba49ebaeb437d885bf22d52473c7d8a79832d1`, exact
 P1-8 Design is `HUMAN_PROVIDED / ACCEPTED / CLOSED` at exact SHA
 `100fd21b4095b8e5df60e4073fe5e7f69fe3cc275da937161f0b9ce7e90a995a` and commit
 `c108e9c02f222cf51ce833e311465584447b3571`. Its durable-content prerequisite is `SATISFIED`. The
-`NEXT_ACTION_CONTEXT` source-authority design is also `HUMAN_PROVIDED / ACCEPTED / CLOSED` at SHA
+The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1` and commit
-`35901125cc5842734cf1e8eb3374d10e4ee866e3`. P1-8 Runtime is `BLOCKED_REQUIRED_EVIDENCE` pending prerequisite
-owner-authority exact-contract completion and must preserve
+`35901125cc5842734cf1e8eb3374d10e4ee866e3` remains preserved. Its corrected revision
+`7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db` and prerequisite rule
+`8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960` are jointly accepted in commit
+`b271f98df7d53edd3d3bc418443ff192e7aa4cfb`. P1-8 Runtime remains `NOT_ACCEPTED` and must preserve
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
 Public Bounded Live remains `NOT_RELEASED`.

@@ -737,3 +737,28 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - P2/P3 remain `NOT_STARTED`;
   - Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing source ownership, TaskContract scope, carrier/source equality, contextual-only Memory role, source enrollment, class-to-rank ownership, accepted tuple, authoring-snapshot boundary or historical/current separation requires a separate Human-accepted baseline update.
+
+## AISCC-P1-8-PREREQUISITE-AUTHORITY-JCS-SAFE-INTEGER-DESIGN-V1
+
+- decision: Adopt the Human joint-accepted corrected `NEXT_ACTION_CONTEXT` source authority and P1-8 prerequisite owner-authority exact contract/source enrollment design as the canonical prerequisite for later P1-8 runtime reconciliation.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- acceptance_binding: `JOINT_EXACT_BYTES`; Human exact text `Accept`
+- accepted identities:
+  - `.aiassistant/rules/AISCC_NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY.md` — `7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db`;
+  - `.aiassistant/rules/AISCC_P1_8_PREREQUISITE_OWNER_AUTHORITY.md` — `8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960`;
+  - accepted joint design commit — `b271f98df7d53edd3d3bc418443ff192e7aa4cfb`.
+- review evidence: Command Center `SUBSTANTIVE_REVIEW_PERFORMED / ACCEPTED_CANDIDATE`; independent JCS reconciliation `22 / 22 PASS`, mismatch `0`, unsafe normative JSON integer count `0`.
+- exact contract:
+  - normative sequence/high-watermark JSON integer maximum is `9007199254740991` under `JCS_RFC8785`; custom JCS and arbitrary-precision lexical hashing are forbidden;
+  - TaskConstraint scopes are exact `PROJECT / TASK_CONTRACT / WORK_RUN`, with immutable `ISSUED / SUPERSEDED / REVOKED` owner events and certified complete-prefix snapshot;
+  - P1-4 blocker taxonomy is closed, `SECURITY_BOUNDARY` is non-resumable, and `P1_4BlockerResolvedAttestationV1` is the single durable resolution authority;
+  - `NEXT_ACTION_CONTEXT` semantic owner remains `EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY / NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY_V1`;
+  - CURRENT ProjectMemory remains contextual eligibility input, not priority authority; selection policy remains class-to-rank owner;
+  - concrete CYCLE_DERIVED descriptor/ActionRef count remains `0`.
+- historical lineage: source design commit `35901125cc5842734cf1e8eb3374d10e4ee866e3`, terminal governance commit `683aaee84d1fc09e9371dd214efc3ff58b7225ee`, and the 1619 final Cycle are preserved and not rewritten.
+- release/next-phase effect:
+  - prerequisite design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`;
+  - P1-8 Runtime is `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` from exact candidate `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`;
+  - stable next action is `P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume`;
+  - P2/P3 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
+- supersession_rule: changing either accepted rule byte, JCS numeric ceiling, TaskConstraint/blocker owner contract, source enrollment, ranking ownership or historical/current boundary requires a separate Human-accepted design change.

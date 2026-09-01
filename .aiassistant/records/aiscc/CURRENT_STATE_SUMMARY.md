@@ -27,9 +27,9 @@
 | P1-7 Human Gate and Judgment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-7 Human Gate and Judgment Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Project Memory and Cycle Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-8 NEXT_ACTION_CONTEXT Source Authority Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-8 Prerequisite Owner Authority Design | `BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION` |
-| P1-8 Project Memory and Cycle Admission Runtime | `BLOCKED_REQUIRED_EVIDENCE` |
+| P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P1-8 Project Memory and Cycle Admission Runtime | `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` |
 
 ## P0-4 provenance
 
@@ -784,6 +784,43 @@ This closes only the source-authority design. The prerequisite owner-authority e
 `BLOCKED_REQUIRED_EVIDENCE`; the exact blocked P1-8 runtime remains unaccepted and uncommitted at
 `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`.
 
+## P1-8 terminal joint prerequisite-authority and JCS-safe-integer design
+
+Human joint final review:
+
+```text
+HUMAN_PROVIDED / ACCEPTED / CLOSED
+binding = JOINT_EXACT_BYTES
+Human exact text = Accept
+```
+
+Accepted corrected rules:
+
+```text
+.aiassistant/rules/AISCC_NEXT_ACTION_CONTEXT_SOURCE_AUTHORITY.md
+7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db
+
+.aiassistant/rules/AISCC_P1_8_PREREQUISITE_OWNER_AUTHORITY.md
+8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960
+
+accepted design commit:
+b271f98df7d53edd3d3bc418443ff192e7aa4cfb
+```
+
+The JCS correction fixes every normative sequence/high-watermark JSON integer maximum at
+`9007199254740991`; independent verification reconciled all `22 / 22` direct/transitive fingerprints with mismatch
+`0` and unsafe normative integer count `0`. Historical source design commit `35901125cc5842734cf1e8eb3374d10e4ee866e3`,
+terminal governance commit `683aaee84d1fc09e9371dd214efc3ff58b7225ee`, and the 1619 final Cycle remain immutable lineage.
+
+The prerequisite design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. This does not accept the existing
+runtime candidate. P1-8 Runtime is `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` from the exact preserved
+`19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`; P2/P3 remain `NOT_STARTED` and Public
+Bounded Live remains `NOT_RELEASED`.
+
+Terminal Cycle:
+
+`.aiassistant/records/aiscc/cycles/20260901_2155_aiscc-p1-8-jcs-safe-integer-joint-design-final-acceptance-1.cycle.md`
+
 ## blockers and next action
 
 - P1-1: `ACCEPTED / CLOSED`
@@ -816,11 +853,14 @@ This closes only the source-authority design. The prerequisite owner-authority e
 - P1-8 design acceptance commit: `c108e9c02f222cf51ce833e311465584447b3571`
 - P1-8 durable-content prerequisite: `SATISFIED / BLOCKER_RESOLVED`
 - P1-8 NEXT_ACTION_CONTEXT Source Authority Design: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
-- accepted source-authority design: `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1`
-- source-authority design acceptance commit: `35901125cc5842734cf1e8eb3374d10e4ee866e3`
-- current next action: `P1-8 prerequisite owner-authority exact-contract design resume`
-- P1-8 prerequisite owner-authority design: `BLOCKED_REQUIRED_EVIDENCE / NEXT_ACTION`
-- P1-8 Runtime: `BLOCKED_REQUIRED_EVIDENCE`
+- historical source-authority design: `19b1d29a8f77ca5cc480a14bc9d1bdd53206951ccf8b34802316f1280dc61cb1`
+- historical source-authority design acceptance commit: `35901125cc5842734cf1e8eb3374d10e4ee866e3 / PRESERVED_LINEAGE`
+- accepted corrected source-authority design: `7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db`
+- accepted prerequisite owner-authority design: `8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960`
+- joint design acceptance commit: `b271f98df7d53edd3d3bc418443ff192e7aa4cfb`
+- current next action: `P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume`
+- P1-8 prerequisite design blocker: `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`
+- P1-8 Runtime: `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED`
 - blocked P1-8 runtime: `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
 - P2: `NOT_STARTED`
 
