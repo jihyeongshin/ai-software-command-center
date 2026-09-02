@@ -26,6 +26,8 @@ P1-7 Human Gate and Judgment Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 Project Memory and Cycle Admission Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1-8 Project Memory and Cycle Admission Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1 → ACCEPTED / CLOSED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -33,8 +35,8 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 
 ## canonical queue
 
-The corrected source-authority contract and prerequisite owner-authority exact contract are jointly accepted. The
-separate runtime reconciliation may now resume from the exact preserved candidate:
+The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
+accepted. P1 is closed and P2 entry is ready without starting P2:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -43,7 +45,10 @@ P1-8 durable-content prerequisite -> SATISFIED / BLOCKER_RESOLVED
 P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision -> HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 prerequisite owner-authority exact-contract/source-enrollment design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 prerequisite design blocker -> CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN
-P1-8 Runtime -> NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED
+P1-8 Runtime -> HUMAN_PROVIDED / ACCEPTED / CLOSED
+P1 -> ACCEPTED / CLOSED
+P2 -> NOT_STARTED / ENTRY_READY
+next executable -> P2-1 Command Center Web UI
 ```
 
 1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
@@ -54,8 +59,8 @@ P1-8 Runtime -> NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED
 6. `P1-8 Design` — Project Memory and Cycle Admission (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 7. `P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 8. `P1-8 Prerequisite Owner Authority Exact Contract` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
-9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED`)
-10. `P2-1` — Command Center Web UI
+9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
+10. `P2-1` — Command Center Web UI (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`)
 11. `P2-2` — Synthetic Demo Repository
 12. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
 13. `P2-4` — Self-Dogfooding Cutover
@@ -134,32 +139,38 @@ P1-8 prerequisite owner-authority exact-contract design:
 HUMAN_PROVIDED / ACCEPTED / CLOSED
 
 P1-8 Project Memory and Cycle Admission runtime:
-NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED
+HUMAN_PROVIDED / ACCEPTED / CLOSED
+
+P1:
+ACCEPTED / CLOSED
+
+P2:
+NOT_STARTED / ENTRY_READY
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 ```
 
-The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime remains
-unaccepted and later demo/release verification remains required.
+The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime and P1
+are closed. P2 implementation has not started, and later demo/release verification remains required.
 
 ## current next action
 
 ```text
 phase:
-P1-8 Runtime Reconciliation Resume
+P2 Entry
 
 title:
-P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume
+P2-1 Command Center Web UI
 
 status:
-SEPARATE_REWORK_RESUME_AUTHORIZED / NEXT_ACTION
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 first subtask:
-start from exact preserved `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
+issue a separate exact P2-1 design/implementation Task before any P2 execution
 
 pre-step:
-read Commit A exact accepted rules; reconcile runtime schemas, persistence, owner events, guards and tests; require separate Command Center and Human runtime acceptance
+use the terminal P1 canonical state and phase handoff; do not infer P2 started status from entry readiness
 ```
 
 ## P1-6 outer authority already inherited
@@ -244,7 +255,9 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `35901125cc5842734cf1e8eb3374d10e4ee866e3` remains preserved. Its corrected revision
 `7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db` and prerequisite rule
 `8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960` are jointly accepted in commit
-`b271f98df7d53edd3d3bc418443ff192e7aa4cfb`. P1-8 Runtime remains `NOT_ACCEPTED` and must preserve
+`b271f98df7d53edd3d3bc418443ff192e7aa4cfb`. P1-8 Runtime is now
+`HUMAN_PROVIDED / ACCEPTED / CLOSED` under the terminal closure authority and must continue to preserve
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
-Public Bounded Live remains `NOT_RELEASED`.
+P1 is `ACCEPTED / CLOSED`; P2 is `NOT_STARTED / ENTRY_READY`; the next executable is
+`P2-1 Command Center Web UI`. Public Bounded Live remains `NOT_RELEASED`.

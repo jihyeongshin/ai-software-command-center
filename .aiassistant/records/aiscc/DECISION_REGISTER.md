@@ -762,3 +762,14 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - stable next action is `P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume`;
   - P2/P3 remain `NOT_STARTED`; Public Bounded Live remains `NOT_RELEASED`.
 - supersession_rule: changing either accepted rule byte, JCS numeric ceiling, TaskConstraint/blocker owner contract, source enrollment, ranking ownership or historical/current boundary requires a separate Human-accepted design change.
+
+## AISCC-P1-TERMINAL-CLOSURE-V1
+
+- decision: P1-8 runtime and P1 are `ACCEPTED / CLOSED`; P2 remains `NOT_STARTED / ENTRY_READY`.
+- decision_status: `ACCEPTED_PROJECT_DECISION / TERMINAL`
+- Human runtime acceptance: Human P1-8 runtime final review — `ACCEPTED`
+- Runtime Commit A: `0f702cb95253a7ed13b46accabe9ac9e969da7a5 / ACCEPTED`
+- Governance Commit B: `c9004e89ae9ed961d7cabe6e3eca1100ef4a13cc / ACCEPTED`
+- closure authority Cycle: `.aiassistant/records/aiscc/cycles/20260902_2329_aiscc-p1-8-governance-commit-b-substantive-acceptance-and-terminal-closure-authority-1.cycle.md`
+- next owner: `P2-1 Command Center Web UI`
+- public release: `NOT_RELEASED`

@@ -29,7 +29,46 @@
 | P1-8 Project Memory and Cycle Admission Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
-| P1-8 Project Memory and Cycle Admission Runtime | `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` |
+| P1-8 Project Memory and Cycle Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+
+## P1 terminal closure and P2 entry state
+
+The Browser Command Center-authorized terminal state is:
+
+```text
+P1-8 Project Memory and Cycle Admission Runtime:
+HUMAN_PROVIDED / ACCEPTED / CLOSED
+
+Runtime Commit A:
+0f702cb95253a7ed13b46accabe9ac9e969da7a5
+ACCEPTED
+
+Governance Commit B:
+c9004e89ae9ed961d7cabe6e3eca1100ef4a13cc
+ACCEPTED
+
+RESTORE_SIX_TO_EXACT_HEAD:
+COMPLETED
+
+P1:
+ACCEPTED / CLOSED
+
+P2:
+NOT_STARTED / ENTRY_READY
+
+next executable:
+P2-1 Command Center Web UI
+
+PUBLIC_BOUNDED_LIVE:
+NOT_RELEASED
+```
+
+Closure authority:
+
+`.aiassistant/records/aiscc/cycles/20260902_2329_aiscc-p1-8-governance-commit-b-substantive-acceptance-and-terminal-closure-authority-1.cycle.md`
+
+The current Browser Project Source mirror predates this terminal canonical state and requires a later explicit
+replacement/sync step. No mirror sync is claimed here.
 
 ## P0-4 provenance
 
@@ -812,8 +851,9 @@ The JCS correction fixes every normative sequence/high-watermark JSON integer ma
 `0` and unsafe normative integer count `0`. Historical source design commit `35901125cc5842734cf1e8eb3374d10e4ee866e3`,
 terminal governance commit `683aaee84d1fc09e9371dd214efc3ff58b7225ee`, and the 1619 final Cycle remain immutable lineage.
 
-The prerequisite design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. This does not accept the existing
-runtime candidate. P1-8 Runtime is `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` from the exact preserved
+At that joint-design judgment time, the prerequisite design blocker became
+`CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`, but the judgment did not accept the existing runtime candidate. P1-8
+Runtime was `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED` from the exact preserved
 `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`; P2/P3 remain `NOT_STARTED` and Public
 Bounded Live remains `NOT_RELEASED`.
 
@@ -858,11 +898,12 @@ Terminal Cycle:
 - accepted corrected source-authority design: `7cf27b77bb961280becfc55ecf8e71c9406da9b7b91df0d2697132c2655108db`
 - accepted prerequisite owner-authority design: `8b19970629c55629df1560f2329b529992eceb86d5e4216baf0b7e78d3876960`
 - joint design acceptance commit: `b271f98df7d53edd3d3bc418443ff192e7aa4cfb`
-- current next action: `P1-8 runtime prerequisite-authority and JCS-safe-integer reconciliation resume`
+- P1 terminal state: `ACCEPTED / CLOSED`
 - P1-8 prerequisite design blocker: `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`
-- P1-8 Runtime: `NOT_ACCEPTED / SEPARATE_REWORK_RESUME_AUTHORIZED`
-- blocked P1-8 runtime: `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
-- P2: `NOT_STARTED`
+- P1-8 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- historical pre-acceptance P1-8 runtime candidate: `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
+- P2: `NOT_STARTED / ENTRY_READY`
+- next executable: `P2-1 Command Center Web UI`
 
 ## non-substitution statement
 
