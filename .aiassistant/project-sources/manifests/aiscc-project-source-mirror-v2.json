@@ -1,0 +1,189 @@
+{
+  "bundle_id": "AISCC-PROJECT-SOURCE-MIRROR-V2",
+  "target_gpt_project": "AI Software Command Center",
+  "project_scope": "AISCC Browser Command Center canonical read-only mirror",
+  "canonical_commit": "b9ed57feb595b3a670b644a213c184f958956924",
+  "generated_by_task": "20260903_0151_aiscc-terminal-project-source-mirror-v2-candidate-generation-and-persistence-1",
+  "generated_at": "2026-09-03T01:51:00+09:00",
+  "expected_active_count": 22,
+  "source_mirror_sync_status": "PENDING_COMMAND_CENTER_REVIEW",
+  "optional_mapping": [],
+  "mapping": [
+    {
+      "project_source_filename": "00_AISCC_STATE__CURRENT_STATE_SUMMARY.md",
+      "canonical_path": ".aiassistant/records/aiscc/CURRENT_STATE_SUMMARY.md",
+      "group": "STATE",
+      "role": "accepted project/phase/authority snapshot",
+      "canonical_sha256": "9a67b2c3df6feeac7ca02ff0fa0126a88567bbc7f65a136c174dce705d0c72ca",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "01_AISCC_STATE__DECISION_REGISTER.md",
+      "canonical_path": ".aiassistant/records/aiscc/DECISION_REGISTER.md",
+      "group": "STATE",
+      "role": "accepted decision and deferred implementation boundary",
+      "canonical_sha256": "dd942172b95815f8872287e45e45ce9b4b7c4755ea4a4eafdb6d2fbebba60a24",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "02_AISCC_STATE__NEXT_ACTIONS.md",
+      "canonical_path": ".aiassistant/records/aiscc/NEXT_ACTIONS.md",
+      "group": "STATE",
+      "role": "stable canonical queue and release invariant",
+      "canonical_sha256": "9917589884df0dfd00d2350e3498e48c323cc4faa0c70ebda18c61b6b65180d4",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "10_AISCC_RULES__AGENTS.md",
+      "canonical_path": ".aiassistant/rules/AISCC_AGENTS.md",
+      "group": "RULES",
+      "role": "instruction transport vs project authority",
+      "canonical_sha256": "fffa447db7388b34d54cdec9d9e3ed4fb58f2f5289d48173efdd8e4c371b3565",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "11_AISCC_RULES__EXECUTOR_REPORT_EXPORT.md",
+      "canonical_path": ".aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md",
+      "group": "RULES",
+      "role": "executor lifecycle/report/export",
+      "canonical_sha256": "e5486b63321ecda069c0ba7b1b6a28ddc707902f77bbe1f9ca2271322b1c9ae9",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "12_AISCC_RULES__ASSET_GIT_AND_ENCODING_POLICY.md",
+      "canonical_path": ".aiassistant/rules/IDE_EXECUTOR_ASSET_GIT_AND_ENCODING_POLICY.md",
+      "group": "RULES",
+      "role": "tracked/ignored/provenance/encoding",
+      "canonical_sha256": "190a903ecc3eb1364503c04c5e1c09a9ca1d50d4fbe9038d5eb25216e72d7c2e",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "13_AISCC_RULES__PROJECT_SOURCE_MIRROR.md",
+      "canonical_path": ".aiassistant/rules/AISCC_PROJECT_SOURCE_MIRROR.md",
+      "group": "RULES",
+      "role": "canonical/mirror lifecycle",
+      "canonical_sha256": "d02f823a03cebeeb14b33994a8fd93a4f695bef813c097ef651f129ae0aab6c0",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "14_AISCC_RULES__DOCUMENT_LANGUAGE_POLICY.md",
+      "canonical_path": ".aiassistant/rules/AISCC_DOCUMENT_LANGUAGE_POLICY.md",
+      "group": "RULES",
+      "role": "Korean-first and claim wording policy",
+      "canonical_sha256": "1856c09ffd1f1a21ae7d621583ee01f42112af8407372d4c5ddac78f5565e773",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "20_AISCC_COMMAND_CENTER__README.md",
+      "canonical_path": ".aiassistant/records/command-center/README.md",
+      "group": "COMMAND_CENTER",
+      "role": "command-center artifact chain",
+      "canonical_sha256": "bc637bcca96f88dec83cbae4a0019d5934ee0a3b2016aaa67e6a90a72a27bc33",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "21_AISCC_COMMAND_CENTER__WORKFLOW.md",
+      "canonical_path": ".aiassistant/records/command-center/COMMAND_CENTER_WORKFLOW.md",
+      "group": "COMMAND_CENTER",
+      "role": "Task/Evidence/Judgment/Cycle workflow",
+      "canonical_sha256": "d1348cccec5130259834132e83a38d9fc8d18e401f646c1f0655b3510ef63ab8",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "22_AISCC_COMMAND_CENTER__TASK_FILE_TEMPLATE.md",
+      "canonical_path": ".aiassistant/records/command-center/TASK_FILE_TEMPLATE.md",
+      "group": "COMMAND_CENTER",
+      "role": "Task Contract template",
+      "canonical_sha256": "01ed89d33851fb861a07e58c48314b74710df4893ceb5e80540bc43c497f7e99",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "23_AISCC_COMMAND_CENTER__SHORT_EXECUTOR_PROMPT_TEMPLATE.md",
+      "canonical_path": ".aiassistant/records/command-center/SHORT_EXECUTOR_PROMPT_TEMPLATE.md",
+      "group": "COMMAND_CENTER",
+      "role": "short IDE transport prompt",
+      "canonical_sha256": "4bd333699ce0a561ec360e823faefb3b4ce20b880437809222e263fae0284742",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "24_AISCC_COMMAND_CENTER__JUDGMENT_RUBRIC.md",
+      "canonical_path": ".aiassistant/records/command-center/JUDGMENT_RUBRIC.md",
+      "group": "COMMAND_CENTER",
+      "role": "evidence/admission/judgment criteria",
+      "canonical_sha256": "14e635e288c3907d912110c547ec45be4ffa8eeacc2ca6e27f545387d0593f67",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "25_AISCC_COMMAND_CENTER__CYCLE_RECORD_TEMPLATE.md",
+      "canonical_path": ".aiassistant/records/command-center/CYCLE_RECORD_TEMPLATE.md",
+      "group": "COMMAND_CENTER",
+      "role": "durable Cycle template",
+      "canonical_sha256": "286e18c1be20951885bccb72407a8ac8e419fd60fb3305e39a3182d2f069ed13",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "26_AISCC_COMMAND_CENTER__NEXT_ACTION_SELECTION_RUBRIC.md",
+      "canonical_path": ".aiassistant/records/command-center/NEXT_ACTION_SELECTION_RUBRIC.md",
+      "group": "COMMAND_CENTER",
+      "role": "next-action ordering",
+      "canonical_sha256": "e4be8bf7b18d46bedd6ca253908dcbcf06e8ee85da29e1d092541330aa3b492c",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "30_AISCC_BASELINE__PRODUCT_THESIS.md",
+      "canonical_path": ".aiassistant/reports/aiscc/AISCC_PRODUCT_THESIS.md",
+      "group": "BASELINE",
+      "role": "accepted product thesis",
+      "canonical_sha256": "359d46cfddb10cb9efd85046383b9405869fe2a74f4e66637032915a802eeeb0",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "31_AISCC_BASELINE__PRIOR_ART_BOUNDARY.md",
+      "canonical_path": ".aiassistant/reports/aiscc/AISCC_PRIOR_ART_BOUNDARY.md",
+      "group": "BASELINE",
+      "role": "prior-art / DO-NOT-CLAIM boundary",
+      "canonical_sha256": "c7cfdcaeddde8eaec384e72a56070e0924de658dbb3db14a729391d41726a0df",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "32_AISCC_BASELINE__COMPETITION_PUBLIC_RUNTIME_BOUNDARY.md",
+      "canonical_path": ".aiassistant/reports/aiscc/AISCC_COMPETITION_PUBLIC_RUNTIME_BOUNDARY.md",
+      "group": "BASELINE",
+      "role": "public Replay/Live/runtime boundary",
+      "canonical_sha256": "cc5237cd4c0adc7eba0927a36158807bd9c9e4e76b1d31e09525cdaffe093e73",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "33_AISCC_BASELINE__ARCHITECTURE.md",
+      "canonical_path": ".aiassistant/rules/AISCC_ARCHITECTURE.md",
+      "group": "BASELINE",
+      "role": "accepted core domain and authority architecture",
+      "canonical_sha256": "f38d90bb3feca83e88f0d67ea5f289c85568334dc4007898925351f8f451e8ef",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "34_AISCC_BASELINE__ORCHESTRATION.md",
+      "canonical_path": ".aiassistant/rules/AISCC_ORCHESTRATION.md",
+      "group": "BASELINE",
+      "role": "accepted explicit state machine and transition contract",
+      "canonical_sha256": "b4d6c8646a2defe060634fea86eb503d96f9dbfa9e31f06c7a34786c23828b4b",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "35_AISCC_BASELINE__SECURITY_SANDBOX.md",
+      "canonical_path": ".aiassistant/rules/AISCC_SECURITY_SANDBOX.md",
+      "group": "BASELINE",
+      "role": "accepted security, sandbox, and runtime boundary",
+      "canonical_sha256": "d11539925b3025b385dec2146dfa30193fc80dbbbd8b71ce4deccb219ba5738b",
+      "upload_status": "REGENERATED_CANDIDATE"
+    },
+    {
+      "project_source_filename": "40_AISCC_HANDOFF__P1_COMPLETION_P2_ENTRY.md",
+      "canonical_path": ".aiassistant/reports/aiscc/20260902_2331_aiscc-p1-completion-p2-entry-handoff-1.md",
+      "group": "HANDOFF",
+      "role": "accepted P1 closure and P2 entry-ready handoff",
+      "canonical_sha256": "df792ea78a7e67ac35066fc1e859e1ecf9133965e3c6bc7f83a22539da082935",
+      "upload_status": "REGENERATED_CANDIDATE"
+    }
+  ]
+}

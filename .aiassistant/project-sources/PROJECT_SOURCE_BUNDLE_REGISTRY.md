@@ -17,12 +17,14 @@ Browser Project Source에서 직접 수정한 body는 canonical change가 아니
 
 ## current state
 
-- current Browser Project active authority: immutable `AISCC-BOOTSTRAP-SEED-V1` `14/14`
-- repository canonical: `ACCEPTED EDITABLE SOURCE OWNER` at `c2187378857c0b13a372235e90cb279ca4b826fa`
-- first tracked mirror manifest: `REGENERATED_CANDIDATE`
-- first generated mirror bundle: `REGENERATED_CANDIDATE`
-- Browser complete active-set replacement: `NOT_EXECUTED / HUMAN_PENDING`
-- source mirror sync status: `COMMAND_CENTER_REVIEW_PENDING`
+- Bootstrap Seed v1: `RETIRED / ACTIVE 0`
+- current Browser Project active authority: `AISCC-PROJECT-SOURCE-MIRROR-V1 / ACTIVE / HUMAN_SYNC_CONFIRMED / 18`
+- v1 canonical commit: `0dc4e19a6da31c22e08d144eaba24209a4476b4d`
+- repository terminal canonical: `b9ed57feb595b3a670b644a213c184f958956924`
+- v2 candidate: `AISCC-PROJECT-SOURCE-MIRROR-V2 / REGENERATED_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING`
+- v2 expected active count: `22`
+- v2 Browser sync: `NOT_EXECUTED / HUMAN_PENDING`
+- source mirror current Browser authority: `V1 until Human complete replacement of accepted V2`
 
 ## ownership boundary
 
@@ -41,6 +43,8 @@ P0-4 does not generate a P0-5 manifest or bundle and does not upload, remove, or
 
 | bundle_id | manifest | canonical_commit | status | browser_sync |
 |---|---|---|---|---|
-| `AISCC-PROJECT-SOURCE-MIRROR-V1` | `.aiassistant/project-sources/manifests/aiscc-project-source-mirror-v1.json` | `0dc4e19a6da31c22e08d144eaba24209a4476b4d` | `REGENERATED_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING` | `NOT_EXECUTED / HUMAN_PENDING` |
+| `AISCC-PROJECT-SOURCE-MIRROR-V1` | `.aiassistant/project-sources/manifests/aiscc-project-source-mirror-v1.json` | `0dc4e19a6da31c22e08d144eaba24209a4476b4d` | `ACTIVE / HUMAN_SYNC_CONFIRMED / 18` | `CONFIRMED` |
+| `AISCC-PROJECT-SOURCE-MIRROR-V2` | `.aiassistant/project-sources/manifests/aiscc-project-source-mirror-v2.json` | `b9ed57feb595b3a670b644a213c184f958956924` | `REGENERATED_CANDIDATE / COMMAND_CENTER_REVIEW_PENDING / 22` | `NOT_EXECUTED / HUMAN_PENDING` |
 
 Seed v1 and mirror v1 must never remain as mixed current authority.
+V1 remains the current Browser authority until Human complete replacement of an accepted V2 candidate.
