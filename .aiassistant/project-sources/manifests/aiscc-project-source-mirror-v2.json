@@ -6,7 +6,7 @@
   "generated_by_task": "20260903_0151_aiscc-terminal-project-source-mirror-v2-candidate-generation-and-persistence-1",
   "generated_at": "2026-09-03T01:51:00+09:00",
   "expected_active_count": 22,
-  "source_mirror_sync_status": "PENDING_COMMAND_CENTER_REVIEW",
+  "source_mirror_sync_status": "HUMAN_PROVIDED_CONFIRMED",
   "optional_mapping": [],
   "mapping": [
     {

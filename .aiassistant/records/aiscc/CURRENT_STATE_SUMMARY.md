@@ -67,8 +67,16 @@ Closure authority:
 
 `.aiassistant/records/aiscc/cycles/20260902_2329_aiscc-p1-8-governance-commit-b-substantive-acceptance-and-terminal-closure-authority-1.cycle.md`
 
-The current Browser Project Source mirror predates this terminal canonical state and requires a later explicit
-replacement/sync step. No mirror sync is claimed here.
+The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
+
+```text
+current Browser mirror: AISCC-PROJECT-SOURCE-MIRROR-V2
+active mirror file count: 22
+mirror snapshot canonical commit: b9ed57feb595b3a670b644a213c184f958956924
+mirror candidate/persistence commit: 2b156d8b2a43d1b908bca6aaf740eba4061fd4a1
+source_mirror_sync: HUMAN_PROVIDED / CONFIRMED
+v1: RETIRED / HISTORICAL
+```
 
 ## P0-4 provenance
 
@@ -111,7 +119,7 @@ P0-5: ACCEPTED / CLOSED
 source_mirror_sync: confirmed
 ```
 
-The active Browser Project Source mirror v1 is a read-only snapshot of canonical commit
+The historical Browser Project Source mirror v1 was a read-only snapshot of canonical commit
 `0dc4e19a6da31c22e08d144eaba24209a4476b4d`.
 Its embedded pre-sync state text is historical snapshot content and MUST NOT be treated as a reason to reopen P0-5 when a later terminal Cycle or current repository canonical state exists.
 
@@ -123,10 +131,14 @@ Its embedded pre-sync state text is historical snapshot content and MUST NOT be 
 - Browser Project Source is read-only mirror authority for Browser context, not an editable canonical owner.
 - `AISCC-BOOTSTRAP-SEED-V1` active Browser authority is retired.
 - Seed v1 active file count: `0`.
-- current Browser mirror: `AISCC-PROJECT-SOURCE-MIRROR-V1`.
-- active mirror file count: `18`.
+- current Browser mirror: `AISCC-PROJECT-SOURCE-MIRROR-V2`.
+- active mirror file count: `22`.
 - mirror snapshot canonical commit:
-  `0dc4e19a6da31c22e08d144eaba24209a4476b4d`.
+  `b9ed57feb595b3a670b644a213c184f958956924`.
+- mirror candidate/persistence commit:
+  `2b156d8b2a43d1b908bca6aaf740eba4061fd4a1`.
+- source mirror sync: `HUMAN_PROVIDED / CONFIRMED`.
+- `AISCC-PROJECT-SOURCE-MIRROR-V1`: `RETIRED / HISTORICAL`.
 
 ## accepted competition decisions
 

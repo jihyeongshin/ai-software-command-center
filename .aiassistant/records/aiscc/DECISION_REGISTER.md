@@ -79,11 +79,12 @@
 
 - decision: local repository canonical은 editable source owner이고 Browser Project Source는 Human-uploaded read-only mirror다.
 - decision_status: `ACCEPTED_PROJECT_DECISION / ACTIVE`
-- provenance: Seed index, Project Source mirror rule, P0-4 acceptance, P0-5 terminal Human sync evidence
-- implementation_status: first repository mirror v1 complete replacement `IMPLEMENTED`
-- verification_status: `HUMAN_PROVIDED / CONFIRMED`; active mirror `18/18`, Seed active `0`
-- active mirror: `AISCC-PROJECT-SOURCE-MIRROR-V1`
-- mirror snapshot canonical commit: `0dc4e19a6da31c22e08d144eaba24209a4476b4d`
+- provenance: Seed index, Project Source mirror rule, P0-4 acceptance, P0-5 terminal Human sync evidence, 0310 v2 candidate acceptance, and 0328 Human v2 sync confirmation
+- implementation_status: mirror v2 complete replacement `IMPLEMENTED`; mirror v1 `RETIRED / HISTORICAL`
+- verification_status: `HUMAN_PROVIDED / CONFIRMED`; active mirror `22/22`, mirror v1 retired, Seed active `0`
+- active mirror: `AISCC-PROJECT-SOURCE-MIRROR-V2`
+- mirror snapshot canonical commit: `b9ed57feb595b3a670b644a213c184f958956924`
+- mirror candidate commit: `2b156d8b2a43d1b908bca6aaf740eba4061fd4a1`
 - owner / future task: repository canonical owners; future mirror refreshes follow `.aiassistant/rules/AISCC_PROJECT_SOURCE_MIRROR.md`
 - supersession_rule: Browser direct edit는 canonical change가 아니며 tracked manifest + generated bundle + Human complete replacement cycle만 mirror state를 갱신한다.
 
@@ -104,6 +105,23 @@
   - Bootstrap Seed v1 becomes historical-only
 - owner / future task: future mirror refresh Task only when active canonical changes warrant a new Browser source snapshot
 - supersession_rule: future mirror version may supersede v1 only through complete replacement; mixed current authority is forbidden.
+
+
+## AISCC-PROJECT-SOURCE-MIRROR-V2-ACTIVATION
+
+- decision: AI Software Command Center Browser Project active source is `AISCC-PROJECT-SOURCE-MIRROR-V2` `22/22` complete replacement.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
+- provenance:
+  - candidate acceptance Cycle: `.aiassistant/records/aiscc/cycles/20260903_0310_aiscc-terminal-project-source-mirror-v2-candidate-substantive-acceptance-human-replacement-gate-1.cycle.md`
+  - Human sync Cycle: `.aiassistant/records/aiscc/cycles/20260903_0328_aiscc-terminal-project-source-mirror-v2-human-sync-confirmation-1.cycle.md`
+- candidate commit: `2b156d8b2a43d1b908bca6aaf740eba4061fd4a1`
+- snapshot canonical commit: `b9ed57feb595b3a670b644a213c184f958956924`
+- Human result: `Mirror Sync 완료 / 22개 업로드 완료`
+- v1: `RETIRED / HISTORICAL`
+- authority: repository canonical remains editable owner; Browser Project Source is read-only mirror v2.
+- P2: `NOT_STARTED / ENTRY_READY`
+- next executable: `P2-1 Command Center Web UI`
+- supersession_rule: a later mirror version requires a separately accepted manifest, generated candidate, complete Human replacement, and admitted sync confirmation; mixed current authority is forbidden.
 
 
 ## AISCC-P1-1-CORE-DOMAIN-STATE-MACHINE-V1
