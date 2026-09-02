@@ -9,10 +9,17 @@ from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX, required_judgment_guard
 from aiscc.workflow.models import (
     AuthorityConflictError,
+    BlockerKindV1,
+    BlockerReasonCodeV1,
+    BlockerResumabilityV1,
     DecisionOutcome,
     DecisionReason,
     GuardId,
     GuardSemanticOwner,
+    P1_4BlockerClaimV1,
+    P1_4BlockerProvenanceV1,
+    P1_4BlockerResolutionClaimV1,
+    P1_4BlockerResolvedAttestationV1,
     RequesterType,
     RequestIdentityConflictError,
     TransitionDecision,
@@ -21,12 +28,15 @@ from aiscc.workflow.models import (
     WorkRun,
 )
 from aiscc.workflow.participants import CompositeTransitionParticipant
-from aiscc.workflow.ports import TransitionTransactionParticipant
+from aiscc.workflow.ports import P1_4BlockerSourceVerifier, TransitionTransactionParticipant
 
 __all__ = [
     "TRANSITION_MATRIX",
     "GUARD_OWNER_POLICY",
     "AuthorityConflictError",
+    "BlockerKindV1",
+    "BlockerReasonCodeV1",
+    "BlockerResumabilityV1",
     "DecisionOutcome",
     "DecisionReason",
     "GuardId",
@@ -39,6 +49,11 @@ __all__ = [
     "FutureOwnerGuardVerifier",
     "ExecutionRefVerifier",
     "P1_4GuardAuthority",
+    "P1_4BlockerClaimV1",
+    "P1_4BlockerProvenanceV1",
+    "P1_4BlockerResolutionClaimV1",
+    "P1_4BlockerResolvedAttestationV1",
+    "P1_4BlockerSourceVerifier",
     "TrustedGuardFact",
     "WorkRun",
     "WorkflowKernel",

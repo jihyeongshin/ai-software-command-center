@@ -13,13 +13,26 @@ import pytest
 from sqlalchemy import func, select, text
 
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
+from aiscc.cycle.models import (
+    CycleAdmissionError,
+    CycleAdmissionErrorCode,
+    CycleAdmissionRequest,
+    CycleCandidate,
+    MemoryCategory,
+    MemoryDeclaration,
+    p1_8_task_binding_fingerprint,
+)
+from aiscc.cycle.repository import PostgresCycleAdmissionRepository
 from aiscc.evidence.admission import (
     EvidenceAdmissionEvaluator,
     EvidenceContentRegistry,
     make_admission_request,
 )
 from aiscc.evidence.attestation import EvidenceCheckpointUseRegistry, EvidenceGuardAuthority
-from aiscc.evidence.content import PrivateEvidenceContentStore
+from aiscc.evidence.content import (
+    P1_6HistoricalContentAccessAuthority,
+    PrivateEvidenceContentStore,
+)
 from aiscc.evidence.issuers import EvidenceIssuerRegistry, P1_7HumanEvidenceIssuerAuthority
 from aiscc.evidence.models import (
     EvidenceAdmissionOutcome,
@@ -83,8 +96,20 @@ from aiscc.judgment.models import (
     JudgmentKind,
     JudgmentOwnerPolicy,
 )
+from aiscc.memory.models import (
+    MemoryAuthorityMode,
+    P1_8MemoryDeclarationPolicyAuthority,
+    default_memory_policy,
+    default_memory_policy_authority,
+    memory_content_fingerprint,
+)
+from aiscc.next_action.models import (
+    default_next_action_policy_authority,
+)
+from aiscc.next_action.repository import PostgresNextActionRepository
 from aiscc.persistence import PostgresTransitionRepository, create_engine, create_session_factory
 from aiscc.persistence.models import (
+    AdmittedCycleRow,
     EvidenceAuthorityEventRow,
     EvidenceSetAttestationRow,
     EvidenceSetEvaluationRow,
@@ -99,6 +124,8 @@ from aiscc.persistence.models import (
     JudgmentEvaluationRow,
     JudgmentProjectionRow,
     JudgmentRow,
+    P1_4BlockerProvenanceRow,
+    ProjectMemoryViewRow,
     TransitionDecisionRow,
     TransitionEvaluationRow,
     TransitionRequestRow,
@@ -109,20 +136,39 @@ from aiscc.persistence.repository import (
     _transition_request_from_row,
     acquire_work_run_transaction_lock,
 )
+from aiscc.task_authority.authority import _bind_repository_once
+from aiscc.task_authority.models import TaskConstraintScopeKind, TaskConstraintScopeV1
+from aiscc.task_authority.repository import PostgresExternalTaskAuthorityRepository
 from aiscc.workflow.evaluator import TransitionEvaluator
 from aiscc.workflow.guards import GUARD_OWNER_POLICY, P1_4GuardAuthority
 from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
+    BlockerKindV1,
+    BlockerReasonCodeV1,
     DecisionOutcome,
     GuardId,
     GuardSemanticOwner,
+    P1_4BlockerClaimV1,
+    P1_4BlockerResolutionClaimV1,
     RequesterType,
     TransitionRequest,
 )
 from aiscc.workflow.participants import CompositeTransitionParticipant
 
 NOW = datetime(2026, 8, 30, 1, 30, tzinfo=UTC)
+
+
+class TestBlockerSourceVerifier:
+    async def verify_resolution_source(self, session: Any, **values: Any) -> bool:
+        del session
+        claim = values["claim"]
+        return (
+            values["resolution_source_contract_ref"] == "resolution-contract:v1:test"
+            and values["resolution_source_contract_fingerprint"] == "a" * 64
+            and claim.resolution_source_authority_ref == "resolution-authority:v1:test"
+            and claim.resolution_source_authority_fingerprint == "b" * 64
+        )
 
 
 def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
@@ -147,9 +193,30 @@ def request(
     evidence_refs: tuple[str, ...] = (),
     human_result_refs: tuple[str, ...] = (),
     judgment_refs: tuple[str, ...] = (),
+    blocker_kind: BlockerKindV1 = BlockerKindV1.EXECUTION,
+    blocker_resolution_claim: P1_4BlockerResolutionClaimV1 | None = None,
 ) -> TransitionRequest:
+    transition_request_id = str(uuid4())
+    reason_code = (
+        BlockerReasonCodeV1.SECURITY_BOUNDARY
+        if blocker_kind is BlockerKindV1.SECURITY
+        else BlockerReasonCodeV1.EXECUTION_BLOCKER
+    )
+    blocker_claim = (
+        P1_4BlockerClaimV1(
+            f"blocker-{transition_request_id}",
+            blocker_kind,
+            reason_code,
+            "resolution-contract:v1:test",
+            "a" * 64,
+            ("source-authority:v1:test",),
+            ("c" * 64,),
+        )
+        if target is WorkflowState.BLOCKED
+        else None
+    )
     return TransitionRequest(
-        str(uuid4()),
+        transition_request_id,
         "aiscc-project",
         task_id,
         "v1",
@@ -163,6 +230,8 @@ def request(
         evidence_refs=evidence_refs,
         human_result_refs=human_result_refs,
         judgment_refs=judgment_refs,
+        blocker_claim=blocker_claim,
+        blocker_resolution_claim=blocker_resolution_claim,
         created_at=NOW,
     )
 
@@ -182,6 +251,24 @@ def system_facts(authority: P1_4GuardAuthority, value: TransitionRequest) -> tup
             )
         )
     return tuple(result)
+
+
+async def blocker_resolution_claim(sessions: Any, work_run_id: str) -> P1_4BlockerResolutionClaimV1:
+    async with sessions() as session:
+        blocker = await session.scalar(
+            select(P1_4BlockerProvenanceRow).where(
+                P1_4BlockerProvenanceRow.work_run_id == work_run_id
+            )
+        )
+    assert blocker is not None
+    return P1_4BlockerResolutionClaimV1(
+        blocker.blocker_ref,
+        blocker.blocker_fingerprint,
+        "resolution-source:v1:test",
+        "d" * 64,
+        "resolution-authority:v1:test",
+        "b" * 64,
+    )
 
 
 def evidence_authority_snapshot(
@@ -286,7 +373,32 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
         run_id = f"run-p1-7-live-{uuid4()}"
         engine = create_engine(database_url)
         sessions = create_session_factory(engine)
-        evidence_repository = PostgresEvidenceRepository(sessions)
+        external_task_repository = PostgresExternalTaskAuthorityRepository(sessions)
+        external_task_writer = _bind_repository_once(external_task_repository)
+        task_constraint, _ = await external_task_writer.issue_task_constraint(
+            constraint_ref_id=f"task-constraint-{label}",
+            logical_constraint_id=f"task-constraint-lineage-{label}",
+            scope=TaskConstraintScopeV1(
+                TaskConstraintScopeKind.TASK_CONTRACT,
+                "aiscc-project",
+                task_id,
+                "v1",
+            ),
+            constraint_schema_id="TASK_CONSTRAINT_PAYLOAD_V1",
+            constraint_schema_version="v1",
+            constraint_payload_ref=f"task-constraint-payload:v1:{label}",
+            constraint_payload_fingerprint="a" * 64,
+            event_id=f"task-constraint-issued-{label}",
+            issued_at=NOW,
+        )
+        task_constraint_snapshot = await external_task_writer.certify_snapshot(
+            snapshot_id=f"task-constraint-snapshot-{label}", issued_at=NOW
+        )
+        historical_content_access = P1_6HistoricalContentAccessAuthority()
+        evidence_repository = PostgresEvidenceRepository(
+            sessions,
+            historical_content_access_authority=historical_content_access,
+        )
         evidence_owner, requirement_set, requirements, checkpoints = evidence_authority_snapshot(
             task_id
         )
@@ -328,6 +440,7 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
         repository = PostgresTransitionRepository(
             sessions,
             TransitionEvaluator(system, (evidence_guard, human_guard, judgment_authority)),
+            TestBlockerSourceVerifier(),
         )
         kernel = WorkflowKernel(repository)
         for source, version, target in (
@@ -816,6 +929,185 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
             )
             == judgment
         )
+
+        # P1-8 consumes exact P1-4/P1-6/P1-7 history. A Markdown Cycle record,
+        # done Task path, or executor claim is never an input to this admission.
+        memory_policy_authority = default_memory_policy_authority()
+        memory_policy = default_memory_policy(NOW)
+        rogue_memory_authority = P1_8MemoryDeclarationPolicyAuthority()
+        with pytest.raises(CycleAdmissionError) as rogue_policy_configuration:
+            PostgresCycleAdmissionRepository(
+                sessions,
+                evidence_repository,
+                historical_content_access_grant=(
+                    historical_content_access.issue_p1_8_structured_result_grant()
+                ),
+                memory_policy=rogue_memory_authority.issue_v1(NOW),
+                memory_policy_authority=rogue_memory_authority,
+                task_authority_verifier=external_task_repository,
+            )
+        assert (
+            rogue_policy_configuration.value.code
+            is CycleAdmissionErrorCode.MEMORY_POLICY_AUTHORITY_DENIED
+        )
+        transition_fingerprint = canonical_hash(
+            {
+                "admitting_owner": final_decision.admitting_owner,
+                "decided_at": final_decision.decided_at.astimezone(UTC).isoformat(),
+                "kernel_version": final_decision.kernel_version,
+                "outcome": final_decision.outcome.value,
+                "reason": final_decision.reason.value,
+                "resulting_state": final_decision.resulting_state.value,
+                "resulting_state_version": final_decision.resulting_state_version,
+                "transition_decision_id": final_decision.transition_decision_id,
+                "transition_evaluation_id": final_decision.transition_evaluation_id,
+                "transition_request_id": final_decision.transition_request_id,
+            }
+        )
+        pointer_fingerprint = memory_content_fingerprint(
+            category=MemoryCategory.PROVENANCE_POINTER,
+            authority_mode=MemoryAuthorityMode.DETERMINISTIC_POINTER,
+            policy_ref=memory_policy.serialized_ref,
+            normalized_derived_content={
+                "provenance_role": "terminal-transition",
+                "source_fingerprint": transition_fingerprint,
+                "source_logical_id": final_decision.transition_decision_id,
+                "source_object_kind": "P1_4_TRANSITION_DECISION",
+                "source_ref": final_decision.transition_decision_id,
+            },
+        )
+        cycle_candidate = CycleCandidate(
+            f"cycle-{label}",
+            "v1",
+            "aiscc-project",
+            task_id,
+            "v1",
+            p1_8_task_binding_fingerprint(
+                project_id="aiscc-project",
+                task_contract_id=task_id,
+                task_contract_version="v1",
+            ),
+            run_id,
+            5,
+            accept_request.transition_request_id,
+            final_decision.transition_decision_id,
+            transition_fingerprint,
+            corrected_judgment.serialized_ref,
+            corrected_judgment.fingerprint,
+            post_attestation.serialized_ref,
+            post_attestation.admitted_ref_root_hash,
+            (
+                MemoryDeclaration(
+                    MemoryCategory.PROVENANCE_POINTER,
+                    final_decision.transition_decision_id,
+                    "project:aiscc-project",
+                    "provenance/terminal-transition/p1_4_transition_decision/"
+                    + final_decision.transition_decision_id,
+                    memory_policy.serialized_ref,
+                    memory_policy.fingerprint,
+                    pointer_fingerprint,
+                    pointer_ref=final_decision.transition_decision_id,
+                ),
+            ),
+            task_constraint.constraint_ref,
+            task_constraint.constraint_fingerprint,
+            task_constraint_snapshot.snapshot_ref,
+            task_constraint_snapshot.snapshot_fingerprint,
+            task_constraint_snapshot.owner_event_high_watermark,
+        )
+        cycle_request = CycleAdmissionRequest(
+            f"cycle-request-{label}", "v1", cycle_candidate, "aiscc-system", NOW
+        )
+        cycle_repository = PostgresCycleAdmissionRepository(
+            sessions,
+            evidence_repository,
+            historical_content_access_grant=(
+                historical_content_access.issue_p1_8_structured_result_grant()
+            ),
+            memory_policy=memory_policy,
+            memory_policy_authority=memory_policy_authority,
+            task_authority_verifier=external_task_repository,
+        )
+        await cycle_repository.enroll_memory_policy()
+        restarted_cycle_repository = PostgresCycleAdmissionRepository(
+            sessions,
+            evidence_repository,
+            historical_content_access_grant=(
+                historical_content_access.issue_p1_8_structured_result_grant()
+            ),
+            memory_policy=memory_policy,
+            memory_policy_authority=memory_policy_authority,
+            task_authority_verifier=external_task_repository,
+        )
+        alternate_request = replace(
+            cycle_request,
+            request_id=f"cycle-request-alternate-{label}",
+            candidate=replace(cycle_candidate, cycle_id=f"cycle-alternate-{label}"),
+        )
+        concurrent_cycles = await asyncio.gather(
+            cycle_repository.admit(cycle_request),
+            restarted_cycle_repository.admit(alternate_request),
+        )
+        admitted_cycle = concurrent_cycles[0]
+        assert concurrent_cycles == [admitted_cycle, admitted_cycle]
+        assert admitted_cycle.cycle_id in {
+            cycle_candidate.cycle_id,
+            alternate_request.candidate.cycle_id,
+        }
+        with pytest.raises(CycleAdmissionError) as terminal_conflict:
+            await cycle_repository.admit(
+                replace(
+                    alternate_request,
+                    request_id=f"cycle-request-conflict-{label}",
+                    candidate=replace(
+                        alternate_request.candidate,
+                        cycle_id=f"cycle-conflict-{label}",
+                        memory_declarations=(
+                            replace(
+                                alternate_request.candidate.memory_declarations[0],
+                                claimed_content_fingerprint="0" * 64,
+                            ),
+                        ),
+                    ),
+                )
+            )
+        assert terminal_conflict.value.code is CycleAdmissionErrorCode.TERMINAL_EPOCH_CONFLICT
+        assert await restarted_cycle_repository.replay(admitted_cycle.cycle_id) == admitted_cycle
+        async with sessions() as session:
+            current_memory_entry_id = await session.scalar(
+                select(ProjectMemoryViewRow.current_entry_id).where(
+                    ProjectMemoryViewRow.project_id == "aiscc-project",
+                    ProjectMemoryViewRow.state == "CURRENT",
+                )
+            )
+        assert isinstance(current_memory_entry_id, str)
+        next_action_authority = default_next_action_policy_authority()
+        eligibility, selection_policy, descriptors = next_action_authority.issue_policy_catalog_v1(
+            now=NOW
+        )
+        next_action_repository = PostgresNextActionRepository(
+            sessions,
+            eligibility_policy=eligibility,
+            selection_policy=selection_policy,
+            descriptors=descriptors,
+            policy_authority=next_action_authority,
+            task_authority_verifier=external_task_repository,
+        )
+        await next_action_repository.enroll_configured_authority(NOW)
+        assert descriptors[0].action_ref.action_id == "open-operational-recovery-task-issuance"
+        assert await restarted_cycle_repository.replay(admitted_cycle.cycle_id) == admitted_cycle
+        async with sessions() as session, session.begin():
+            await session.execute(text("SET LOCAL session_replication_role = replica"))
+            cycle_row = await session.get(AdmittedCycleRow, admitted_cycle.cycle_id)
+            assert cycle_row is not None
+            cycle_row.cycle_fingerprint = "f" * 64
+        with pytest.raises(CycleAdmissionError):
+            await restarted_cycle_repository.replay(admitted_cycle.cycle_id)
+        async with sessions() as session, session.begin():
+            await session.execute(text("SET LOCAL session_replication_role = replica"))
+            cycle_row = await session.get(AdmittedCycleRow, admitted_cycle.cycle_id)
+            assert cycle_row is not None
+            cycle_row.cycle_fingerprint = admitted_cycle.cycle_fingerprint
 
         # Restart reconstructs durable Human/producer/Judgment authority; no process cache is truth.
         restarted_human = PostgresHumanAuthorityRepository(sessions)
@@ -1368,6 +1660,9 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
             WorkflowState.BLOCKED,
             5,
             WorkflowState.HUMAN_REQUIRED,
+            blocker_resolution_claim=await blocker_resolution_claim(
+                sessions, lifecycle_run_id
+            ),
         )
         suspended_fact = await human_guard.policy_guard_participant(
             resume,
@@ -1406,6 +1701,7 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
             WorkflowState.HUMAN_REQUIRED,
             6,
             WorkflowState.BLOCKED,
+            blocker_kind=BlockerKindV1.SECURITY,
         )
         assert (
             await kernel.request_transition(
@@ -1447,6 +1743,7 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
             WorkflowState.BLOCKED,
             3,
             WorkflowState.READY,
+            blocker_resolution_claim=await blocker_resolution_claim(sessions, no_gate_run_id),
         )
         no_pending_guard = await human_guard.policy_guard_participant(
             ready_again,
@@ -1631,6 +1928,7 @@ def test_p1_7_cross_scope_policy_idempotency_and_expiry_rework(
         repository = PostgresTransitionRepository(
             sessions,
             TransitionEvaluator(system, (evidence_guard, human_guard, judgment_authority)),
+            TestBlockerSourceVerifier(),
         )
         kernel = WorkflowKernel(repository)
 
@@ -2112,6 +2410,7 @@ def test_p1_7_cross_scope_policy_idempotency_and_expiry_rework(
         restarted_repository = PostgresTransitionRepository(
             sessions,
             TransitionEvaluator(system, (evidence_guard, human_guard, restarted_judgment)),
+            TestBlockerSourceVerifier(),
         )
         restarted_kernel = WorkflowKernel(restarted_repository)
         not_required = await human_guard.policy_guard_participant(

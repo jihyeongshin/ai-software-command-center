@@ -13,6 +13,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -83,6 +84,8 @@ class TransitionRequestRow(Base):
     evidence_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     human_result_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     judgment_refs: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    blocker_claim: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    blocker_resolution_claim: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     parent_request_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -419,9 +422,7 @@ class EvidenceCandidateContentBindingRow(Base):
         ForeignKey("evidence_content_objects.serialized_ref", ondelete="RESTRICT"),
         nullable=False,
     )
-    durable_content_payload_fingerprint: Mapped[str] = mapped_column(
-        String(64), nullable=False
-    )
+    durable_content_payload_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     content_ref_metadata_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     requirement_ref: Mapped[str] = mapped_column(String(224), nullable=False)
     requirement_fingerprint_schema: Mapped[str] = mapped_column(String(96), nullable=False)
@@ -914,3 +915,717 @@ class JudgmentGuardAttestationRow(Base):
     payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+# P1-8 immutable authority rows intentionally retain canonical payloads alongside
+# independently indexed identity/binding columns.  Projection rows are the only
+# mutable rows in this group and are rebuildable from append-only events.
+class CycleAdmissionRequestRow(Base):
+    __tablename__ = "cycle_admission_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "terminal_state_version >= 1",
+            name="ck_cycle_admission_requests_terminal_state_version",
+        ),
+    )
+
+    request_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    cycle_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    cycle_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    terminal_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CycleEvaluationRow(Base):
+    __tablename__ = "cycle_evaluations"
+    __table_args__ = (CheckConstraint("outcome = 'ACCEPTED'", name="ck_cycle_evaluations_outcome"),)
+
+    evaluation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("cycle_admission_requests.request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    evaluation_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CycleAdmissionDecisionRow(Base):
+    __tablename__ = "cycle_admission_decisions"
+    __table_args__ = (
+        CheckConstraint("outcome = 'ADMITTED'", name="ck_cycle_admission_decisions_outcome"),
+    )
+
+    decision_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("cycle_evaluations.evaluation_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("cycle_admission_requests.request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    decision_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(24), nullable=False)
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    decided_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AdmittedCycleRow(Base):
+    __tablename__ = "admitted_cycles"
+
+    __table_args__ = (
+        Index(
+            "uq_admitted_cycles_terminal_epoch_key",
+            "terminal_epoch_key",
+            unique=True,
+            postgresql_where=text("terminal_epoch_key IS NOT NULL"),
+        ),
+    )
+
+    cycle_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    cycle_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    cycle_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_id: Mapped[str] = mapped_column(
+        ForeignKey("cycle_admission_requests.request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    decision_id: Mapped[str] = mapped_column(
+        ForeignKey("cycle_admission_decisions.decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    work_run_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    terminal_state_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    terminal_epoch_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    terminal_epoch_payload_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    source_owner_event_high_watermark: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    memory_policy_event_high_watermark: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    task_constraint_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    task_constraint_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    task_constraint_snapshot_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    task_constraint_snapshot_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    task_constraint_event_high_watermark: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    admission_sequence: Mapped[int] = mapped_column(
+        BigInteger, Identity(start=1), nullable=False, unique=True
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    admitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CycleAuthorityEventRow(Base):
+    __tablename__ = "cycle_authority_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    cycle_id: Mapped[str] = mapped_column(
+        ForeignKey("admitted_cycles.cycle_id", ondelete="RESTRICT"), nullable=False
+    )
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryDeclarationPolicyRow(Base):
+    __tablename__ = "memory_declaration_policies"
+
+    serialized_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MemoryPolicyAuthorityEventRow(Base):
+    __tablename__ = "memory_policy_authority_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    policy_ref: Mapped[str] = mapped_column(String(288), nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    replacement_ref: Mapped[str] = mapped_column(String(288), nullable=False, default="NONE")
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectMemoryEntryRow(Base):
+    __tablename__ = "project_memory_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "cycle_id",
+            "declaration_ordinal",
+            name="uq_project_memory_entry_cycle_ordinal",
+        ),
+        CheckConstraint(
+            "category IN ('DECISION','INVARIANT_POINTER','CONSTRAINT_POINTER',"
+            "'BLOCKER_RESOLUTION','PROVENANCE_POINTER','NEXT_ACTION_CONTEXT')",
+            name="ck_project_memory_entries_category",
+        ),
+        CheckConstraint(
+            "privacy IN ('INTERNAL','PUBLIC_SANITIZED','NON_EXPORTABLE')",
+            name="ck_project_memory_entries_privacy",
+        ),
+    )
+
+    entry_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    memory_lineage_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    cycle_id: Mapped[str] = mapped_column(
+        ForeignKey("admitted_cycles.cycle_id", ondelete="RESTRICT"), nullable=False
+    )
+    declaration_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    category: Mapped[str] = mapped_column(String(40), nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    policy_ref: Mapped[str] = mapped_column(String(288), nullable=False)
+    policy_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    external_context_ref: Mapped[str | None] = mapped_column(
+        String(288),
+        ForeignKey("next_action_context_refs.context_ref", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    privacy: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class CycleMemoryReferenceRow(Base):
+    __tablename__ = "cycle_memory_references"
+    __table_args__ = (
+        UniqueConstraint(
+            "cycle_id",
+            "declaration_ordinal",
+            name="uq_cycle_memory_reference_cycle_ordinal",
+        ),
+    )
+
+    reference_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    cycle_id: Mapped[str] = mapped_column(
+        ForeignKey("admitted_cycles.cycle_id", ondelete="RESTRICT"), nullable=False
+    )
+    entry_id: Mapped[str] = mapped_column(
+        ForeignKey("project_memory_entries.entry_id", ondelete="RESTRICT"), nullable=False
+    )
+    declaration_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    provenance: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectMemoryAuthorityEventRow(Base):
+    __tablename__ = "project_memory_authority_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_kind IN ('CURRENT','SUPERSEDED','REVOKED','EXPIRED')",
+            name="ck_project_memory_authority_events_kind",
+        ),
+        CheckConstraint(
+            "new_revision = prior_revision + 1",
+            name="ck_project_memory_authority_events_revision",
+        ),
+    )
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    memory_lineage_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    subject_entry_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    replacement_entry_id: Mapped[str] = mapped_column(String(64), nullable=False, default="NONE")
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    new_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    authority_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    reason: Mapped[str] = mapped_column(String(96), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProjectMemoryViewRow(Base):
+    __tablename__ = "project_memory_views"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('CURRENT','SUPERSEDED','REVOKED','EXPIRED')",
+            name="ck_project_memory_views_state",
+        ),
+    )
+
+    memory_lineage_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    current_entry_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    reason: Mapped[str] = mapped_column(String(96), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionDescriptorRow(Base):
+    __tablename__ = "next_action_descriptors"
+
+    action_ref: Mapped[str] = mapped_column(String(512), primary_key=True)
+    descriptor_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionPolicyRow(Base):
+    __tablename__ = "next_action_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "policy_kind IN ('ELIGIBILITY','SELECTION')",
+            name="ck_next_action_policies_kind",
+        ),
+    )
+
+    policy_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    policy_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionOwnerEventRow(Base):
+    __tablename__ = "next_action_owner_events"
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    subject_ref: Mapped[str] = mapped_column(String(512), nullable=False, index=True)
+    subject_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    replacement_ref: Mapped[str] = mapped_column(String(512), nullable=False, default="NONE")
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionPolicyDescriptorEnrollmentRow(Base):
+    __tablename__ = "next_action_policy_descriptor_enrollments"
+    __table_args__ = (
+        UniqueConstraint(
+            "eligibility_policy_ref",
+            "action_ref",
+            name="uq_next_action_policy_descriptor_enrollment",
+        ),
+        Index(
+            "ix_na_policy_descriptor_enrollment_policy_ref",
+            "eligibility_policy_ref",
+        ),
+        Index("ix_na_policy_descriptor_enrollment_action_ref", "action_ref"),
+    )
+
+    enrollment_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    eligibility_policy_ref: Mapped[str] = mapped_column(String(288), nullable=False)
+    eligibility_policy_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    action_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    descriptor_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    enrolled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionProposalRow(Base):
+    __tablename__ = "next_action_proposals"
+
+    proposal_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    action_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    proposed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionEvaluationRow(Base):
+    __tablename__ = "next_action_evaluations"
+
+    evaluation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    project_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    evaluated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionSelectionRow(Base):
+    __tablename__ = "next_action_selections"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "project_revision",
+            name="uq_next_action_selection_project_revision",
+        ),
+    )
+
+    selection_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    serialized_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    project_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    evaluation_id: Mapped[str] = mapped_column(
+        ForeignKey("next_action_evaluations.evaluation_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    action_ref: Mapped[str] = mapped_column(String(512), nullable=False)
+    external_context_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    external_context_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    external_context_snapshot_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    external_context_snapshot_fingerprint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    external_context_event_high_watermark: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    memory_authority_event_high_watermark: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    selected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionAuthorityEventRow(Base):
+    __tablename__ = "next_action_authority_events"
+    __table_args__ = (
+        CheckConstraint(
+            "new_revision = prior_revision + 1",
+            name="ck_next_action_authority_events_revision",
+        ),
+    )
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, Identity(start=1), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    project_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    selection_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    event_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    prior_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    new_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionProjectionRow(Base):
+    __tablename__ = "next_action_projections"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('CURRENT','WITHDRAWN')",
+            name="ck_next_action_projections_state",
+        ),
+    )
+
+    project_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    selection_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="CURRENT")
+    reason: Mapped[str] = mapped_column(String(96), nullable=False, default="SELECTED_CURRENT")
+    project_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskIssuanceCandidateRow(Base):
+    __tablename__ = "task_issuance_candidates"
+    __table_args__ = (
+        CheckConstraint(
+            "issuance_owner = 'EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY'",
+            name="ck_task_issuance_candidates_owner",
+        ),
+    )
+
+    candidate_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    selection_id: Mapped[str] = mapped_column(
+        ForeignKey("next_action_selections.selection_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    issuance_owner: Mapped[str] = mapped_column(String(160), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+# EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY is a separate owner domain. Its immutable
+# objects/events/snapshots are never projections of P1-8 Memory or NextAction rows.
+class ExternalTaskAuthorityCounterRow(Base):
+    __tablename__ = "external_task_authority_counters"
+    __table_args__ = (
+        CheckConstraint("object_sequence >= 0", name="ck_ext_task_counter_object_nonnegative"),
+        CheckConstraint("event_sequence >= 0", name="ck_ext_task_counter_event_nonnegative"),
+        CheckConstraint(
+            "object_sequence <= 9007199254740991",
+            name="ck_ext_task_counter_object_safe_integer",
+        ),
+        CheckConstraint(
+            "event_sequence <= 9007199254740991",
+            name="ck_ext_task_counter_event_safe_integer",
+        ),
+    )
+
+    counter_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    object_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class ExternalTaskAuthorityIssuerBindingRow(Base):
+    __tablename__ = "external_task_authority_issuer_bindings"
+
+    binding_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    authority_owner: Mapped[str] = mapped_column(String(160), nullable=False)
+    authority_version: Mapped[str] = mapped_column(String(160), nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    bound_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ExternalTaskAuthorityEventRegistryRow(Base):
+    __tablename__ = "external_task_authority_event_registry"
+    __table_args__ = (
+        CheckConstraint("event_sequence >= 1", name="ck_ext_task_event_sequence_positive"),
+        CheckConstraint(
+            "event_sequence <= 9007199254740991",
+            name="ck_ext_task_event_sequence_safe_integer",
+        ),
+        CheckConstraint(
+            "event_domain IN ('TASK_CONSTRAINT','NEXT_ACTION_CONTEXT')",
+            name="ck_ext_task_event_domain",
+        ),
+    )
+
+    event_sequence: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    event_ref: Mapped[str] = mapped_column(String(288), nullable=False, unique=True)
+    event_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_domain: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskConstraintRefRow(Base):
+    __tablename__ = "task_constraint_refs"
+    __table_args__ = (
+        UniqueConstraint("issuance_sequence", name="uq_task_constraint_issuance_sequence"),
+        CheckConstraint("issuance_sequence >= 1", name="ck_task_constraint_issuance_positive"),
+        CheckConstraint(
+            "scope_kind IN ('PROJECT','TASK_CONTRACT','WORK_RUN')",
+            name="ck_task_constraint_scope_kind",
+        ),
+    )
+
+    constraint_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    constraint_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    logical_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    logical_constraint_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    scope_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    task_contract_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    task_contract_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    work_run_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    issuance_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    issuer_binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskConstraintAuthorityEventRow(Base):
+    __tablename__ = "task_constraint_authority_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "logical_key",
+            "effective_sequence",
+            name="uq_task_constraint_logical_effective_sequence",
+        ),
+        CheckConstraint("effective_sequence >= 1", name="ck_task_constraint_effective_positive"),
+    )
+
+    event_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    event_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_sequence: Mapped[int] = mapped_column(
+        ForeignKey("external_task_authority_event_registry.event_sequence", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    effective_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    logical_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    constraint_ref: Mapped[str] = mapped_column(String(288), nullable=False)
+    replacement_constraint_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    issuer_binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskConstraintCurrentRow(Base):
+    __tablename__ = "task_constraint_current"
+
+    logical_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    current_constraint_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    terminal_revoked: Mapped[str] = mapped_column(String(8), nullable=False)
+    effective_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskConstraintOwnerSnapshotRow(Base):
+    __tablename__ = "task_constraint_owner_snapshots"
+    __table_args__ = (
+        Index("ix_task_constraint_owner_snapshots_h", "owner_event_high_watermark"),
+    )
+
+    snapshot_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    snapshot_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    owner_event_high_watermark: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    ordered_event_prefix_root: Mapped[str] = mapped_column(String(64), nullable=False)
+    issuer_binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionContextRefRow(Base):
+    __tablename__ = "next_action_context_refs"
+    __table_args__ = (
+        UniqueConstraint("issuance_sequence", name="uq_next_action_context_issuance_sequence"),
+        CheckConstraint("issuance_sequence >= 1", name="ck_next_action_context_issuance_positive"),
+        CheckConstraint(
+            "critical_path_ordinal BETWEEN 1 AND 1000000",
+            name="ck_next_action_context_ordinal",
+        ),
+    )
+
+    context_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    context_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    logical_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    context_logical_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    task_contract_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    task_contract_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    context_slot_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    priority_class: Mapped[str] = mapped_column(String(64), nullable=False)
+    critical_path_ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
+    issuance_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    effective_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    issuer_binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionContextAuthorityEventRow(Base):
+    __tablename__ = "next_action_context_authority_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "logical_key",
+            "effective_sequence",
+            name="uq_next_action_context_logical_effective_sequence",
+        ),
+        CheckConstraint(
+            "effective_sequence >= 1", name="ck_next_action_context_effective_positive"
+        ),
+    )
+
+    event_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    event_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    event_sequence: Mapped[int] = mapped_column(
+        ForeignKey("external_task_authority_event_registry.event_sequence", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    effective_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    logical_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    context_ref: Mapped[str] = mapped_column(String(288), nullable=False)
+    replacement_context_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    issuer_binding_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class NextActionContextCurrentRow(Base):
+    __tablename__ = "next_action_context_current"
+
+    logical_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    current_context_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    terminal_revoked: Mapped[str] = mapped_column(String(8), nullable=False)
+    effective_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    latest_event_sequence: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class P1_4BlockerProvenanceRow(Base):
+    __tablename__ = "p1_4_blocker_provenance"
+    __table_args__ = (
+        UniqueConstraint("work_run_id", "blocked_epoch", name="uq_p1_4_blocker_work_run_epoch"),
+        Index("ix_p1_4_blocker_work_run_id", "work_run_id"),
+    )
+
+    blocker_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    blocker_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    work_run_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    blocked_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    blocker_kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason_code: Mapped[str] = mapped_column(String(64), nullable=False)
+    resumability: Mapped[str] = mapped_column(String(32), nullable=False)
+    transition_request_id: Mapped[str] = mapped_column(
+        ForeignKey("transition_requests.transition_request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    transition_decision_id: Mapped[str] = mapped_column(
+        ForeignKey("transition_decisions.transition_decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class P1_4BlockerResolvedAttestationRow(Base):
+    __tablename__ = "p1_4_blocker_resolved_attestations"
+
+    attestation_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
+    attestation_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    blocker_ref: Mapped[str] = mapped_column(
+        ForeignKey("p1_4_blocker_provenance.blocker_ref", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    transition_request_id: Mapped[str] = mapped_column(
+        ForeignKey("transition_requests.transition_request_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    transition_decision_id: Mapped[str] = mapped_column(
+        ForeignKey("transition_decisions.transition_decision_id", ondelete="RESTRICT"),
+        nullable=False,
+        unique=True,
+    )
+    payload: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class P1_4BlockerProjectionRow(Base):
+    __tablename__ = "p1_4_blocker_projections"
+
+    work_run_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    blocker_ref: Mapped[str | None] = mapped_column(String(288), nullable=True)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    blocked_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
+    authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

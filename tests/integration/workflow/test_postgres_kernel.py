@@ -7,11 +7,12 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 from aiscc.persistence import PostgresTransitionRepository, create_engine, create_session_factory
 from aiscc.persistence.models import (
+    P1_4BlockerProvenanceRow,
     TransitionDecisionRow,
     TransitionEvaluationRow,
     TransitionRequestRow,
@@ -36,15 +37,31 @@ from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
     AuthorityConflictError,
+    BlockerKindV1,
+    BlockerReasonCodeV1,
     DecisionOutcome,
     DecisionReason,
     GuardId,
     GuardSemanticOwner,
+    P1_4BlockerClaimV1,
+    P1_4BlockerResolutionClaimV1,
     RequesterType,
     TransitionDecision,
     TransitionRequest,
 )
 from aiscc.workflow.ports import FailurePoint
+
+
+class TestBlockerSourceVerifier:
+    async def verify_resolution_source(self, session: Any, **values: Any) -> bool:
+        del session
+        claim = values["claim"]
+        return (
+            values["resolution_source_contract_ref"] == "resolution-contract:v1:test"
+            and values["resolution_source_contract_fingerprint"] == "a" * 64
+            and claim.resolution_source_authority_ref == "resolution-authority:v1:test"
+            and claim.resolution_source_authority_fingerprint == "b" * 64
+        )
 
 
 def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
@@ -72,6 +89,7 @@ def build_kernel(
     repository = PostgresTransitionRepository(
         create_session_factory(engine),
         TransitionEvaluator(authority.system, authority.future_verifiers),
+        TestBlockerSourceVerifier(),
     )
     return WorkflowKernel(repository), repository, authority, engine
 
@@ -90,9 +108,24 @@ def request(
     task_contract_id: str = "task-contract-p1-4",
     task_contract_version: str = "v1",
     runtime_mode: RuntimeMode = RuntimeMode.OWNER_SELF_DOGFOOD,
+    blocker_resolution_claim: P1_4BlockerResolutionClaimV1 | None = None,
 ) -> TransitionRequest:
+    transition_id = request_id or f"request-{uuid4()}"
+    blocker_claim = (
+        P1_4BlockerClaimV1(
+            f"blocker-{transition_id}",
+            BlockerKindV1.EXECUTION,
+            BlockerReasonCodeV1.EXECUTION_BLOCKER,
+            "resolution-contract:v1:test",
+            "a" * 64,
+            ("source-authority:v1:test",),
+            ("c" * 64,),
+        )
+        if target is WorkflowState.BLOCKED
+        else None
+    )
     return TransitionRequest(
-        transition_request_id=request_id or f"request-{uuid4()}",
+        transition_request_id=transition_id,
         project_id=project_id,
         task_contract_id=task_contract_id,
         task_contract_version=task_contract_version,
@@ -106,6 +139,8 @@ def request(
         evidence_refs=evidence_refs,
         human_result_refs=human_result_refs,
         judgment_refs=judgment_refs,
+        blocker_claim=blocker_claim,
+        blocker_resolution_claim=blocker_resolution_claim,
     )
 
 
@@ -229,7 +264,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                assert revision == "20260830_0005"
+            assert revision == "20260901_0008"
         finally:
             await engine.dispose()
 
@@ -648,6 +683,15 @@ def test_representative_blocked_rework_human_and_outcome_paths(database_url: str
                     target=WorkflowState.BLOCKED,
                 ),
             )
+            sessions = create_session_factory(engine)
+            async with sessions() as session:
+                blocker = await session.scalar(
+                    select(P1_4BlockerProvenanceRow).where(
+                        P1_4BlockerProvenanceRow.work_run_id == blocked_run,
+                        P1_4BlockerProvenanceRow.blocked_epoch == 3,
+                    )
+                )
+            assert blocker is not None
             await admit(
                 kernel,
                 authority,
@@ -656,6 +700,14 @@ def test_representative_blocked_rework_human_and_outcome_paths(database_url: str
                     source=WorkflowState.BLOCKED,
                     version=3,
                     target=WorkflowState.READY,
+                    blocker_resolution_claim=P1_4BlockerResolutionClaimV1(
+                        blocker.blocker_ref,
+                        blocker.blocker_fingerprint,
+                        "resolution-source:v1:test",
+                        "d" * 64,
+                        "resolution-authority:v1:test",
+                        "b" * 64,
+                    ),
                 ),
             )
 
@@ -743,6 +795,75 @@ def test_representative_blocked_rework_human_and_outcome_paths(database_url: str
             )
             rework = await admit(kernel, authority, rework_request)
             assert rework.resulting_state is WorkflowState.REWORK_REQUIRED
+        finally:
+            await engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize("failure_point", tuple(FailurePoint))
+def test_blocker_provenance_projection_and_workrun_rollback_together(
+    database_url: str, failure_point: FailurePoint
+) -> None:
+    async def scenario() -> None:
+        run_id = f"run-blocker-rollback-{failure_point.value}-{uuid4()}"
+        kernel, _, authority, engine = build_kernel(database_url)
+        sessions = create_session_factory(engine)
+        try:
+            await admit(
+                kernel,
+                authority,
+                request(run_id=run_id, source=None, version=0, target=WorkflowState.READY),
+            )
+            await admit(
+                kernel,
+                authority,
+                request(
+                    run_id=run_id,
+                    source=WorkflowState.READY,
+                    version=1,
+                    target=WorkflowState.RUNNING,
+                ),
+            )
+            block = request(
+                run_id=run_id,
+                source=WorkflowState.RUNNING,
+                version=2,
+                target=WorkflowState.BLOCKED,
+            )
+
+            def fail(point: FailurePoint) -> None:
+                if point is failure_point:
+                    raise RuntimeError("injected blocker transaction cut")
+
+            with pytest.raises(RuntimeError, match="injected blocker"):
+                await kernel.request_transition(
+                    block,
+                    facts(authority, block),
+                    failure_injector=fail,
+                    transaction_participant=None,
+                )
+            async with sessions() as session:
+                blocker_count = int(
+                    await session.scalar(
+                        select(func.count())
+                        .select_from(P1_4BlockerProvenanceRow)
+                        .where(P1_4BlockerProvenanceRow.work_run_id == run_id)
+                    )
+                    or 0
+                )
+                request_row = await session.get(
+                    TransitionRequestRow, block.transition_request_id
+                )
+            projection = await kernel.load(run_id)
+            assert blocker_count == 0
+            assert request_row is None
+            assert projection is not None
+            assert projection.state is WorkflowState.RUNNING
+            assert projection.state_version == 2
+            admitted = await admit(kernel, authority, block)
+            assert admitted.resulting_state is WorkflowState.BLOCKED
         finally:
             await engine.dispose()
 

@@ -105,7 +105,7 @@ class P1_4GuardAuthority:
             satisfied=satisfied,
             reason=reason,
             authority_ref=authority_ref,
-            bound_refs=(),
+            bound_refs=required_bound_refs(guard_id, request),
             task_contract_id=request.task_contract_id,
             task_contract_version=request.task_contract_version,
             work_run_id=request.work_run_id,
@@ -144,6 +144,11 @@ def required_bound_refs(guard_id: GuardId, request: TransitionRequest) -> tuple[
         return request.human_result_refs
     if guard_id in _JUDGMENT_GUARDS:
         return request.judgment_refs
+    if guard_id is GuardId.G_BLOCKER and request.blocker_claim is not None:
+        return (request.blocker_claim.blocker_ref,)
+    if guard_id is GuardId.G_BLOCKER_RESOLVED and request.blocker_resolution_claim is not None:
+        claim = request.blocker_resolution_claim
+        return (claim.blocker_ref, claim.resolution_source_ref)
     return ()
 
 

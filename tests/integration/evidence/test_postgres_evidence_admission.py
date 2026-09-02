@@ -18,6 +18,15 @@ from sqlalchemy.exc import DBAPIError
 import aiscc.evidence.repository as evidence_repository_module
 import aiscc.persistence.repository as workflow_repository_module
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
+from aiscc.cycle.models import (
+    CycleAdmissionError,
+    CycleAdmissionRequest,
+    CycleCandidate,
+    MemoryCategory,
+    MemoryDeclaration,
+    p1_8_task_binding_fingerprint,
+)
+from aiscc.cycle.repository import PostgresCycleAdmissionRepository
 from aiscc.evidence.admission import (
     EVIDENCE_AUTHORITY_VERSION,
     EvidenceAdmissionEvaluator,
@@ -80,6 +89,14 @@ from aiscc.evidence.repository import (
 from aiscc.evidence.requirements import TaskContractEvidenceAuthority
 from aiscc.evidence.service import EvidenceAdmissionService
 from aiscc.evidence.set_evaluator import EvidenceSetEvaluator
+from aiscc.judgment.authority import JudgmentPolicyAuthority, PostgresJudgmentAuthority
+from aiscc.judgment.models import JudgmentKind, JudgmentOwnerPolicy
+from aiscc.memory.models import (
+    MemoryAuthorityMode,
+    default_memory_policy,
+    default_memory_policy_authority,
+    memory_content_fingerprint,
+)
 from aiscc.persistence import (
     PostgresExecutionRepository,
     PostgresTransitionRepository,
@@ -104,6 +121,9 @@ from aiscc.persistence.models import (
     ExecutionOutputRefRow,
     WorkRunRow,
 )
+from aiscc.task_authority.authority import _bind_repository_once
+from aiscc.task_authority.models import TaskConstraintScopeKind, TaskConstraintScopeV1
+from aiscc.task_authority.repository import PostgresExternalTaskAuthorityRepository
 from aiscc.workflow.evaluator import TransitionEvaluator
 from aiscc.workflow.guards import (
     GUARD_OWNER_POLICY,
@@ -3082,13 +3102,32 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
         run_id = f"run-durable-{uuid4()}"
         engine = create_engine(database_url)
         sessions = create_session_factory(engine)
+        external_task_repository = PostgresExternalTaskAuthorityRepository(sessions)
+        external_task_writer = _bind_repository_once(external_task_repository)
+        task_constraint, _ = await external_task_writer.issue_task_constraint(
+            constraint_ref_id=f"task-constraint-{task_id}",
+            logical_constraint_id=f"task-constraint-lineage-{task_id}",
+            scope=TaskConstraintScopeV1(
+                TaskConstraintScopeKind.TASK_CONTRACT,
+                "aiscc-project",
+                task_id,
+                "v1",
+            ),
+            constraint_schema_id="TASK_CONSTRAINT_PAYLOAD_V1",
+            constraint_schema_version="v1",
+            constraint_payload_ref=f"task-constraint-payload:v1:{task_id}",
+            constraint_payload_fingerprint="a" * 64,
+            event_id=f"task-constraint-issued-{task_id}",
+            issued_at=NOW,
+        )
+        task_constraint_snapshot = await external_task_writer.certify_snapshot(
+            snapshot_id=f"task-constraint-snapshot-{task_id}", issued_at=NOW
+        )
         workflow_authorities = WorkflowAuthorities()
         kernel = WorkflowKernel(
             PostgresTransitionRepository(
                 sessions,
-                TransitionEvaluator(
-                    workflow_authorities.system, workflow_authorities.future
-                ),
+                TransitionEvaluator(workflow_authorities.system, workflow_authorities.future),
             )
         )
         await move_to(
@@ -3121,9 +3160,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 checkpoints=(pre.ref.serialized(),),
                 issuer_types=frozenset({EvidenceIssuerType.SYSTEM_STATIC_PROOF}),
                 issuer_ids=frozenset({"STATIC_ISSUER"}),
-                content_kinds=frozenset(
-                    {EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY}
-                ),
+                content_kinds=frozenset({EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY}),
             ),
             ref=EvidenceRequirementRef(f"{task_id}:structured-result", "v2"),
             fingerprint_schema=RequirementFingerprintSchema.V2_DURABLE_CONTENT,
@@ -3152,9 +3189,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             checkpoints=checkpoints,
             authority=authority,
         )
-        issuer = TokenEvidenceIssuer(
-            EvidenceIssuerType.SYSTEM_STATIC_PROOF, "STATIC_ISSUER", "v1"
-        )
+        issuer = TokenEvidenceIssuer(EvidenceIssuerType.SYSTEM_STATIC_PROOF, "STATIC_ISSUER", "v1")
         evaluator = EvidenceAdmissionEvaluator(
             EvidenceIssuerRegistry((issuer,)), EvidenceContentRegistry(())
         )
@@ -3228,9 +3263,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 owner_id="durable-owner",
                 owner_version="v1",
                 source_owner_authority_ref=skeleton.issuer.authority_ref,
-                source_owner_authority_fingerprint=(
-                    source_owner_authority_fingerprint(skeleton)
-                ),
+                source_owner_authority_fingerprint=(source_owner_authority_fingerprint(skeleton)),
                 object_id=object_id or f"object-{label}",
                 object_version="v1",
                 value=value,
@@ -3244,12 +3277,12 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
 
         candidate, prepared = durable_candidate(
             "accepted",
-            {"result": "PASS"},
+            {"decision": {"outcome": "accepted"}, "result": "PASS"},
             object_id="bootstrap-bound-object",
         )
         rogue_candidate, rogue_prepared = durable_candidate(
             "rogue",
-            {"result": "PASS"},
+            {"decision": {"outcome": "accepted"}, "result": "PASS"},
             object_id="bootstrap-bound-object",
             writer_authority=rogue_authority,
         )
@@ -3266,9 +3299,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             state_version=3,
         )
         before_rogue = await repository.counts()
-        assert "durable_content_authority" not in inspect.signature(
-            repository.admit
-        ).parameters
+        assert "durable_content_authority" not in inspect.signature(repository.admit).parameters
         with pytest.raises(DurableContentError) as unconfigured_write:
             await PostgresEvidenceRepository(sessions).admit(
                 request=rogue_request,
@@ -3288,12 +3319,8 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             )
         assert rogue_write.value.code is DurableContentErrorCode.ACCESS_DENIED
         after_rogue = await repository.counts()
-        assert after_rogue["durable_content_objects"] == before_rogue[
-            "durable_content_objects"
-        ]
-        assert after_rogue["durable_content_bindings"] == before_rogue[
-            "durable_content_bindings"
-        ]
+        assert after_rogue["durable_content_objects"] == before_rogue["durable_content_objects"]
+        assert after_rogue["durable_content_bindings"] == before_rogue["durable_content_bindings"]
 
         request = admission_request(
             request_id=f"request-durable-{uuid4()}",
@@ -3304,17 +3331,13 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             run_id=run_id,
             state_version=3,
         )
-        decision, admitted = await service.submit_durable(
-            request, candidate, prepared, now=NOW
-        )
+        decision, admitted = await service.submit_durable(request, candidate, prepared, now=NOW)
         assert decision.outcome is EvidenceAdmissionOutcome.ADMITTED
         assert admitted is not None
         admitted_ref = AdmittedEvidenceRef(
             admitted.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
         ).serialized()
-        set_evaluation, terminal_attestation = await EvidenceSetEvaluator(
-            repository
-        ).evaluate(
+        set_evaluation, terminal_attestation = await EvidenceSetEvaluator(repository).evaluate(
             work_run_id=run_id,
             checkpoint_ref=pre.ref,
             source_state=WorkflowState.ADMISSION_PENDING,
@@ -3324,14 +3347,14 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
         assert set_evaluation.outcome is EvidenceSetOutcome.SATISFIED
         assert terminal_attestation is not None
         p1_8_grant = access_authority.issue_p1_8_structured_result_grant()
-        terminal_content = (
-            await repository.verify_historical_admitted_evidence_with_content(
-                admitted_evidence_ref=admitted_ref,
-                exact_terminal_attestation_ref=terminal_attestation.serialized_ref,
-                access_grant=p1_8_grant,
-            )
+        terminal_content = await repository.verify_historical_admitted_evidence_with_content(
+            admitted_evidence_ref=admitted_ref,
+            exact_terminal_attestation_ref=terminal_attestation.serialized_ref,
+            access_grant=p1_8_grant,
         )
-        assert terminal_content.canonical_body_bytes == b'{"result":"PASS"}'
+        assert terminal_content.canonical_body_bytes == (
+            b'{"decision":{"outcome":"accepted"},"result":"PASS"}'
+        )
         async with sessions() as session:
             content_row = await session.get(
                 EvidenceContentObjectRow, prepared.content.serialized_ref
@@ -3343,7 +3366,9 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 EvidenceRequirementRow, durable_requirement.ref.serialized()
             )
             assert content_row is not None and binding_row is not None
-            assert bytes(content_row.canonical_body) == b'{"result":"PASS"}'
+            assert bytes(content_row.canonical_body) == (
+                b'{"decision":{"outcome":"accepted"},"result":"PASS"}'
+            )
             assert requirement_row is not None
             assert requirement_row.fingerprint_schema == (
                 RequirementFingerprintSchema.V2_DURABLE_CONTENT.value
@@ -3374,14 +3399,14 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             sessions,
             historical_content_access_authority=restarted_access_authority,
         )
-        restarted_p1_8_grant = (
-            restarted_access_authority.issue_p1_8_structured_result_grant()
-        )
+        restarted_p1_8_grant = restarted_access_authority.issue_p1_8_structured_result_grant()
         resolved = await restarted_repository.resolve_historical_canonical_body(
             candidate.content_ref,
             access_grant=restarted_p1_8_grant,
         )
-        assert resolved.canonical_body_bytes == b'{"result":"PASS"}'
+        assert resolved.canonical_body_bytes == (
+            b'{"decision":{"outcome":"accepted"},"result":"PASS"}'
+        )
         assert (
             await restarted_repository.resolve_historical_canonical_body(
                 public_candidate.content_ref,
@@ -3404,9 +3429,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             )
         assert foreign_access_denied.value.code is DurableContentErrorCode.ACCESS_DENIED
         assert not hasattr(restarted_p1_8_grant, "prepare_structured")
-        assert not hasattr(
-            restarted_p1_8_grant, "issue_p1_8_structured_result_grant"
-        )
+        assert not hasattr(restarted_p1_8_grant, "issue_p1_8_structured_result_grant")
         assert not hasattr(restarted_p1_8_grant, "public_export_allowed")
         assert (
             await restarted_repository.require_p1_8_structured_source_binding(
@@ -3433,7 +3456,10 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 finally:
                     await transaction.rollback()
 
-        await assert_content_corruption("canonical_body", b'{"result":"FAIL"}')
+        await assert_content_corruption(
+            "canonical_body",
+            b'{"decision":{"outcome":"rejected"},"result":"FAIL"}',
+        )
         await assert_content_corruption("content_hash", "9" * 64)
         await assert_content_corruption("schema_id", "CORRUPTED-SCHEMA")
         await assert_content_corruption("canonicalization", "CORRUPTED-CANONICALIZATION")
@@ -3457,9 +3483,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             transaction = await session.begin()
             try:
                 await session.execute(text("SET LOCAL session_replication_role = replica"))
-                row = await session.get(
-                    EvidenceContentObjectRow, prepared.content.serialized_ref
-                )
+                row = await session.get(EvidenceContentObjectRow, prepared.content.serialized_ref)
                 assert row is not None
                 await session.delete(row)
                 await session.flush()
@@ -3475,7 +3499,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 candidate.content_ref,
                 access_grant=restarted_p1_8_grant,
             )
-        ).canonical_body_bytes == b'{"result":"PASS"}'
+        ).canonical_body_bytes == (b'{"decision":{"outcome":"accepted"},"result":"PASS"}')
 
         replay_candidate, replay_prepared = durable_candidate(
             "replay", {"result": "PASS"}, object_id="shared-object"
@@ -3562,14 +3586,10 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
         )
         assert sum(isinstance(item, DurableContentError) for item in race_results) == 1
         assert sum(isinstance(item, tuple) for item in race_results) == 1
-        race_error = next(
-            item for item in race_results if isinstance(item, DurableContentError)
-        )
+        race_error = next(item for item in race_results if isinstance(item, DurableContentError))
         assert race_error.code is DurableContentErrorCode.IDENTITY_CONFLICT
 
-        missing_candidate, missing_prepared = durable_candidate(
-            "missing", {"result": "MISSING"}
-        )
+        missing_candidate, missing_prepared = durable_candidate("missing", {"result": "MISSING"})
         missing_request = admission_request(
             request_id=f"request-missing-{uuid4()}",
             candidate=missing_candidate,
@@ -3586,9 +3606,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
         assert missing_admitted is None
         async with sessions() as session:
             assert (
-                await session.get(
-                    EvidenceContentObjectRow, missing_prepared.content.serialized_ref
-                )
+                await session.get(EvidenceContentObjectRow, missing_prepared.content.serialized_ref)
                 is None
             )
 
@@ -3615,6 +3633,181 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
             )
         assert secret.value.code is DurableContentErrorCode.SENSITIVITY_DENIED
         assert (await repository.counts())["durable_content_objects"] == before_secret
+
+        # Exact durable source -> accepted P1-4/P1-7 terminal -> P1-8 structured
+        # memory. P1-8 only receives the owner-issued read capability used above.
+        _, cycle_attestation = await EvidenceSetEvaluator(repository).evaluate(
+            work_run_id=run_id,
+            checkpoint_ref=pre.ref,
+            source_state=WorkflowState.ADMISSION_PENDING,
+            state_version=3,
+            now=NOW,
+        )
+        assert cycle_attestation is not None
+        accept_request = transition_request(
+            run_id=run_id,
+            task_id=task_id,
+            source=WorkflowState.ADMISSION_PENDING,
+            version=3,
+            target=WorkflowState.ACCEPTED,
+            evidence_refs=(cycle_attestation.serialized_ref,),
+        )
+        judgment_policies = JudgmentPolicyAuthority(sessions, clock=lambda: NOW)
+        judgment_authority = PostgresJudgmentAuthority(
+            sessions, repository, judgment_policies, clock=lambda: NOW
+        )
+        judgment_policy = await judgment_policies.register(
+            policy_id=f"durable-system-accept-{task_id}",
+            policy_version="v1",
+            task_contract_id=task_id,
+            task_contract_version="v1",
+            source_state=WorkflowState.ADMISSION_PENDING,
+            target_state=WorkflowState.ACCEPTED,
+            owner_policy=JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC,
+            requires_human_result=False,
+            requires_post_human_evidence=True,
+            deterministic_kind=JudgmentKind.ACCEPTED,
+        )
+        judgment = await judgment_authority.issue(
+            judgment_id=f"durable-judgment-{task_id}",
+            judgment_version="v1",
+            request=accept_request,
+            policy=judgment_policy,
+            human_result_ref=None,
+            evidence_attestation_ref=cycle_attestation.serialized_ref,
+            reason_code="DURABLE_STRUCTURED_RESULT_ACCEPTED",
+            reason_vocabulary_version="v1",
+        )
+        accept_request = replace(accept_request, judgment_refs=(judgment.serialized_ref,))
+        evidence_guard = EvidenceGuardAuthority(
+            repository, EvidenceCheckpointUseRegistry(checkpoints)
+        )
+        accepting_kernel = WorkflowKernel(
+            PostgresTransitionRepository(
+                sessions,
+                TransitionEvaluator(
+                    workflow_authorities.system,
+                    (workflow_authorities.human, evidence_guard, judgment_authority),
+                ),
+            )
+        )
+        evidence_fact = await evidence_guard.issue_for_transition(accept_request)
+        facts = [evidence_fact]
+        for guard in TRANSITION_MATRIX[(WorkflowState.ADMISSION_PENDING, WorkflowState.ACCEPTED)]:
+            owner = GUARD_OWNER_POLICY[guard]
+            if owner is GuardSemanticOwner.P1_4_SYSTEM:
+                facts.append(
+                    workflow_authorities.system.issue(
+                        guard_id=guard,
+                        satisfied=True,
+                        reason="TEST_SYSTEM_AUTHORITY",
+                        authority_ref=f"test:{guard.value}",
+                        request=accept_request,
+                    )
+                )
+            elif owner is GuardSemanticOwner.P1_7_HUMAN:
+                facts.append(workflow_authorities.human.issue(guard, accept_request))
+        final_decision = await accepting_kernel.request_transition(
+            accept_request,
+            tuple(facts),
+            transaction_participant=await judgment_authority.participant(
+                accept_request, judgment.serialized_ref
+            ),
+        )
+        assert final_decision.resulting_state is WorkflowState.ACCEPTED
+        transition_fingerprint = canonical_hash(
+            {
+                "admitting_owner": final_decision.admitting_owner,
+                "decided_at": final_decision.decided_at.astimezone(UTC).isoformat(),
+                "kernel_version": final_decision.kernel_version,
+                "outcome": final_decision.outcome.value,
+                "reason": final_decision.reason.value,
+                "resulting_state": final_decision.resulting_state.value,
+                "resulting_state_version": final_decision.resulting_state_version,
+                "transition_decision_id": final_decision.transition_decision_id,
+                "transition_evaluation_id": final_decision.transition_evaluation_id,
+                "transition_request_id": final_decision.transition_request_id,
+            }
+        )
+        memory_policy = default_memory_policy(NOW)
+        content_fingerprint = memory_content_fingerprint(
+            category=MemoryCategory.DECISION,
+            authority_mode=MemoryAuthorityMode.STRUCTURED_RESULT_ATTESTED,
+            policy_ref=memory_policy.serialized_ref,
+            normalized_derived_content={"outcome": "accepted"},
+        )
+        cycle_candidate = CycleCandidate(
+            f"durable-cycle-{task_id}",
+            "v1",
+            "aiscc-project",
+            task_id,
+            "v1",
+            p1_8_task_binding_fingerprint(
+                project_id="aiscc-project",
+                task_contract_id=task_id,
+                task_contract_version="v1",
+            ),
+            run_id,
+            4,
+            accept_request.transition_request_id,
+            final_decision.transition_decision_id,
+            transition_fingerprint,
+            judgment.serialized_ref,
+            judgment.fingerprint,
+            cycle_attestation.serialized_ref,
+            cycle_attestation.admitted_ref_root_hash,
+            (
+                MemoryDeclaration(
+                    MemoryCategory.DECISION,
+                    f"task-contract:{task_id}",
+                    "project:aiscc-project",
+                    "decision/aiscc-proof/terminal-decision",
+                    memory_policy.serialized_ref,
+                    memory_policy.fingerprint,
+                    content_fingerprint,
+                    source_evidence_ref=admitted_ref,
+                    source_selector="/decision",
+                    source_object_kind="P1_6_ADMITTED_STRUCTURED_RESULT",
+                    source_schema_id="AISCC-PROOF",
+                    source_schema_version="v1",
+                ),
+            ),
+            task_constraint.constraint_ref,
+            task_constraint.constraint_fingerprint,
+            task_constraint_snapshot.snapshot_ref,
+            task_constraint_snapshot.snapshot_fingerprint,
+            task_constraint_snapshot.owner_event_high_watermark,
+        )
+        cycle_repository = PostgresCycleAdmissionRepository(
+            sessions,
+            repository,
+            historical_content_access_grant=p1_8_grant,
+            memory_policy=memory_policy,
+            memory_policy_authority=default_memory_policy_authority(),
+            task_authority_verifier=external_task_repository,
+        )
+        await cycle_repository.enroll_memory_policy()
+        cycle_request = CycleAdmissionRequest(
+            f"durable-cycle-request-{task_id}",
+            "v1",
+            cycle_candidate,
+            "aiscc-system",
+            NOW,
+        )
+        admitted_cycle = await cycle_repository.admit(cycle_request)
+        assert admitted_cycle.work_run_id == run_id
+        with pytest.raises(CycleAdmissionError):
+            await cycle_repository.admit(
+                replace(
+                    cycle_request,
+                    request_id=f"nonterminal-cycle-request-{task_id}",
+                    candidate=replace(
+                        cycle_candidate,
+                        cycle_id=f"nonterminal-cycle-{task_id}",
+                        terminal_state_version=3,
+                    ),
+                )
+            )
         await service.invalidate_authority(
             subject_ref=admitted_ref,
             reason="CURRENT_EFFECTIVENESS_REVOKED_FOR_REGRESSION",
@@ -3625,7 +3818,7 @@ def test_p1_6_v2_durable_content_atomic_restart_and_legacy_cut(
                 candidate.content_ref,
                 access_grant=restarted_p1_8_grant,
             )
-        ).canonical_body_bytes == b'{"result":"PASS"}'
+        ).canonical_body_bytes == (b'{"decision":{"outcome":"accepted"},"result":"PASS"}')
         await engine.dispose()
 
     run(scenario())

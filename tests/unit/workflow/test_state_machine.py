@@ -19,10 +19,16 @@ from aiscc.workflow.guards import (
 from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TERMINAL_STATES, TRANSITION_MATRIX, required_judgment_guard
 from aiscc.workflow.models import (
+    BLOCKER_TAXONOMY_V1,
+    BlockerKindV1,
+    BlockerReasonCodeV1,
+    BlockerResumabilityV1,
     DecisionOutcome,
     DecisionReason,
     GuardId,
     GuardSemanticOwner,
+    P1_4BlockerClaimV1,
+    P1_4BlockerResolutionClaimV1,
     RequesterType,
     TransitionRequest,
     WorkRun,
@@ -521,3 +527,67 @@ def test_absent_future_owner_verifier_fails_closed() -> None:
     assert decision.reason is DecisionReason.MISSING_GUARD
     assert GuardId.G_EVIDENCE in evaluation.missing_guards
     assert GuardId.G_JUDGMENT_ACCEPTED in evaluation.missing_guards
+
+
+def test_exact_seven_blocker_pairs_and_resumability() -> None:
+    assert len(BLOCKER_TAXONOMY_V1) == 7
+    assert (
+        BLOCKER_TAXONOMY_V1[(BlockerKindV1.SECURITY, BlockerReasonCodeV1.SECURITY_BOUNDARY)]
+        is BlockerResumabilityV1.NON_RESUMABLE
+    )
+    assert all(
+        resumability is BlockerResumabilityV1.RESUMABLE
+        for pair, resumability in BLOCKER_TAXONOMY_V1.items()
+        if pair != (BlockerKindV1.SECURITY, BlockerReasonCodeV1.SECURITY_BOUNDARY)
+    )
+    with pytest.raises(ValueError, match="outside P1_4_BLOCKER_TAXONOMY_V1"):
+        P1_4BlockerClaimV1(
+            "blocker-invalid",
+            BlockerKindV1.SECURITY,
+            BlockerReasonCodeV1.EXECUTION_BLOCKER,
+            "resolution-contract:v1:test",
+            "a" * 64,
+            ("source-authority:v1:test",),
+            ("b" * 64,),
+        )
+
+
+def test_blocker_guards_bind_typed_claim_refs_only() -> None:
+    blocker = P1_4BlockerClaimV1(
+        "blocker-1",
+        BlockerKindV1.EXECUTION,
+        BlockerReasonCodeV1.EXECUTION_BLOCKER,
+        "resolution-contract:v1:test",
+        "a" * 64,
+        ("source-authority:v1:test",),
+        ("b" * 64,),
+    )
+    blocked_request = replace(
+        request(
+            source=WorkflowState.RUNNING,
+            version=2,
+            target=WorkflowState.BLOCKED,
+        ),
+        blocker_claim=blocker,
+    )
+    assert required_bound_refs(GuardId.G_BLOCKER, blocked_request) == (blocker.blocker_ref,)
+    resolution = P1_4BlockerResolutionClaimV1(
+        blocker.blocker_ref,
+        "c" * 64,
+        "resolution-source:v1:source-1",
+        "d" * 64,
+        "resolution-authority:v1:test",
+        "e" * 64,
+    )
+    resolved_request = replace(
+        request(
+            source=WorkflowState.BLOCKED,
+            version=3,
+            target=WorkflowState.READY,
+        ),
+        blocker_resolution_claim=resolution,
+    )
+    assert required_bound_refs(GuardId.G_BLOCKER_RESOLVED, resolved_request) == (
+        blocker.blocker_ref,
+        resolution.resolution_source_ref,
+    )

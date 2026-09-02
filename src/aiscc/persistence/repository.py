@@ -11,6 +11,7 @@ from sqlalchemy import Select, func, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from aiscc.contracts.canonical_json import canonical_sha256
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot, WorkflowState
 from aiscc.persistence.models import (
     ExecutionAttemptRow,
@@ -18,6 +19,9 @@ from aiscc.persistence.models import (
     ExecutionOperationRow,
     ExecutionOutputRefRow,
     OperationEventRow,
+    P1_4BlockerProjectionRow,
+    P1_4BlockerProvenanceRow,
+    P1_4BlockerResolvedAttestationRow,
     PrivateProviderProtocolStateRow,
     TransitionDecisionRow,
     TransitionEvaluationRow,
@@ -40,12 +44,20 @@ from aiscc.workflow.evaluator import ADMITTING_OWNER, KERNEL_VERSION, Transition
 from aiscc.workflow.guards import GUARD_OWNER_POLICY, TrustedGuardFact, required_bound_refs
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
+    P1_4_BLOCKER_AUTHORITY_REF,
+    P1_4_BLOCKER_AUTHORITY_VERSION,
+    P1_4_BLOCKER_OWNER,
     AuthorityConflictError,
+    BlockerKindV1,
+    BlockerReasonCodeV1,
+    BlockerResumabilityV1,
     DecisionOutcome,
     DecisionReason,
     GuardId,
     GuardObservation,
     GuardSemanticOwner,
+    P1_4BlockerClaimV1,
+    P1_4BlockerResolutionClaimV1,
     RequesterType,
     RequestIdentityConflictError,
     TransitionDecision,
@@ -56,6 +68,7 @@ from aiscc.workflow.models import (
 from aiscc.workflow.ports import (
     FailureInjector,
     FailurePoint,
+    P1_4BlockerSourceVerifier,
     TransitionTransactionParticipant,
 )
 
@@ -85,6 +98,7 @@ class PostgresExecutionRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self._evaluator: TransitionEvaluator | None = None
+        self._blocker_source_verifier: P1_4BlockerSourceVerifier | None = None
 
     async def create_attempt(
         self,
@@ -1315,6 +1329,7 @@ class PostgresExecutionRepository:
                 current_row,
                 incoming_request=request,
             )
+            blocker_row = await self._prepare_builtin_blocker_authority(session, request, current)
             if transaction_participant is not None:
                 await transaction_participant.prepare(session, request, current)
             try:
@@ -1332,6 +1347,15 @@ class PostgresExecutionRepository:
             await session.flush()
             session.add(_decision_row(decision))
             await session.flush()
+            await self._append_builtin_blocker_authority(
+                session,
+                request=request,
+                request_fingerprint=fingerprint,
+                evaluation=evaluation,
+                decision=decision,
+                current=current,
+                active_blocker=blocker_row,
+            )
             if transaction_participant is not None:
                 await transaction_participant.after_decision(
                     session, request, evaluation, decision, current
@@ -1375,6 +1399,209 @@ class PostgresExecutionRepository:
                 await session.flush()
                 _inject(failure_injector, FailurePoint.AFTER_PROJECTION_BEFORE_COMMIT)
             return decision
+
+    async def _prepare_builtin_blocker_authority(
+        self,
+        session: AsyncSession,
+        request: TransitionRequest,
+        current: WorkRun | None,
+    ) -> P1_4BlockerProvenanceRow | None:
+        """Validate the mandatory P1-4 blocker participant inside the run transaction."""
+        entering_blocked = request.target_state is WorkflowState.BLOCKED
+        resolving = request.observed_state is WorkflowState.BLOCKED and request.target_state in {
+            WorkflowState.READY,
+            WorkflowState.HUMAN_REQUIRED,
+            WorkflowState.REWORK_REQUIRED,
+        }
+        terminal_failure = (
+            request.observed_state is WorkflowState.BLOCKED
+            and request.target_state is WorkflowState.FAILED
+        )
+        if not (entering_blocked or resolving or terminal_failure):
+            if request.blocker_claim is not None or request.blocker_resolution_claim is not None:
+                raise AuthorityConflictError(
+                    "blocker claims are forbidden for a non-blocker transition"
+                )
+            return None
+        if current is None or current.state is not request.observed_state:
+            # The evaluator owns stale/invalid denial. No positive blocker object can be made.
+            return None
+
+        projection = await session.scalar(
+            select(P1_4BlockerProjectionRow)
+            .where(P1_4BlockerProjectionRow.work_run_id == request.work_run_id)
+            .with_for_update()
+        )
+        if entering_blocked:
+            if request.blocker_claim is None or request.blocker_resolution_claim is not None:
+                raise AuthorityConflictError(
+                    "admission into BLOCKED requires one typed P1_4BlockerClaimV1"
+                )
+            if projection is not None and projection.state == "ACTIVE":
+                raise AuthorityConflictError("the WorkRun already has an ACTIVE blocker")
+            return None
+
+        if request.blocker_claim is not None:
+            raise AuthorityConflictError("a BLOCKED source transition cannot create a blocker")
+        if projection is None or projection.state != "ACTIVE" or projection.blocker_ref is None:
+            raise AuthorityConflictError("BLOCKED transition has no ACTIVE blocker projection")
+        active = await session.scalar(
+            select(P1_4BlockerProvenanceRow)
+            .where(P1_4BlockerProvenanceRow.blocker_ref == projection.blocker_ref)
+            .with_for_update()
+        )
+        if active is None or active.blocked_epoch != request.observed_state_version:
+            raise AuthorityConflictError("ACTIVE blocker epoch/provenance binding differs")
+
+        if terminal_failure:
+            if request.blocker_resolution_claim is not None:
+                raise AuthorityConflictError(
+                    "non-resumable terminal failure cannot carry a resolution claim"
+                )
+            if (
+                active.reason_code != BlockerReasonCodeV1.SECURITY_BOUNDARY.value
+                or active.resumability != BlockerResumabilityV1.NON_RESUMABLE.value
+            ):
+                raise AuthorityConflictError("BLOCKED -> FAILED is reserved for SECURITY_BOUNDARY")
+            return active
+
+        claim = request.blocker_resolution_claim
+        if claim is None:
+            raise AuthorityConflictError(
+                "resumable BLOCKED transition requires P1_4BlockerResolutionClaimV1"
+            )
+        if (
+            active.resumability != BlockerResumabilityV1.RESUMABLE.value
+            or claim.blocker_ref != active.blocker_ref
+            or claim.blocker_fingerprint != active.blocker_fingerprint
+        ):
+            raise AuthorityConflictError("resolution claim does not bind the ACTIVE blocker")
+        active_payload = active.payload
+        contract_ref = active_payload.get("resolution_source_contract_ref")
+        contract_fingerprint = active_payload.get("resolution_source_contract_fingerprint")
+        if not isinstance(contract_ref, str) or not isinstance(contract_fingerprint, str):
+            raise AuthorityConflictError("ACTIVE blocker source enrollment is corrupt")
+        if (
+            self._blocker_source_verifier is None
+            or not await self._blocker_source_verifier.verify_resolution_source(
+                session,
+                resolution_source_contract_ref=contract_ref,
+                resolution_source_contract_fingerprint=contract_fingerprint,
+                claim=claim,
+                request=request,
+            )
+        ):
+            raise AuthorityConflictError("blocker resolution source is not owner-verified")
+        return active
+
+    async def _append_builtin_blocker_authority(
+        self,
+        session: AsyncSession,
+        *,
+        request: TransitionRequest,
+        request_fingerprint: str,
+        evaluation: TransitionEvaluation,
+        decision: TransitionDecision,
+        current: WorkRun | None,
+        active_blocker: P1_4BlockerProvenanceRow | None,
+    ) -> None:
+        if decision.outcome is not DecisionOutcome.ADMITTED:
+            return
+        decision_row = await session.get(TransitionDecisionRow, decision.transition_decision_id)
+        if decision_row is None:
+            raise AuthorityConflictError("new transition decision row is unavailable")
+        owner_sequence = decision_row.event_sequence
+        if request.target_state is WorkflowState.BLOCKED:
+            claim = request.blocker_claim
+            if claim is None or current is None:
+                raise AuthorityConflictError("admitted BLOCKED decision lacks typed blocker input")
+            blocked_epoch = decision.resulting_state_version
+            payload = _blocker_provenance_payload(
+                claim=claim,
+                request=request,
+                request_fingerprint=request_fingerprint,
+                evaluation=evaluation,
+                decision=decision,
+                owner_sequence=owner_sequence,
+            )
+            fingerprint = canonical_sha256(payload)
+            session.add(
+                P1_4BlockerProvenanceRow(
+                    blocker_ref=claim.blocker_ref,
+                    blocker_fingerprint=fingerprint,
+                    work_run_id=request.work_run_id,
+                    blocked_epoch=blocked_epoch,
+                    blocker_kind=claim.blocker_kind.value,
+                    reason_code=claim.reason_code.value,
+                    resumability=claim.resumability.value,
+                    transition_request_id=request.transition_request_id,
+                    transition_decision_id=decision.transition_decision_id,
+                    payload={**payload, "blocker_fingerprint": fingerprint},
+                    issued_at=decision.decided_at,
+                )
+            )
+            projection = await session.get(P1_4BlockerProjectionRow, request.work_run_id)
+            if projection is None:
+                session.add(
+                    P1_4BlockerProjectionRow(
+                        work_run_id=request.work_run_id,
+                        blocker_ref=claim.blocker_ref,
+                        state="ACTIVE",
+                        blocked_epoch=blocked_epoch,
+                        authority_revision=1,
+                        updated_at=decision.decided_at,
+                    )
+                )
+            else:
+                projection.blocker_ref = claim.blocker_ref
+                projection.state = "ACTIVE"
+                projection.blocked_epoch = blocked_epoch
+                projection.authority_revision += 1
+                projection.updated_at = decision.decided_at
+            await session.flush()
+            return
+
+        if request.observed_state is not WorkflowState.BLOCKED or active_blocker is None:
+            return
+        projection = await session.get(P1_4BlockerProjectionRow, request.work_run_id)
+        if projection is None:
+            raise AuthorityConflictError("ACTIVE blocker projection disappeared")
+        if request.target_state is WorkflowState.FAILED:
+            projection.state = "TERMINAL_FAILED"
+            projection.authority_revision += 1
+            projection.updated_at = decision.decided_at
+            await session.flush()
+            return
+
+        resolution_claim = request.blocker_resolution_claim
+        if resolution_claim is None:
+            raise AuthorityConflictError("admitted blocker resolution lacks typed source")
+        payload = _blocker_resolved_payload(
+            active_blocker=active_blocker,
+            claim=resolution_claim,
+            request=request,
+            request_fingerprint=request_fingerprint,
+            evaluation=evaluation,
+            decision=decision,
+            owner_sequence=owner_sequence,
+        )
+        fingerprint = canonical_sha256(payload)
+        attestation_ref = str(payload["attestation_ref"])
+        session.add(
+            P1_4BlockerResolvedAttestationRow(
+                attestation_ref=attestation_ref,
+                attestation_fingerprint=fingerprint,
+                blocker_ref=active_blocker.blocker_ref,
+                transition_request_id=request.transition_request_id,
+                transition_decision_id=decision.transition_decision_id,
+                payload={**payload, "attestation_fingerprint": fingerprint},
+                issued_at=decision.decided_at,
+            )
+        )
+        projection.state = "RESOLVED"
+        projection.authority_revision += 1
+        projection.updated_at = decision.decided_at
+        await session.flush()
 
     async def get_work_run(self, work_run_id: str) -> WorkRun | None:
         async with self._session_factory() as session:
@@ -1538,9 +1765,11 @@ class PostgresTransitionRepository(PostgresExecutionRepository):
         self,
         session_factory: async_sessionmaker[AsyncSession],
         evaluator: TransitionEvaluator,
+        blocker_source_verifier: P1_4BlockerSourceVerifier | None = None,
     ) -> None:
         super().__init__(session_factory)
         self._evaluator = evaluator
+        self._blocker_source_verifier = blocker_source_verifier
 
 
 def _verify_historical_transition_step_from_rows(
@@ -1716,6 +1945,10 @@ def _transition_request_from_row(row: TransitionRequestRow) -> TransitionRequest
         evidence_refs=tuple(row.evidence_refs),
         human_result_refs=tuple(row.human_result_refs),
         judgment_refs=tuple(row.judgment_refs),
+        blocker_claim=_blocker_claim_from_payload(row.blocker_claim),
+        blocker_resolution_claim=_blocker_resolution_claim_from_payload(
+            row.blocker_resolution_claim
+        ),
         parent_request_id=row.parent_request_id,
         created_at=_aware(row.created_at),
     )
@@ -2205,6 +2438,214 @@ def _inject(injector: FailureInjector | None, point: FailurePoint) -> None:
         injector(point)
 
 
+def _transition_evaluation_fingerprint(evaluation: TransitionEvaluation) -> str:
+    return canonical_sha256(
+        {
+            "transition_evaluation_id": evaluation.transition_evaluation_id,
+            "transition_request_id": evaluation.transition_request_id,
+            "authoritative_state": (
+                evaluation.authoritative_state.value
+                if evaluation.authoritative_state is not None
+                else None
+            ),
+            "authoritative_state_version": evaluation.authoritative_state_version,
+            "guards": [
+                {
+                    "guard_id": guard.guard_id.value,
+                    "semantic_owner": guard.semantic_owner.value,
+                    "satisfied": guard.satisfied,
+                    "reason": guard.reason,
+                    "authority_ref": guard.authority_ref,
+                    "bound_refs": list(guard.bound_refs),
+                }
+                for guard in evaluation.guards
+            ],
+            "missing_guards": [guard.value for guard in evaluation.missing_guards],
+            "evaluated_at": evaluation.evaluated_at.astimezone(UTC).isoformat(),
+        }
+    )
+
+
+def _transition_decision_fingerprint(decision: TransitionDecision) -> str:
+    return canonical_sha256(
+        {
+            "admitting_owner": decision.admitting_owner,
+            "decided_at": decision.decided_at.astimezone(UTC).isoformat(),
+            "kernel_version": decision.kernel_version,
+            "outcome": decision.outcome.value,
+            "reason": decision.reason.value,
+            "resulting_state": (
+                decision.resulting_state.value if decision.resulting_state is not None else None
+            ),
+            "resulting_state_version": decision.resulting_state_version,
+            "transition_decision_id": decision.transition_decision_id,
+            "transition_evaluation_id": decision.transition_evaluation_id,
+            "transition_request_id": decision.transition_request_id,
+        }
+    )
+
+
+def _blocker_provenance_payload(
+    *,
+    claim: P1_4BlockerClaimV1,
+    request: TransitionRequest,
+    request_fingerprint: str,
+    evaluation: TransitionEvaluation,
+    decision: TransitionDecision,
+    owner_sequence: int,
+) -> dict[str, object]:
+    return {
+        "blocker_id": claim.blocker_id,
+        "blocker_ref": claim.blocker_ref,
+        "blocker_version": "v1",
+        "fingerprint_schema": "p1-4-blocker-provenance-v1",
+        "blocker_owner": P1_4_BLOCKER_OWNER,
+        "authority_ref": P1_4_BLOCKER_AUTHORITY_REF,
+        "authority_version": P1_4_BLOCKER_AUTHORITY_VERSION,
+        "authority_revision": 1,
+        "blocker_kind": claim.blocker_kind.value,
+        "reason_code": claim.reason_code.value,
+        "resumability": claim.resumability.value,
+        "project_id": request.project_id,
+        "task_contract_id": request.task_contract_id,
+        "task_contract_version": request.task_contract_version,
+        "work_run_id": request.work_run_id,
+        "blocked_epoch": decision.resulting_state_version,
+        "created_source_state": (
+            request.observed_state.value if request.observed_state is not None else None
+        ),
+        "created_source_state_version": request.observed_state_version,
+        "blocking_transition_request_ref": request.transition_request_id,
+        "blocking_transition_request_fingerprint": request_fingerprint,
+        "blocking_transition_evaluation_ref": evaluation.transition_evaluation_id,
+        "blocking_transition_evaluation_fingerprint": _transition_evaluation_fingerprint(
+            evaluation
+        ),
+        "blocking_transition_decision_ref": decision.transition_decision_id,
+        "blocking_transition_decision_fingerprint": _transition_decision_fingerprint(decision),
+        "resulting_state": "BLOCKED",
+        "resulting_state_version": decision.resulting_state_version,
+        "resolution_source_contract_ref": claim.resolution_source_contract_ref,
+        "resolution_source_contract_fingerprint": (claim.resolution_source_contract_fingerprint),
+        "ordered_source_authority_refs": list(claim.ordered_source_authority_refs),
+        "ordered_source_authority_fingerprints": list(claim.ordered_source_authority_fingerprints),
+        "issuance_sequence": owner_sequence,
+        "issued_at": decision.decided_at.astimezone(UTC).isoformat(),
+    }
+
+
+def _blocker_resolved_payload(
+    *,
+    active_blocker: P1_4BlockerProvenanceRow,
+    claim: P1_4BlockerResolutionClaimV1,
+    request: TransitionRequest,
+    request_fingerprint: str,
+    evaluation: TransitionEvaluation,
+    decision: TransitionDecision,
+    owner_sequence: int,
+) -> dict[str, object]:
+    active_payload = active_blocker.payload
+    contract_ref = active_payload["resolution_source_contract_ref"]
+    contract_fingerprint = active_payload["resolution_source_contract_fingerprint"]
+    return {
+        "attestation_id": f"blocker-resolved-{request.transition_request_id}",
+        "attestation_ref": f"p1-4-blocker-resolved:v1:{request.transition_request_id}",
+        "attestation_version": "v1",
+        "fingerprint_schema": "p1-4-blocker-resolved-attestation-v1",
+        "owner": P1_4_BLOCKER_OWNER,
+        "authority_ref": P1_4_BLOCKER_AUTHORITY_REF,
+        "authority_version": P1_4_BLOCKER_AUTHORITY_VERSION,
+        "authority_revision": 1,
+        "guard_id": GuardId.G_BLOCKER_RESOLVED.value,
+        "blocker_ref": active_blocker.blocker_ref,
+        "blocker_fingerprint": active_blocker.blocker_fingerprint,
+        "reason_code": active_blocker.reason_code,
+        "resolution_source_contract_ref": contract_ref,
+        "resolution_source_contract_fingerprint": contract_fingerprint,
+        "resolution_source_ref": claim.resolution_source_ref,
+        "resolution_source_fingerprint": claim.resolution_source_fingerprint,
+        "resolution_source_authority_ref": claim.resolution_source_authority_ref,
+        "resolution_source_authority_fingerprint": (claim.resolution_source_authority_fingerprint),
+        "project_id": request.project_id,
+        "task_contract_id": request.task_contract_id,
+        "task_contract_version": request.task_contract_version,
+        "work_run_id": request.work_run_id,
+        "blocked_epoch": active_blocker.blocked_epoch,
+        "source_state": "BLOCKED",
+        "source_state_version": request.observed_state_version,
+        "target_state": request.target_state.value,
+        "transition_request_ref": request.transition_request_id,
+        "transition_request_fingerprint": request_fingerprint,
+        "transition_evaluation_ref": evaluation.transition_evaluation_id,
+        "transition_evaluation_fingerprint": _transition_evaluation_fingerprint(evaluation),
+        "transition_decision_ref": decision.transition_decision_id,
+        "transition_decision_fingerprint": _transition_decision_fingerprint(decision),
+        "decision_outcome": "ADMITTED",
+        "resulting_state": request.target_state.value,
+        "resulting_state_version": decision.resulting_state_version,
+        "owner_event_sequence": owner_sequence,
+        "issued_at": decision.decided_at.astimezone(UTC).isoformat(),
+    }
+
+
+def _blocker_claim_from_payload(
+    value: dict[str, object] | None,
+) -> P1_4BlockerClaimV1 | None:
+    if value is None:
+        return None
+    exact = {
+        "blocker_id",
+        "blocker_kind",
+        "reason_code",
+        "resolution_source_contract_ref",
+        "resolution_source_contract_fingerprint",
+        "ordered_source_authority_refs",
+        "ordered_source_authority_fingerprints",
+    }
+    if set(value) != exact:
+        raise HistoricalTransitionProvenanceError("blocker claim shape differs")
+    refs = value["ordered_source_authority_refs"]
+    fingerprints = value["ordered_source_authority_fingerprints"]
+    if not isinstance(refs, list) or not isinstance(fingerprints, list):
+        raise HistoricalTransitionProvenanceError("blocker source enrollment differs")
+    return P1_4BlockerClaimV1(
+        blocker_id=str(value["blocker_id"]),
+        blocker_kind=BlockerKindV1(str(value["blocker_kind"])),
+        reason_code=BlockerReasonCodeV1(str(value["reason_code"])),
+        resolution_source_contract_ref=str(value["resolution_source_contract_ref"]),
+        resolution_source_contract_fingerprint=str(value["resolution_source_contract_fingerprint"]),
+        ordered_source_authority_refs=tuple(str(item) for item in refs),
+        ordered_source_authority_fingerprints=tuple(str(item) for item in fingerprints),
+    )
+
+
+def _blocker_resolution_claim_from_payload(
+    value: dict[str, object] | None,
+) -> P1_4BlockerResolutionClaimV1 | None:
+    if value is None:
+        return None
+    exact = {
+        "blocker_ref",
+        "blocker_fingerprint",
+        "resolution_source_ref",
+        "resolution_source_fingerprint",
+        "resolution_source_authority_ref",
+        "resolution_source_authority_fingerprint",
+    }
+    if set(value) != exact:
+        raise HistoricalTransitionProvenanceError("blocker resolution claim shape differs")
+    return P1_4BlockerResolutionClaimV1(
+        blocker_ref=str(value["blocker_ref"]),
+        blocker_fingerprint=str(value["blocker_fingerprint"]),
+        resolution_source_ref=str(value["resolution_source_ref"]),
+        resolution_source_fingerprint=str(value["resolution_source_fingerprint"]),
+        resolution_source_authority_ref=str(value["resolution_source_authority_ref"]),
+        resolution_source_authority_fingerprint=str(
+            value["resolution_source_authority_fingerprint"]
+        ),
+    )
+
+
 def _request_fingerprint(request: TransitionRequest, facts: Sequence[TrustedGuardFact]) -> str:
     payload = {
         "request": {
@@ -2222,6 +2663,14 @@ def _request_fingerprint(request: TransitionRequest, facts: Sequence[TrustedGuar
             "evidence_refs": list(request.evidence_refs),
             "human_result_refs": list(request.human_result_refs),
             "judgment_refs": list(request.judgment_refs),
+            "blocker_claim": (
+                request.blocker_claim.payload() if request.blocker_claim is not None else None
+            ),
+            "blocker_resolution_claim": (
+                request.blocker_resolution_claim.payload()
+                if request.blocker_resolution_claim is not None
+                else None
+            ),
             "parent_request_id": request.parent_request_id,
             "created_at": request.created_at.isoformat(),
         },
@@ -2262,6 +2711,14 @@ def _request_row(request: TransitionRequest, fingerprint: str) -> TransitionRequ
         evidence_refs=list(request.evidence_refs),
         human_result_refs=list(request.human_result_refs),
         judgment_refs=list(request.judgment_refs),
+        blocker_claim=(
+            request.blocker_claim.payload() if request.blocker_claim is not None else None
+        ),
+        blocker_resolution_claim=(
+            request.blocker_resolution_claim.payload()
+            if request.blocker_resolution_claim is not None
+            else None
+        ),
         parent_request_id=request.parent_request_id,
         created_at=request.created_at,
     )

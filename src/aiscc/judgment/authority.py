@@ -1255,8 +1255,7 @@ async def _verify_judgment_base_issuance_provenance_in_session(
             or evidence.source_state is not value.source_state
             or evidence.state_version != value.state_version
             or evidence.target_state is not value.target_state
-            or evidence.evidence_authority_revision
-            != value.evidence_authority_revision
+            or evidence.evidence_authority_revision != value.evidence_authority_revision
             or evidence.admitted_ref_root_hash != value.evidence_root
         ):
             raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
@@ -1412,6 +1411,18 @@ async def _verify_judgment_historical_provenance_in_session(
     if start[0].serialized_ref not in forward_seen:
         raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
     return start[0]
+
+
+async def verify_historical_judgment_provenance(
+    session: AsyncSession, serialized_ref: str
+) -> Judgment:
+    """Projection-independent P1-7 read boundary for dependent authorities."""
+    row = await session.scalar(
+        select(JudgmentRow).where(JudgmentRow.serialized_ref == serialized_ref)
+    )
+    if row is None:
+        raise JudgmentAuthorityError("PROVENANCE_INCOMPLETE")
+    return await _verify_judgment_historical_provenance_in_session(session, row)
 
 
 def _verify_judgment_correction_edge(

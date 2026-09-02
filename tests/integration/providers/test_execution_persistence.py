@@ -32,6 +32,8 @@ from aiscc.persistence.models import (
     ExecutionEventRow,
     ExecutionOperationRow,
     OperationEventRow,
+    P1_4BlockerProjectionRow,
+    P1_4BlockerProvenanceRow,
     PrivateProviderProtocolStateRow,
     WorkRunRow,
 )
@@ -71,8 +73,11 @@ from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
     AuthorityConflictError,
+    BlockerKindV1,
+    BlockerReasonCodeV1,
     DecisionOutcome,
     GuardId,
+    P1_4BlockerClaimV1,
     RequesterType,
     TransitionRequest,
 )
@@ -1671,6 +1676,8 @@ def test_provider_returned_tool_is_denied_when_accepted_transition_leaves_runnin
             source: WorkflowState | None,
             version: int,
             target: WorkflowState,
+            *,
+            blocker_claim: P1_4BlockerClaimV1 | None = None,
         ) -> TransitionRequest:
             return TransitionRequest(
                 transition_request_id=f"workflow-left-{target.value}-{uuid4().hex}",
@@ -1684,6 +1691,7 @@ def test_provider_returned_tool_is_denied_when_accepted_transition_leaves_runnin
                 requester_identity="aiscc-system",
                 requester_type=RequesterType.SYSTEM,
                 runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD,
+                blocker_claim=blocker_claim,
             )
 
         def facts(
@@ -1749,6 +1757,37 @@ def test_provider_returned_tool_is_denied_when_accepted_transition_leaves_runnin
             await kernel.request_transition(start, tuple(start_facts))
         ).outcome is DecisionOutcome.ADMITTED
         await repository.transition_attempt(attempt_id, "EXECUTION_STARTED")
+        assert execution_refs.verify(start_ref, start, GuardId.G_EXECUTION_STARTED)
+
+        denial_class = "WORKFLOW_LEFT_RUNNING"
+        denial_reason = "WORKFLOW_LEFT_RUNNING_AFTER_PROVIDER_DISPATCH"
+        blocker_source_contract_ref = (
+            "p1-5-execution-source-contract:v1:workflow-currentness-denial"
+        )
+        blocker_source_contract_fingerprint = canonical_sha256(
+            {
+                "blocker_kind": BlockerKindV1.EXECUTION.value,
+                "denial_class": denial_class,
+                "denial_reason": denial_reason,
+                "reason_code": BlockerReasonCodeV1.EXECUTION_BLOCKER.value,
+                "source_authority": execution_refs.issuer_ref,
+                "verification": "ExecutionReferenceAuthority.verify",
+            }
+        )
+        blocker_source_ref = f"p1-5-execution-start-ref:v1:{attempt_id}"
+        blocker_source_fingerprint = canonical_sha256(
+            {
+                "execution_attempt_id": start_ref.execution_attempt_id,
+                "execution_version": start_ref.execution_version,
+                "issuer_ref": start_ref.issuer_ref,
+                "state": start_ref.state.value,
+                "state_version": start_ref.state_version,
+                "status": start_ref.status.value,
+                "task_contract_id": start_ref.task_contract_id,
+                "task_contract_version": start_ref.task_contract_version,
+                "work_run_id": start_ref.work_run_id,
+            }
+        )
 
         profile = load_provider_profile(
             Path("config/providers/provider-profiles.v1.toml"),
@@ -1806,7 +1845,24 @@ def test_provider_returned_tool_is_denied_when_accepted_transition_leaves_runnin
                         TransitionEvaluator(callback_authority),
                     )
                 )
-                blocked = request(WorkflowState.RUNNING, 2, WorkflowState.BLOCKED)
+                blocked = request(
+                    WorkflowState.RUNNING,
+                    2,
+                    WorkflowState.BLOCKED,
+                    blocker_claim=P1_4BlockerClaimV1(
+                        blocker_id=f"workflow-left-running-{attempt_id}",
+                        blocker_kind=BlockerKindV1.EXECUTION,
+                        reason_code=BlockerReasonCodeV1.EXECUTION_BLOCKER,
+                        resolution_source_contract_ref=blocker_source_contract_ref,
+                        resolution_source_contract_fingerprint=(
+                            blocker_source_contract_fingerprint
+                        ),
+                        ordered_source_authority_refs=(blocker_source_ref,),
+                        ordered_source_authority_fingerprints=(
+                            blocker_source_fingerprint,
+                        ),
+                    ),
+                )
                 decision = await callback_kernel.request_transition(
                     blocked,
                     tuple(facts(callback_authority, blocked)),
@@ -1889,9 +1945,39 @@ def test_provider_returned_tool_is_denied_when_accepted_transition_leaves_runnin
             )
             assert work_run is not None
             assert (work_run.workflow_state, work_run.state_version) == ("BLOCKED", 3)
+            blocker = await session.scalar(
+                select(P1_4BlockerProvenanceRow).where(
+                    P1_4BlockerProvenanceRow.work_run_id == run_id,
+                    P1_4BlockerProvenanceRow.blocked_epoch == 3,
+                )
+            )
+            blocker_projection = await session.get(P1_4BlockerProjectionRow, run_id)
+            assert blocker is not None
+            assert (
+                blocker.blocker_kind,
+                blocker.reason_code,
+                blocker.resumability,
+            ) == ("EXECUTION", "EXECUTION_BLOCKER", "RESUMABLE")
+            assert blocker.payload["resolution_source_contract_ref"] == (
+                blocker_source_contract_ref
+            )
+            assert blocker.payload["resolution_source_contract_fingerprint"] == (
+                blocker_source_contract_fingerprint
+            )
+            assert blocker.payload["ordered_source_authority_refs"] == [blocker_source_ref]
+            assert blocker.payload["ordered_source_authority_fingerprints"] == [
+                blocker_source_fingerprint
+            ]
+            assert blocker_projection is not None
+            assert (
+                blocker_projection.blocker_ref,
+                blocker_projection.state,
+                blocker_projection.blocked_epoch,
+            ) == (blocker.blocker_ref, "ACTIVE", 3)
             assert attempt is not None and attempt.status == "EXECUTION_FAILED"
             assert failure is not None
-            assert failure.refs["failure_class"] == "WORKFLOW_LEFT_RUNNING"
+            assert failure.refs["failure_class"] == denial_class
+            assert failure.refs["reason"] == denial_reason
             assert tool_operations == 0
 
     try:

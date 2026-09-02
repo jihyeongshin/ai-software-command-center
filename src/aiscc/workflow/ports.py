@@ -8,11 +8,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from aiscc.workflow.guards import TrustedGuardFact
 from aiscc.workflow.models import (
+    P1_4BlockerResolutionClaimV1,
     TransitionDecision,
     TransitionEvaluation,
     TransitionRequest,
     WorkRun,
 )
+
+
+class P1_4BlockerSourceVerifier(Protocol):
+    """Verifier enrolled by P1-4; the caller cannot assert source authenticity."""
+
+    async def verify_resolution_source(
+        self,
+        session: AsyncSession,
+        *,
+        resolution_source_contract_ref: str,
+        resolution_source_contract_fingerprint: str,
+        claim: P1_4BlockerResolutionClaimV1,
+        request: TransitionRequest,
+    ) -> bool: ...
 
 
 class FailurePoint(StrEnum):
