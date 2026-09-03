@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
@@ -14,7 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from aiscc.api.routes import command_center, control, health
+from aiscc.api.routes import command_center, command_center_ui, control, health
+from aiscc.command_center import web
 from aiscc.command_center.postgres_queries import PostgresCommandCenterQueries
 from aiscc.command_center.queries import CommandCenterQueries, UnavailableCommandCenterQueries
 from aiscc.command_center.read_models import ErrorCode
@@ -50,6 +51,21 @@ def create_app(command_center_queries: CommandCenterQueries | None = None) -> Fa
     application.include_router(health.router)
     application.include_router(control.router)
     application.include_router(command_center.router)
+    application.include_router(command_center_ui.router)
+
+    @application.middleware("http")
+    async def command_center_ui_security_boundary(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        response = await call_next(request)
+        if request.url.path == "/command-center" or request.url.path.startswith(
+            "/command-center/"
+        ):
+            is_html = not request.url.path.startswith("/command-center/assets/")
+            for name, value in web.security_headers(html=is_html).items():
+                response.headers[name] = value
+        return response
 
     @application.exception_handler(RequestValidationError)
     async def command_center_validation_error(
