@@ -17,6 +17,8 @@ from test_postgres_read_api import (
 from aiscc.api.app import create_app
 from aiscc.command_center.queries import CommandCenterQueries, QueryResult, QueueFilters
 from aiscc.command_center.read_models import (
+    BlockerView,
+    ExecutionData,
     ExecutionSummaryView,
     HumanGateSummaryView,
     HumanResultSummaryView,
@@ -25,10 +27,14 @@ from aiscc.command_center.read_models import (
     Presence,
     QueueData,
     QueueRow,
+    ScopeView,
+    TaskConstraintView,
     TaskContractView,
     TaskDisplayView,
     TransitionDecisionSummaryView,
+    TransitionsData,
     WorkflowView,
+    WorkRunData,
 )
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 
@@ -44,6 +50,7 @@ SECURITY_HEADERS = {
 class QueueQuerySpy:
     def __init__(self) -> None:
         self.calls: list[tuple[str, QueueFilters, str | None, int]] = []
+        self.detail_calls: list[tuple[str, str]] = []
 
     async def queue(
         self,
@@ -84,6 +91,44 @@ class QueueQuerySpy:
             source_revisions={"transition_event_sequence": 7},
         )
 
+    async def work_run(self, work_run_id: str) -> QueryResult[WorkRunData]:
+        self.detail_calls.append(("summary", work_run_id))
+        return QueryResult(
+            data=WorkRunData(
+                project_id="project-ui",
+                work_run_id=work_run_id,
+                task_contract=TaskContractView(id="task-ui-1", version="v1"),
+                runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD,
+                workflow=WorkflowView(
+                    state=WorkflowState.RUNNING,
+                    state_version=2,
+                    updated_at=NOW,
+                ),
+                task_constraint=TaskConstraintView(presence=Presence.NONE),
+                task_display=TaskDisplayView(),
+                scope=ScopeView(),
+                blocker=BlockerView(presence=Presence.NONE),
+            ),
+            snapshot_at=NOW,
+            source_revisions={"transition_event_sequence": 7},
+        )
+
+    async def transitions(self, work_run_id: str) -> QueryResult[TransitionsData]:
+        self.detail_calls.append(("transitions", work_run_id))
+        return QueryResult(
+            data=TransitionsData(work_run_id=work_run_id, items=()),
+            snapshot_at=NOW,
+            source_revisions={"transition_event_sequence": 7},
+        )
+
+    async def execution(self, work_run_id: str) -> QueryResult[ExecutionData]:
+        self.detail_calls.append(("execution", work_run_id))
+        return QueryResult(
+            data=ExecutionData(work_run_id=work_run_id, attempts=()),
+            snapshot_at=NOW,
+            source_revisions={"execution_event_sequence": 3},
+        )
+
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f"unexpected read query: {name}")
 
@@ -105,6 +150,7 @@ def test_ui_http_routes_render_without_invoking_server_side_queries() -> None:
         responses = (
             client.get("/command-center"),
             client.get("/command-center/projects/project-ui"),
+            client.get("/command-center/work-runs/run-ui-1"),
             client.get("/command-center/assets/app.css"),
             client.get("/command-center/assets/app.js"),
         )
@@ -112,8 +158,9 @@ def test_ui_http_routes_render_without_invoking_server_side_queries() -> None:
     assert all(response.status_code == 200 for response in responses)
     assert responses[0].headers["content-type"].startswith("text/html")
     assert responses[1].headers["content-type"].startswith("text/html")
-    assert responses[2].headers["content-type"].startswith("text/css")
-    assert responses[3].headers["content-type"].startswith("application/javascript")
+    assert responses[2].headers["content-type"].startswith("text/html")
+    assert responses[3].headers["content-type"].startswith("text/css")
+    assert responses[4].headers["content-type"].startswith("application/javascript")
     assert '<html lang="ko">' in responses[0].text
     assert '<html lang="ko">' in responses[1].text
     assert "알고 있는 Project ID 열기" in responses[0].text
@@ -123,12 +170,15 @@ def test_ui_http_routes_render_without_invoking_server_side_queries() -> None:
     assert "<table" not in responses[1].text
     assert 'class="label-primary">워크플로</span>' in responses[1].text
     assert 'class="label-technical">WorkflowState</span>' in responses[1].text
-    assert 'document.createElement("article")' in responses[3].text
-    assert 'target.focus({ preventScroll: true })' in responses[3].text
+    assert '<html lang="ko">' in responses[2].text
+    assert "WorkRun 상세" in responses[2].text
+    assert 'document.createElement("article")' in responses[4].text
+    assert 'target.focus({ preventScroll: true })' in responses[4].text
     _assert_security_headers(responses[0], html=True)
     _assert_security_headers(responses[1], html=True)
-    _assert_security_headers(responses[2])
+    _assert_security_headers(responses[2], html=True)
     _assert_security_headers(responses[3])
+    _assert_security_headers(responses[4])
 
 
 def test_ui_mutation_methods_are_rejected_with_security_boundary() -> None:
@@ -136,6 +186,7 @@ def test_ui_mutation_methods_are_rejected_with_security_boundary() -> None:
     paths = (
         "/command-center",
         "/command-center/projects/project-ui",
+        "/command-center/work-runs/run-ui-1",
         "/command-center/assets/app.css",
         "/command-center/assets/app.js",
     )
@@ -207,6 +258,34 @@ def test_exact_queue_api_filters_and_etag_remain_the_only_data_path() -> None:
     assert cursor is None and limit == 25
 
 
+def test_detail_read_endpoints_have_independent_etags_and_empty_states() -> None:
+    queries = QueueQuerySpy()
+    with TestClient(create_app(cast(CommandCenterQueries, queries))) as client:
+        paths = (
+            "/v1/command-center/work-runs/run-ui-1",
+            "/v1/command-center/work-runs/run-ui-1/transitions",
+            "/v1/command-center/work-runs/run-ui-1/execution",
+        )
+        first = [client.get(path) for path in paths]
+        unchanged = [
+            client.get(path, headers={"If-None-Match": response.headers["etag"]})
+            for path, response in zip(paths, first, strict=True)
+        ]
+    assert all(response.status_code == 200 for response in first)
+    assert all(response.status_code == 304 and response.content == b"" for response in unchanged)
+    assert first[0].json()["data"]["workflow"]["state"] == "RUNNING"
+    assert first[1].json()["data"]["items"] == []
+    assert first[2].json()["data"]["attempts"] == []
+    assert queries.detail_calls == [
+        ("summary", "run-ui-1"),
+        ("transitions", "run-ui-1"),
+        ("execution", "run-ui-1"),
+        ("summary", "run-ui-1"),
+        ("transitions", "run-ui-1"),
+        ("execution", "run-ui-1"),
+    ]
+
+
 @pytest.mark.postgres
 def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
     database_url = os.environ.get("AISCC_TEST_DATABASE_URL")
@@ -221,6 +300,7 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
         ui_paths = (
             "/command-center",
             f"/command-center/projects/{project_id}",
+            f"/command-center/work-runs/{accepted_run_id}",
             "/command-center/assets/app.css",
             "/command-center/assets/app.js",
         )
@@ -231,15 +311,38 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
             assert headers["x-content-type-options"] == "nosniff"
             assert headers["referrer-policy"] == "no-referrer"
             assert headers["cache-control"] == "no-store"
-            if path in ui_paths[:2]:
+            if path in ui_paths[:3]:
                 assert b'<html lang="ko">' in body
             if path == f"/command-center/projects/{project_id}":
                 assert f'data-project-id="{project_id}"'.encode() in body
                 assert b'id="queue-list" class="work-run-list"' in body
                 assert b"<table" not in body
+            if path == f"/command-center/work-runs/{accepted_run_id}":
+                assert b'data-page="work-run-detail"' in body
+                assert b'id="transition-list" class="transition-list"' in body
             if path == "/command-center/assets/app.js":
                 assert b'document.createElement("article")' in body
                 assert b'target.focus({ preventScroll: true })' in body
+
+        detail_api_paths = (
+            f"/v1/command-center/work-runs/{accepted_run_id}",
+            f"/v1/command-center/work-runs/{accepted_run_id}/transitions",
+            f"/v1/command-center/work-runs/{accepted_run_id}/execution",
+        )
+        detail_payloads = []
+        for path in detail_api_paths:
+            status, headers, body = server.request(path)
+            assert status == 200
+            assert headers["x-aiscc-exposure"] == "LOCAL_PRIVATE_ONLY"
+            detail_payloads.append(json.loads(body))
+            assert server.request(path, headers={"If-None-Match": headers["etag"]})[0] == 304
+        assert detail_payloads[0]["data"]["workflow"]["state"] == "ACCEPTED"
+        assert any(
+            item["decision"]["outcome"] == "DENIED"
+            and item["decision"]["derived_state_effect"] == "UNCHANGED"
+            for item in detail_payloads[1]["data"]["items"]
+        )
+        assert detail_payloads[2]["data"]["attempts"][0]["status"] == "EXECUTOR_COMPLETED"
 
         queue_path = f"/v1/command-center/projects/{project_id}/queue"
         filtered_path = (

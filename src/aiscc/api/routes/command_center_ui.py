@@ -8,6 +8,7 @@ from aiscc.command_center.web import (
     APP_JS,
     render_landing_page,
     render_project_page,
+    render_work_run_page,
     security_headers,
 )
 
@@ -22,6 +23,11 @@ async def command_center_landing() -> HTMLResponse:
 @router.get("/command-center/projects/{project_id}", response_class=HTMLResponse)
 async def command_center_project(project_id: str) -> HTMLResponse:
     return HTMLResponse(render_project_page(project_id), headers=security_headers(html=True))
+
+
+@router.get("/command-center/work-runs/{work_run_id}", response_class=HTMLResponse)
+async def command_center_work_run(work_run_id: str) -> HTMLResponse:
+    return HTMLResponse(render_work_run_page(work_run_id), headers=security_headers(html=True))
 
 
 @router.get("/command-center/assets/app.css")
