@@ -289,25 +289,31 @@ def test_work_run_detail_information_architecture_is_korean_first_and_accessible
     assert "Task / 범위" in detail
     assert "전이 기록 (TransitionDecision)" in detail
     assert "실행 기록 (Execution)" in detail
+    assert "증거 상세 (Evidence)" in detail
+    assert "사람 검토 / 판정 상세" in detail
     assert 'id="transition-list" class="transition-list"' in detail
+    assert 'id="requirement-set-list" class="record-list"' in detail
+    assert 'class="human-dimension-grid"' in detail
     assert 'aria-live="polite"' in detail
     assert "수동 새로고침" in detail
     assert "프로젝트 큐로" in detail
     assert "overflow-wrap: anywhere" in web.APP_CSS
     assert ".transition-columns" in web.APP_CSS
+    assert ".evidence-sections" in web.APP_CSS
+    assert ".human-dimension-grid" in web.APP_CSS
     assert "overflow-x: auto" not in web.APP_CSS
 
 
-def test_work_run_detail_uses_only_three_accepted_read_endpoints_and_safe_dom() -> None:
+def test_work_run_detail_uses_only_five_accepted_read_endpoints_and_safe_dom() -> None:
     detail_source = web.APP_JS.split('if (page === "work-run-detail")', 1)[1].split(
         'if (page !== "project-queue")', 1
     )[0]
     assert 'url: "/v1/command-center/work-runs/" + encodedWorkRunId' in detail_source
     assert '+ "/transitions"' in detail_source
     assert '+ "/execution"' in detail_source
+    assert '+ "/evidence"' in detail_source
+    assert '+ "/human-judgment"' in detail_source
     for forbidden_path in (
-        "/evidence",
-        "/human-judgment",
         "/outcomes",
         "/cycles/",
         "/next-action",
@@ -346,11 +352,155 @@ def test_work_run_detail_preserves_transition_and_execution_semantics() -> None:
         assert identifier in source + web.render_work_run_page("run-1")
 
 
+def test_evidence_projection_keeps_every_authority_stage_separate_and_safe() -> None:
+    detail = web.render_work_run_page("run-1")
+    source = web.APP_JS.split("function renderEvidence", 1)[1].split(
+        "function renderPresenceDimension", 1
+    )[0]
+    expected_collections = {
+        "requirement_sets",
+        "checkpoints",
+        "requirements",
+        "candidates",
+        "admission_decisions",
+        "admitted_evidence",
+        "satisfactions",
+        "set_evaluations",
+        "set_attestations",
+    }
+    collection_block = source.split("const collectionNames = [", 1)[1].split("];", 1)[0]
+    assert set(re.findall(r'"([a-z_]+)"', collection_block)) == expected_collections
+    for identifier in (
+        "EvidenceRequirementSet",
+        "EvidenceCheckpoint",
+        "EvidenceRequirement",
+        "EvidenceCandidate",
+        "EvidenceAdmissionDecision",
+        "AdmittedEvidence",
+        "RequirementSatisfaction",
+        "EvidenceSetEvaluation",
+        "EvidenceSetAttestation",
+    ):
+        assert identifier in detail + source
+    for field in (
+        "profile",
+        "obligation",
+        "semantic_owner",
+        "evidence_type_id",
+        "freshness_kind",
+        "applicable_checkpoint_refs",
+        "issuer_type",
+        "checkpoint_ref",
+        "requirement_ref",
+        "outcome",
+        "reason",
+        "coverage",
+        "evidence_authority_revision",
+    ):
+        assert f"item.{field}" in source
+    assert "EvidenceCandidate, admission decision, AdmittedEvidence" in detail
+    assert "증거 부재나 UNSATISFIED를 Judgment로 해석하지 않습니다" in detail
+    assert "data.admitted_evidence" in source
+    assert "data.satisfactions" in source
+    assert "data.set_evaluations" in source
+    assert "AdmittedEvidence 기록 없음" in source
+    assert "RequirementSatisfaction 기록 없음" in source
+    assert "EvidenceSetEvaluation 기록 없음" in source
+    assert "EvidenceSetAttestation 기록 없음" in source
+    for forbidden_field in (
+        ".canonical_body",
+        ".private_comment_ref",
+        ".private_comment_hash",
+        ".principal_id",
+        ".requester_identity",
+        ".encrypted_body_ref",
+        ".storage_ref",
+        ".output",
+        ".parameters",
+    ):
+        assert forbidden_field not in source
+
+
+def test_human_result_judgment_and_transition_effect_are_four_independent_dimensions() -> None:
+    detail = web.render_work_run_page("run-1")
+    source = web.APP_JS.split("function renderHumanJudgment", 1)[1].split(
+        "function mapFailure", 1
+    )[0]
+    for card_id in (
+        "human-gate-content",
+        "human-result-content",
+        "judgment-content",
+        "transition-effect-content",
+    ):
+        assert f'id="{card_id}"' in detail
+    assert detail.count('class="authority-dimension-card"') == 4
+    assert "data.human_gate" in source
+    assert "data.human_result" in source
+    assert "data.judgment" in source
+    assert "data.transition_effect" in source
+    assert "HumanGateStatus: " in source
+    assert "HumanGateSuspensionStatus: " in source
+    assert "HumanResultKind: " in source
+    assert "JudgmentKind: " in source
+    assert "DecisionOutcome: " in source
+    assert "HumanResult는 Judgment가 아닙니다" in source
+    assert "Judgment는 TransitionDecision이나 WorkflowState가 아닙니다" in source
+    assert "JudgmentStatus" not in source + detail
+    assert "judgment.status" not in source
+    result_block = source.split("const result = data.human_result", 1)[1].split(
+        "const judgment = data.judgment", 1
+    )[0]
+    assert "judgment." not in result_block
+    for empty_copy in (
+        "HumanGate 기록 없음",
+        "HumanResult 기록 없음",
+        "Judgment 기록 없음",
+        "Transition Effect 기록 없음",
+    ):
+        assert empty_copy in source
+    for forbidden_field in (
+        "principal_id",
+        "principal_authority_ref",
+        "authentication_session_id",
+        "human_action_authority_ref",
+        "private_comment_ref",
+        "private_comment_hash",
+    ):
+        assert forbidden_field not in source
+
+
+def test_evidence_and_human_endpoints_preserve_local_304_and_failure_state() -> None:
+    source = web.APP_JS.split('if (page === "work-run-detail")', 1)[1].split(
+        'if (page !== "project-queue")', 1
+    )[0]
+    evidence = source.split("function applyEvidence", 1)[1].split(
+        "function applyHumanJudgment", 1
+    )[0]
+    human = source.split("function applyHumanJudgment", 1)[1].split(
+        "async function loadDetail", 1
+    )[0]
+    for endpoint_source, endpoint in (
+        (evidence, "evidence"),
+        (human, "humanJudgment"),
+    ):
+        assert 'result.kind === "not-modified"' in endpoint_source
+        assert f"detailEndpoints.{endpoint}.hasData" in endpoint_source
+        assert f'commitSuccess("{endpoint}", result)' in endpoint_source
+        assert endpoint_source.index('result.kind === "not-modified"') < endpoint_source.index(
+            f'commitSuccess("{endpoint}", result)'
+        )
+        assert "마지막 성공" in endpoint_source
+        assert "성공한 snapshot 없음" in endpoint_source
+        assert "replaceChildren" not in endpoint_source.split(
+            'if (result.kind !== "success")', 1
+        )[1].split("try {", 1)[0]
+
+
 def test_work_run_detail_has_endpoint_scoped_etag_304_and_polling_contract() -> None:
     source = web.APP_JS.split('if (page === "work-run-detail")', 1)[1].split(
         'if (page !== "project-queue")', 1
     )[0]
-    for endpoint in ("summary", "transitions", "execution"):
+    for endpoint in ("summary", "transitions", "execution", "evidence", "humanJudgment"):
         assert f'{endpoint}: {{' in source
     assert 'headers["If-None-Match"] = endpoint.etag' in source
     assert 'response.status === 304' in source
@@ -377,6 +527,12 @@ def test_work_run_detail_refresh_state_sequence_downgrades_and_restores_labels()
         "function applyExecution", 1
     )[0]
     execution_source = source.split("function applyExecution", 1)[1].split(
+        "function applyEvidence", 1
+    )[0]
+    evidence_source = source.split("function applyEvidence", 1)[1].split(
+        "function applyHumanJudgment", 1
+    )[0]
+    human_source = source.split("function applyHumanJudgment", 1)[1].split(
         "async function loadDetail", 1
     )[0]
     failed_summary_branch = source.split("if (!summaryCurrent)", 1)[1].split(
@@ -384,9 +540,11 @@ def test_work_run_detail_refresh_state_sequence_downgrades_and_restores_labels()
     )[0]
 
     retained_labels = re.findall(r'\? "([^"]+)"\s*: "([^"]+)";', stale_source)
-    assert len(retained_labels) == 2
+    assert len(retained_labels) == 4
     transition_stale, transition_unavailable = retained_labels[0]
     execution_stale, execution_unavailable = retained_labels[1]
+    evidence_stale, evidence_unavailable = retained_labels[2]
+    human_stale, human_unavailable = retained_labels[3]
     transition_current = re.search(
         r'commitSuccess\("transitions", result\);\s*'
         r'transitionsState\.textContent = "([^"]+)";',
@@ -397,43 +555,79 @@ def test_work_run_detail_refresh_state_sequence_downgrades_and_restores_labels()
         r'executionState\.textContent = "([^"]+)";',
         execution_source,
     )
+    evidence_current = re.search(
+        r'commitSuccess\("evidence", result\);\s*'
+        r'evidenceState\.textContent = "([^"]+)";',
+        evidence_source,
+    )
+    human_current = re.search(
+        r'commitSuccess\("humanJudgment", result\);\s*'
+        r'humanJudgmentState\.textContent = "([^"]+)";',
+        human_source,
+    )
     assert transition_current is not None
     assert execution_current is not None
+    assert evidence_current is not None
+    assert human_current is not None
 
     state: dict[str, str | None] = {
         "transition_data": None,
         "execution_data": None,
+        "evidence_data": None,
+        "human_data": None,
         "transition_label": None,
         "execution_label": None,
+        "evidence_label": None,
+        "human_label": None,
         "page_state": None,
     }
 
-    def apply_successful_refresh(transition_data: str, execution_data: str) -> None:
+    def apply_successful_refresh(
+        transition_data: str,
+        execution_data: str,
+        evidence_data: str,
+        human_data: str,
+    ) -> None:
         state.update(
             transition_data=transition_data,
             execution_data=execution_data,
+            evidence_data=evidence_data,
+            human_data=human_data,
             transition_label=transition_current.group(1),
             execution_label=execution_current.group(1),
+            evidence_label=evidence_current.group(1),
+            human_label=human_current.group(1),
             page_state="READY",
         )
 
     def apply_summary_authority_failure(
-        fresh_transition_data: str, fresh_execution_data: str
+        fresh_transition_data: str,
+        fresh_execution_data: str,
+        fresh_evidence_data: str,
+        fresh_human_data: str,
     ) -> None:
         assert fresh_transition_data == "transition-b"
         assert fresh_execution_data == "execution-b"
+        assert fresh_evidence_data == "evidence-b"
+        assert fresh_human_data == "human-b"
         state.update(
             transition_label=transition_stale,
             execution_label=execution_stale,
+            evidence_label=evidence_stale,
+            human_label=human_stale,
             page_state="AUTHORITY_CONFLICT",
         )
 
-    apply_successful_refresh("transition-a", "execution-a")
+    apply_successful_refresh("transition-a", "execution-a", "evidence-a", "human-a")
     assert state == {
         "transition_data": "transition-a",
         "execution_data": "execution-a",
+        "evidence_data": "evidence-a",
+        "human_data": "human-a",
         "transition_label": "최신 전이 기록",
         "execution_label": "최신 실행 기록",
+        "evidence_label": "현재 Evidence 상세",
+        "human_label": "현재 Human/Judgment 상세",
         "page_state": "READY",
     }
 
@@ -442,27 +636,47 @@ def test_work_run_detail_refresh_state_sequence_downgrades_and_restores_labels()
     )
     assert "applyTransitions" not in failed_summary_branch
     assert "applyExecution" not in failed_summary_branch
+    assert "applyEvidence" not in failed_summary_branch
+    assert "applyHumanJudgment" not in failed_summary_branch
     assert "commitSuccess" not in failed_summary_branch
     assert "replaceChildren" not in stale_source
     assert ".etag = null" not in stale_source
     assert ".hasData = false" not in stale_source
-    apply_summary_authority_failure("transition-b", "execution-b")
+    apply_summary_authority_failure(
+        "transition-b", "execution-b", "evidence-b", "human-b"
+    )
 
     assert state["transition_data"] == "transition-a"
     assert state["execution_data"] == "execution-a"
-    assert "마지막 성공" in str(state["transition_label"])
-    assert "마지막 성공" in str(state["execution_label"])
-    assert "새로고침 실패" in str(state["transition_label"])
-    assert "새로고침 실패" in str(state["execution_label"])
-    assert "최신" not in str(state["transition_label"])
-    assert "최신" not in str(state["execution_label"])
+    assert state["evidence_data"] == "evidence-a"
+    assert state["human_data"] == "human-a"
+    for label_name in (
+        "transition_label",
+        "execution_label",
+        "evidence_label",
+        "human_label",
+    ):
+        assert "마지막 성공" in str(state[label_name])
+        assert "새로고침 실패" in str(state[label_name])
+        assert "최신" not in str(state[label_name])
+        assert state[label_name] != "현재 Evidence 상세"
+        assert state[label_name] != "현재 Human/Judgment 상세"
     assert state["page_state"] == "AUTHORITY_CONFLICT"
-    assert "최신" not in transition_unavailable
-    assert "최신" not in execution_unavailable
+    for unavailable in (
+        transition_unavailable,
+        execution_unavailable,
+        evidence_unavailable,
+        human_unavailable,
+    ):
+        assert "최신" not in unavailable
 
-    apply_successful_refresh("transition-c", "execution-c")
+    apply_successful_refresh("transition-c", "execution-c", "evidence-c", "human-c")
     assert state["transition_data"] == "transition-c"
     assert state["execution_data"] == "execution-c"
+    assert state["evidence_data"] == "evidence-c"
+    assert state["human_data"] == "human-c"
     assert state["transition_label"] == "최신 전이 기록"
     assert state["execution_label"] == "최신 실행 기록"
+    assert state["evidence_label"] == "현재 Evidence 상세"
+    assert state["human_label"] == "현재 Human/Judgment 상세"
     assert state["page_state"] == "READY"

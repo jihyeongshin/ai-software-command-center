@@ -264,6 +264,92 @@ def render_work_run_page(work_run_id: str) -> str:
       </div>
       <div id="execution-list" class="execution-list"></div>
     </section>
+
+    <section class="panel detail-panel" aria-labelledby="evidence-heading">
+      <div class="section-heading-row">
+        <div>
+          <p class="kicker">requirement부터 attestation까지 분리</p>
+          <h2 id="evidence-heading">증거 상세 (Evidence)</h2>
+        </div>
+        <p id="evidence-state" class="section-read-state" aria-live="polite">불러오는 중</p>
+      </div>
+      <p class="projection-note">
+        EvidenceCandidate, admission decision, AdmittedEvidence, requirement satisfaction,
+        set satisfaction은 서로 대체되지 않습니다.
+        증거 부재나 UNSATISFIED를 Judgment로 해석하지 않습니다.
+      </p>
+      <div id="evidence-meta" class="endpoint-meta"></div>
+      <div class="evidence-sections">
+        <section class="evidence-group" aria-labelledby="requirement-sets-heading">
+          <h3 id="requirement-sets-heading">요구사항 집합 (EvidenceRequirementSet)</h3>
+          <div id="requirement-set-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="checkpoints-heading">
+          <h3 id="checkpoints-heading">체크포인트 (EvidenceCheckpoint)</h3>
+          <div id="checkpoint-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="requirements-heading">
+          <h3 id="requirements-heading">요구사항 (EvidenceRequirement)</h3>
+          <div id="requirement-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="candidates-heading">
+          <h3 id="candidates-heading">후보 (EvidenceCandidate)</h3>
+          <div id="candidate-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="admission-decisions-heading">
+          <h3 id="admission-decisions-heading">입장 판정 (EvidenceAdmissionDecision)</h3>
+          <div id="admission-decision-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="admitted-evidence-heading">
+          <h3 id="admitted-evidence-heading">입장된 증거 (AdmittedEvidence)</h3>
+          <div id="admitted-evidence-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="satisfaction-heading">
+          <h3 id="satisfaction-heading">요구사항 충족 기록 (RequirementSatisfaction)</h3>
+          <div id="satisfaction-list" class="record-list"></div>
+        </section>
+        <section class="evidence-group" aria-labelledby="set-authority-heading">
+          <h3 id="set-authority-heading">집합 평가 / attestation</h3>
+          <div id="set-evaluation-list" class="record-list"></div>
+          <div id="set-attestation-list" class="record-list record-list-secondary"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="panel detail-panel" aria-labelledby="human-judgment-heading">
+      <div class="section-heading-row">
+        <div>
+          <p class="kicker">서로 독립된 네 권위 차원</p>
+          <h2 id="human-judgment-heading">사람 검토 / 판정 상세</h2>
+        </div>
+        <p id="human-judgment-state" class="section-read-state" aria-live="polite">
+          불러오는 중
+        </p>
+      </div>
+      <p class="projection-note">
+        HumanGate, HumanResult, Judgment, Transition Effect는 별도 기록입니다.
+        HumanResult나 Judgment만으로 WorkflowState 전이가 완료됐다고 해석하지 않습니다.
+      </p>
+      <div id="human-judgment-meta" class="endpoint-meta"></div>
+      <div class="human-dimension-grid">
+        <article class="authority-dimension-card" aria-labelledby="human-gate-heading">
+          <h3 id="human-gate-heading">사람 검토 관문 (HumanGate)</h3>
+          <div id="human-gate-content"></div>
+        </article>
+        <article class="authority-dimension-card" aria-labelledby="human-result-heading">
+          <h3 id="human-result-heading">사람 검토 결과 (HumanResult)</h3>
+          <div id="human-result-content"></div>
+        </article>
+        <article class="authority-dimension-card" aria-labelledby="judgment-heading">
+          <h3 id="judgment-heading">판정 (Judgment)</h3>
+          <div id="judgment-content"></div>
+        </article>
+        <article class="authority-dimension-card" aria-labelledby="transition-effect-heading">
+          <h3 id="transition-effect-heading">전이 효과 (Transition Effect)</h3>
+          <div id="transition-effect-content"></div>
+        </article>
+      </div>
+    </section>
   </main>
 </body>
 </html>
@@ -567,6 +653,35 @@ main { padding: 1.5rem clamp(1rem, 4vw, 4rem) 3rem; }
 .attempt-meta { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
 .execution-help { margin: 0.8rem 0; color: var(--warning); }
 .operation-list { margin-top: 0.8rem; }
+.endpoint-meta { margin-bottom: 1rem; }
+.endpoint-meta:empty { display: none; }
+.evidence-sections { display: grid; gap: 1rem; min-width: 0; }
+.evidence-group {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  background: var(--surface);
+}
+.evidence-group h3, .authority-dimension-card h3 { margin: 0 0 0.8rem; }
+.record-list { display: grid; gap: 0.75rem; min-width: 0; }
+.record-list-secondary { margin-top: 0.75rem; }
+.evidence-card, .authority-dimension-card {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: #0d131a;
+  overflow-wrap: anywhere;
+}
+.evidence-card h4 { margin: 0 0 0.7rem; }
+.human-dimension-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem;
+  min-width: 0;
+}
+.authority-dimension-card { border-left: 3px solid var(--accent); }
 
 @media (max-width: 1180px) {
   .filter-grid { grid-template-columns: repeat(3, minmax(10rem, 1fr)); }
@@ -580,7 +695,9 @@ main { padding: 1.5rem clamp(1rem, 4vw, 4rem) 3rem; }
   .site-header, .section-heading-row { flex-direction: column; }
   .input-action-row, .filter-grid { grid-template-columns: 1fr; }
   .identity-grid, .state-strip, .authority-grid { grid-template-columns: 1fr; }
-  .detail-grid, .transition-columns, .attempt-meta { grid-template-columns: 1fr; }
+  .detail-grid, .transition-columns, .attempt-meta, .human-dimension-grid {
+    grid-template-columns: 1fr;
+  }
   .next-action-item { grid-column: auto; }
   .read-state { justify-items: start; text-align: left; }
   .pagination { align-items: stretch; flex-direction: column; }
@@ -623,7 +740,7 @@ APP_JS = r"""(() => {
     ]);
     const DETAIL_STATE_COPY = {
       LOADING: ["불러오는 중", "WorkRun snapshot을 불러오고 있습니다."],
-      READY: ["최신 상태", "세 read projection을 확인했습니다."],
+      READY: ["최신 상태", "다섯 read projection을 확인했습니다."],
       UNCHANGED: ["변경 없음", "현재 표시 중인 section을 그대로 유지합니다."],
       PARTIAL_ERROR: [
         "일부 조회 실패",
@@ -659,6 +776,16 @@ APP_JS = r"""(() => {
         etag: null,
         hasData: false,
       },
+      evidence: {
+        url: "/v1/command-center/work-runs/" + encodedWorkRunId + "/evidence",
+        etag: null,
+        hasData: false,
+      },
+      humanJudgment: {
+        url: "/v1/command-center/work-runs/" + encodedWorkRunId + "/human-judgment",
+        etag: null,
+        hasData: false,
+      },
     };
     const workRunLabel = document.getElementById("work-run-id-label");
     const projectLink = document.getElementById("detail-project-link");
@@ -674,6 +801,23 @@ APP_JS = r"""(() => {
     const transitionList = document.getElementById("transition-list");
     const executionState = document.getElementById("execution-state");
     const executionList = document.getElementById("execution-list");
+    const evidenceState = document.getElementById("evidence-state");
+    const evidenceMeta = document.getElementById("evidence-meta");
+    const requirementSetList = document.getElementById("requirement-set-list");
+    const checkpointList = document.getElementById("checkpoint-list");
+    const requirementList = document.getElementById("requirement-list");
+    const candidateList = document.getElementById("candidate-list");
+    const admissionDecisionList = document.getElementById("admission-decision-list");
+    const admittedEvidenceList = document.getElementById("admitted-evidence-list");
+    const satisfactionList = document.getElementById("satisfaction-list");
+    const setEvaluationList = document.getElementById("set-evaluation-list");
+    const setAttestationList = document.getElementById("set-attestation-list");
+    const humanJudgmentState = document.getElementById("human-judgment-state");
+    const humanJudgmentMeta = document.getElementById("human-judgment-meta");
+    const humanGateContent = document.getElementById("human-gate-content");
+    const humanResultContent = document.getElementById("human-result-content");
+    const judgmentContent = document.getElementById("judgment-content");
+    const transitionEffectContent = document.getElementById("transition-effect-content");
 
     workRunLabel.textContent = workRunId;
 
@@ -1033,6 +1177,290 @@ APP_JS = r"""(() => {
       executionList.replaceChildren(fragment);
     }
 
+    function evidenceCard(title, lines) {
+      const card = document.createElement("article");
+      card.className = "evidence-card";
+      const heading = document.createElement("h4");
+      heading.textContent = title;
+      card.appendChild(heading);
+      appendLines(card, lines);
+      return card;
+    }
+
+    function renderRecordList(container, records, emptyCopy, buildCard) {
+      if (records.length === 0) {
+        container.replaceChildren(paragraph(emptyCopy, "empty-state"));
+        return;
+      }
+      const fragment = document.createDocumentFragment();
+      records.forEach((record, index) => fragment.appendChild(buildCard(record || {}, index)));
+      container.replaceChildren(fragment);
+    }
+
+    function renderEvidence(data, meta) {
+      const collectionNames = [
+        "requirement_sets",
+        "checkpoints",
+        "requirements",
+        "candidates",
+        "admission_decisions",
+        "admitted_evidence",
+        "satisfactions",
+        "set_evaluations",
+        "set_attestations",
+      ];
+      if (
+        !data || data.work_run_id !== workRunId ||
+        collectionNames.some((name) => !Array.isArray(data[name]))
+      ) {
+        throw new Error("invalid evidence projection");
+      }
+      evidenceMeta.replaceChildren(definition(
+        "Evidence endpoint source_revisions",
+        sourceRevisionLines(meta && meta.source_revisions),
+        true,
+      ));
+      renderRecordList(
+        requirementSetList,
+        data.requirement_sets,
+        "EvidenceRequirementSet 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceRequirementSet " + display(index + 1),
+          [
+            "requirement_set_ref: " + display(item.requirement_set_ref),
+            "semantic_owner: " + display(item.semantic_owner),
+            ...fixedArrayLines("ordered requirement ref", item.ordered_requirement_refs),
+            ...fixedArrayLines("ordered checkpoint ref", item.ordered_checkpoint_refs),
+            "requirement_root_hash: " + display(item.requirement_root_hash),
+            "fingerprint: " + display(item.fingerprint),
+          ],
+        ),
+      );
+      renderRecordList(
+        checkpointList,
+        data.checkpoints,
+        "EvidenceCheckpoint 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceCheckpoint " + display(index + 1),
+          [
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            "source WorkflowState: " + display(item.source_state),
+            "target WorkflowState: " + display(item.target_state),
+            "transition_purpose_id: " + display(item.transition_purpose_id),
+            "transition_purpose_version: " + display(item.transition_purpose_version),
+            "requirement_set_ref: " + display(item.requirement_set_ref),
+            "fingerprint: " + display(item.fingerprint),
+          ],
+        ),
+      );
+      renderRecordList(
+        requirementList,
+        data.requirements,
+        "EvidenceRequirement 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceRequirement " + display(index + 1),
+          [
+            "requirement_ref: " + display(item.requirement_ref),
+            "profile: " + display(item.profile),
+            "obligation: " + display(item.obligation),
+            "semantic_owner: " + display(item.semantic_owner),
+            "evidence_type_id: " + display(item.evidence_type_id),
+            "evidence_type_version: " + display(item.evidence_type_version),
+            "freshness_kind: " + display(item.freshness_kind),
+            ...fixedArrayLines("applicable checkpoint ref", item.applicable_checkpoint_refs),
+            "fingerprint: " + display(item.fingerprint),
+          ],
+        ),
+      );
+      renderRecordList(
+        candidateList,
+        data.candidates,
+        "EvidenceCandidate 기록 없음",
+        (item, index) => {
+          const content = item.durable_content;
+          const contentLines = content && typeof content === "object" ? [
+            "safe content ref: " + display(content.content_ref),
+            "content kind: " + display(content.content_kind),
+            "schema: " + display(content.schema_id) + " / " + display(content.schema_version),
+            "byte_count: " + display(content.byte_count),
+            "safe content hash: " + display(content.content_hash),
+            "content sensitivity: " + display(content.sensitivity),
+          ] : ["durable content metadata: 없음"];
+          return evidenceCard(
+            "EvidenceCandidate " + display(index + 1),
+            [
+              "candidate_id: " + display(item.candidate_id),
+              "candidate_version: " + display(item.candidate_version),
+              "candidate_fingerprint: " + display(item.candidate_fingerprint),
+              "checkpoint_ref: " + display(item.checkpoint_ref),
+              "issuer_type: " + display(item.issuer_type),
+              "sensitivity: " + display(item.sensitivity),
+              "content_hash: " + display(item.content_hash),
+              "created_at: " + display(item.created_at),
+              ...contentLines,
+            ],
+          );
+        },
+      );
+      renderRecordList(
+        admissionDecisionList,
+        data.admission_decisions,
+        "EvidenceAdmissionDecision 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceAdmissionDecision " + display(index + 1),
+          [
+            "decision_id: " + display(item.decision_id),
+            "candidate_id: " + display(item.candidate_id),
+            "requirement_ref: " + display(item.requirement_ref),
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            "outcome: " + display(item.outcome),
+            "reason: " + display(item.reason),
+            "decided_at: " + display(item.decided_at),
+          ],
+        ),
+      );
+      renderRecordList(
+        admittedEvidenceList,
+        data.admitted_evidence,
+        "AdmittedEvidence 기록 없음",
+        (item, index) => evidenceCard(
+          "AdmittedEvidence " + display(index + 1),
+          [
+            "admitted_evidence_id: " + display(item.admitted_evidence_id),
+            "decision_id: " + display(item.decision_id),
+            "candidate_id: " + display(item.candidate_id),
+            "requirement_ref: " + display(item.requirement_ref),
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            "content_hash: " + display(item.content_hash),
+            ...fixedArrayLines("coverage", item.coverage),
+            "admitted_at: " + display(item.admitted_at),
+          ],
+        ),
+      );
+      renderRecordList(
+        satisfactionList,
+        data.satisfactions,
+        "RequirementSatisfaction 기록 없음",
+        (item, index) => evidenceCard(
+          "RequirementSatisfaction " + display(index + 1),
+          [
+            "satisfaction_id: " + display(item.satisfaction_id),
+            "admitted_evidence_id: " + display(item.admitted_evidence_id),
+            "requirement_ref: " + display(item.requirement_ref),
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            ...fixedArrayLines("coverage", item.coverage),
+            "created_at: " + display(item.created_at),
+          ],
+        ),
+      );
+      renderRecordList(
+        setEvaluationList,
+        data.set_evaluations,
+        "EvidenceSetEvaluation 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceSetEvaluation " + display(index + 1),
+          [
+            "evaluation_id: " + display(item.evaluation_id),
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            "requirement_set_ref: " + display(item.requirement_set_ref),
+            "outcome: " + display(item.outcome),
+            "evidence_authority_revision: " + display(item.evidence_authority_revision),
+            "evaluated_at: " + display(item.evaluated_at),
+          ],
+        ),
+      );
+      renderRecordList(
+        setAttestationList,
+        data.set_attestations,
+        "EvidenceSetAttestation 기록 없음",
+        (item, index) => evidenceCard(
+          "EvidenceSetAttestation " + display(index + 1),
+          [
+            "attestation_id: " + display(item.attestation_id),
+            "serialized_ref: " + display(item.serialized_ref),
+            "checkpoint_ref: " + display(item.checkpoint_ref),
+            "state_version: " + display(item.state_version),
+            "evidence_authority_revision: " + display(item.evidence_authority_revision),
+            "issued_at: " + display(item.issued_at),
+            "expires_at: " + display(item.expires_at),
+          ],
+        ),
+      );
+    }
+
+    function renderPresenceDimension(container, value, presentLines, emptyCopy) {
+      if (!value || (value.presence !== "PRESENT" && value.presence !== "NONE")) {
+        throw new Error("invalid presence projection");
+      }
+      if (value.presence === "NONE") {
+        container.replaceChildren(paragraph(emptyCopy + " · presence: NONE", "empty-state"));
+        return;
+      }
+      container.replaceChildren(...presentLines.map((line) => paragraph(line)));
+    }
+
+    function renderHumanJudgment(data, meta) {
+      if (
+        !data || data.work_run_id !== workRunId || !data.human_gate ||
+        !data.human_result || !data.judgment || !data.transition_effect
+      ) {
+        throw new Error("invalid Human/Judgment projection");
+      }
+      humanJudgmentMeta.replaceChildren(definition(
+        "Human/Judgment endpoint source_revisions",
+        sourceRevisionLines(meta && meta.source_revisions),
+        true,
+      ));
+      const gate = data.human_gate;
+      renderPresenceDimension(humanGateContent, gate, [
+        "presence: " + display(gate.presence),
+        "human_gate_id: " + display(gate.human_gate_id),
+        "gate_ref: " + display(gate.gate_ref),
+        "purpose_id: " + display(gate.purpose_id),
+        "purpose_version: " + display(gate.purpose_version),
+        "HumanGateStatus: " + display(gate.status),
+        "HumanGateSuspensionStatus: " + display(gate.suspension_status),
+        "bound WorkflowState: " + display(gate.bound_state),
+        "bound state_version: " + display(gate.bound_state_version),
+        "authority_revision: " + display(gate.authority_revision),
+        "opened_at: " + display(gate.opened_at),
+        "updated_at: " + display(gate.updated_at),
+      ], "HumanGate 기록 없음");
+      const result = data.human_result;
+      renderPresenceDimension(humanResultContent, result, [
+        "presence: " + display(result.presence),
+        "human_result_id: " + display(result.human_result_id),
+        "human_result_ref: " + display(result.human_result_ref),
+        "HumanResultKind: " + display(result.result_kind),
+        "structured_reason_code: " + display(result.structured_reason_code),
+        "authority_revision: " + display(result.authority_revision),
+        "admitted_at: " + display(result.admitted_at),
+        "HumanResult는 Judgment가 아닙니다.",
+      ], "HumanResult 기록 없음");
+      const judgment = data.judgment;
+      renderPresenceDimension(judgmentContent, judgment, [
+        "presence: " + display(judgment.presence),
+        "judgment_id: " + display(judgment.judgment_id),
+        "judgment_ref: " + display(judgment.judgment_ref),
+        "JudgmentKind: " + display(judgment.kind),
+        "owner_policy: " + display(judgment.owner_policy),
+        "reason_code: " + display(judgment.reason_code),
+        "state_version: " + display(judgment.state_version),
+        "authority_revision: " + display(judgment.authority_revision),
+        "issued_at: " + display(judgment.issued_at),
+        "Judgment는 TransitionDecision이나 WorkflowState가 아닙니다.",
+      ], "Judgment 기록 없음");
+      const effect = data.transition_effect;
+      renderPresenceDimension(transitionEffectContent, effect, [
+        "presence: " + display(effect.presence),
+        "transition_decision_id: " + display(effect.transition_decision_id),
+        "DecisionOutcome: " + display(effect.outcome),
+        "resulting WorkflowState: " + display(effect.resulting_state),
+        "resulting state_version: " + display(effect.resulting_state_version),
+        "derived_state_effect: " + display(effect.derived_state_effect),
+      ], "Transition Effect 기록 없음");
+    }
+
     function mapFailure(status, code) {
       if (SAFE_ERROR_CODES.has(code)) return code;
       if (status === 404) return "NOT_FOUND";
@@ -1109,8 +1537,26 @@ APP_JS = r"""(() => {
       blockerContent.replaceChildren();
       transitionList.replaceChildren();
       executionList.replaceChildren();
+      evidenceMeta.replaceChildren();
+      requirementSetList.replaceChildren();
+      checkpointList.replaceChildren();
+      requirementList.replaceChildren();
+      candidateList.replaceChildren();
+      admissionDecisionList.replaceChildren();
+      admittedEvidenceList.replaceChildren();
+      satisfactionList.replaceChildren();
+      setEvaluationList.replaceChildren();
+      setAttestationList.replaceChildren();
+      humanJudgmentMeta.replaceChildren();
+      humanGateContent.replaceChildren();
+      humanResultContent.replaceChildren();
+      judgmentContent.replaceChildren();
+      transitionEffectContent.replaceChildren();
       transitionsState.textContent = "WorkRun 현재 상태를 확정할 수 없어 표시하지 않습니다.";
       executionState.textContent = "WorkRun 현재 상태를 확정할 수 없어 표시하지 않습니다.";
+      evidenceState.textContent = "WorkRun 현재 상태를 확정할 수 없어 표시하지 않습니다.";
+      humanJudgmentState.textContent =
+        "WorkRun 현재 상태를 확정할 수 없어 표시하지 않습니다.";
     }
 
     function markRetainedDetailStale() {
@@ -1120,6 +1566,12 @@ APP_JS = r"""(() => {
       executionState.textContent = detailEndpoints.execution.hasData
         ? "마지막 성공 실행 기록 유지 · 새로고침 실패로 보존된 과거 snapshot입니다."
         : "실행 기록 미확정 · WorkRun 현재 상태 새로고침 실패로 표시하지 않습니다.";
+      evidenceState.textContent = detailEndpoints.evidence.hasData
+        ? "마지막 성공 Evidence 상세 유지 · 새로고침 실패로 보존된 과거 snapshot입니다."
+        : "Evidence 상세 미확정 · WorkRun 현재 상태 새로고침 실패로 표시하지 않습니다.";
+      humanJudgmentState.textContent = detailEndpoints.humanJudgment.hasData
+        ? "마지막 성공 Human/Judgment 상세 유지 · 새로고침 실패로 보존된 과거 snapshot입니다."
+        : "Human/Judgment 상세 미확정 · WorkRun 현재 상태 새로고침 실패로 표시하지 않습니다.";
     }
 
     function applyTransitions(result) {
@@ -1163,6 +1615,51 @@ APP_JS = r"""(() => {
       }
     }
 
+    function applyEvidence(result) {
+      if (result.kind === "not-modified" && detailEndpoints.evidence.hasData) {
+        evidenceState.textContent = "변경 없음 · 현재 Evidence 상세 유지";
+        return true;
+      }
+      if (result.kind !== "success") {
+        evidenceState.textContent = detailEndpoints.evidence.hasData
+          ? "마지막 성공 Evidence 상세 유지 · endpoint 새로고침 실패"
+          : "Evidence 상세 사용 불가 · 성공한 snapshot 없음";
+        return false;
+      }
+      try {
+        renderEvidence(result.data, result.meta);
+        commitSuccess("evidence", result);
+        evidenceState.textContent = "현재 Evidence 상세";
+        return true;
+      } catch (_error) {
+        evidenceState.textContent = "Evidence projection 형식을 확인할 수 없습니다.";
+        return false;
+      }
+    }
+
+    function applyHumanJudgment(result) {
+      if (result.kind === "not-modified" && detailEndpoints.humanJudgment.hasData) {
+        humanJudgmentState.textContent = "변경 없음 · 현재 Human/Judgment 상세 유지";
+        return true;
+      }
+      if (result.kind !== "success") {
+        humanJudgmentState.textContent = detailEndpoints.humanJudgment.hasData
+          ? "마지막 성공 Human/Judgment 상세 유지 · endpoint 새로고침 실패"
+          : "Human/Judgment 상세 사용 불가 · 성공한 snapshot 없음";
+        return false;
+      }
+      try {
+        renderHumanJudgment(result.data, result.meta);
+        commitSuccess("humanJudgment", result);
+        humanJudgmentState.textContent = "현재 Human/Judgment 상세";
+        return true;
+      } catch (_error) {
+        humanJudgmentState.textContent =
+          "Human/Judgment projection 형식을 확인할 수 없습니다.";
+        return false;
+      }
+    }
+
     async function loadDetail() {
       if (requestInFlight) {
         refreshAfterFlight = true;
@@ -1172,10 +1669,18 @@ APP_JS = r"""(() => {
       stopPolling();
       if (!detailEndpoints.summary.hasData) setDetailState("LOADING");
       try {
-        const [summaryResult, transitionsResult, executionResult] = await Promise.all([
+        const [
+          summaryResult,
+          transitionsResult,
+          executionResult,
+          evidenceResult,
+          humanJudgmentResult,
+        ] = await Promise.all([
           fetchEndpoint("summary"),
           fetchEndpoint("transitions"),
           fetchEndpoint("execution"),
+          fetchEndpoint("evidence"),
+          fetchEndpoint("humanJudgment"),
         ]);
 
         let summaryCurrent = false;
@@ -1212,7 +1717,11 @@ APP_JS = r"""(() => {
         }
         const transitionsReady = applyTransitions(transitionsResult);
         const executionReady = applyExecution(executionResult);
-        if (!transitionsReady || !executionReady) {
+        const evidenceReady = applyEvidence(evidenceResult);
+        const humanJudgmentReady = applyHumanJudgment(humanJudgmentResult);
+        if (
+          !transitionsReady || !executionReady || !evidenceReady || !humanJudgmentReady
+        ) {
           setDetailState("PARTIAL_ERROR");
         } else {
           setDetailState(summaryUnchanged ? "UNCHANGED" : "READY");

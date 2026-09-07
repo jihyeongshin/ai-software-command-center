@@ -18,11 +18,16 @@ from aiscc.api.app import create_app
 from aiscc.command_center.queries import CommandCenterQueries, QueryResult, QueueFilters
 from aiscc.command_center.read_models import (
     BlockerView,
+    EvidenceData,
     ExecutionData,
     ExecutionSummaryView,
     HumanGateSummaryView,
+    HumanGateView,
+    HumanJudgmentData,
     HumanResultSummaryView,
+    HumanResultView,
     JudgmentSummaryView,
+    JudgmentView,
     NextActionSummaryView,
     Presence,
     QueueData,
@@ -32,6 +37,7 @@ from aiscc.command_center.read_models import (
     TaskContractView,
     TaskDisplayView,
     TransitionDecisionSummaryView,
+    TransitionEffectView,
     TransitionsData,
     WorkflowView,
     WorkRunData,
@@ -129,6 +135,39 @@ class QueueQuerySpy:
             source_revisions={"execution_event_sequence": 3},
         )
 
+    async def evidence(self, work_run_id: str) -> QueryResult[EvidenceData]:
+        self.detail_calls.append(("evidence", work_run_id))
+        return QueryResult(
+            data=EvidenceData(
+                work_run_id=work_run_id,
+                requirement_sets=(),
+                checkpoints=(),
+                requirements=(),
+                candidates=(),
+                admission_decisions=(),
+                admitted_evidence=(),
+                satisfactions=(),
+                set_evaluations=(),
+                set_attestations=(),
+            ),
+            snapshot_at=NOW,
+            source_revisions={"evidence_authority_revision": 4},
+        )
+
+    async def human_judgment(self, work_run_id: str) -> QueryResult[HumanJudgmentData]:
+        self.detail_calls.append(("human-judgment", work_run_id))
+        return QueryResult(
+            data=HumanJudgmentData(
+                work_run_id=work_run_id,
+                human_gate=HumanGateView(presence=Presence.NONE),
+                human_result=HumanResultView(presence=Presence.NONE),
+                judgment=JudgmentView(presence=Presence.NONE),
+                transition_effect=TransitionEffectView(presence=Presence.NONE),
+            ),
+            snapshot_at=NOW,
+            source_revisions={"workflow_state_version": 2},
+        )
+
     def __getattr__(self, name: str) -> Any:
         raise AssertionError(f"unexpected read query: {name}")
 
@@ -172,6 +211,8 @@ def test_ui_http_routes_render_without_invoking_server_side_queries() -> None:
     assert 'class="label-technical">WorkflowState</span>' in responses[1].text
     assert '<html lang="ko">' in responses[2].text
     assert "WorkRun 상세" in responses[2].text
+    assert 'id="evidence-state"' in responses[2].text
+    assert 'id="human-judgment-state"' in responses[2].text
     assert 'document.createElement("article")' in responses[4].text
     assert 'target.focus({ preventScroll: true })' in responses[4].text
     _assert_security_headers(responses[0], html=True)
@@ -265,6 +306,8 @@ def test_detail_read_endpoints_have_independent_etags_and_empty_states() -> None
             "/v1/command-center/work-runs/run-ui-1",
             "/v1/command-center/work-runs/run-ui-1/transitions",
             "/v1/command-center/work-runs/run-ui-1/execution",
+            "/v1/command-center/work-runs/run-ui-1/evidence",
+            "/v1/command-center/work-runs/run-ui-1/human-judgment",
         )
         first = [client.get(path) for path in paths]
         unchanged = [
@@ -276,13 +319,24 @@ def test_detail_read_endpoints_have_independent_etags_and_empty_states() -> None
     assert first[0].json()["data"]["workflow"]["state"] == "RUNNING"
     assert first[1].json()["data"]["items"] == []
     assert first[2].json()["data"]["attempts"] == []
+    assert first[3].json()["data"]["requirement_sets"] == []
+    assert first[3].json()["data"]["candidates"] == []
+    assert first[3].json()["data"]["admitted_evidence"] == []
+    assert first[4].json()["data"]["human_gate"]["presence"] == "NONE"
+    assert first[4].json()["data"]["human_result"]["presence"] == "NONE"
+    assert first[4].json()["data"]["judgment"]["presence"] == "NONE"
+    assert first[4].json()["data"]["transition_effect"]["presence"] == "NONE"
     assert queries.detail_calls == [
         ("summary", "run-ui-1"),
         ("transitions", "run-ui-1"),
         ("execution", "run-ui-1"),
+        ("evidence", "run-ui-1"),
+        ("human-judgment", "run-ui-1"),
         ("summary", "run-ui-1"),
         ("transitions", "run-ui-1"),
         ("execution", "run-ui-1"),
+        ("evidence", "run-ui-1"),
+        ("human-judgment", "run-ui-1"),
     ]
 
 
@@ -320,6 +374,8 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
             if path == f"/command-center/work-runs/{accepted_run_id}":
                 assert b'data-page="work-run-detail"' in body
                 assert b'id="transition-list" class="transition-list"' in body
+                assert b'id="evidence-state"' in body
+                assert b'id="human-judgment-state"' in body
             if path == "/command-center/assets/app.js":
                 assert b'document.createElement("article")' in body
                 assert b'target.focus({ preventScroll: true })' in body
@@ -328,6 +384,8 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
             f"/v1/command-center/work-runs/{accepted_run_id}",
             f"/v1/command-center/work-runs/{accepted_run_id}/transitions",
             f"/v1/command-center/work-runs/{accepted_run_id}/execution",
+            f"/v1/command-center/work-runs/{accepted_run_id}/evidence",
+            f"/v1/command-center/work-runs/{accepted_run_id}/human-judgment",
         )
         detail_payloads = []
         for path in detail_api_paths:
@@ -343,6 +401,25 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
             for item in detail_payloads[1]["data"]["items"]
         )
         assert detail_payloads[2]["data"]["attempts"][0]["status"] == "EXECUTOR_COMPLETED"
+        assert set(detail_payloads[3]["data"]) == {
+            "work_run_id",
+            "requirement_sets",
+            "checkpoints",
+            "requirements",
+            "candidates",
+            "admission_decisions",
+            "admitted_evidence",
+            "satisfactions",
+            "set_evaluations",
+            "set_attestations",
+        }
+        assert set(detail_payloads[4]["data"]) == {
+            "work_run_id",
+            "human_gate",
+            "human_result",
+            "judgment",
+            "transition_effect",
+        }
 
         queue_path = f"/v1/command-center/projects/{project_id}/queue"
         filtered_path = (
