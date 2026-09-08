@@ -21,14 +21,17 @@ Browser Command Center가 장문 chat instruction에 의존하지 않고 Task Co
 → Command Center가 work type과 authority gap 분류
 → Task File 생성
 → Command Center가 현재 발행 artifact만 담은 flat ZIP과 Short Prompt 제공
-→ 사람이 ZIP을 `C:\Users\oracl\Downloads`에 flat 압축해제
+→ 사람이 ZIP만 `C:\Users\oracl\Downloads`에 다운로드
 → fresh IDE chat이 요구되면 사람이 새 IDE chat을 엶
-→ Executor가 issued artifact를 canonical destination으로 transport하고 hash 검증
-→ transport PASS 뒤 Task File을 읽음
+→ Executor가 Short Prompt의 ZIP SHA-256과 archive 무결성/member safety 검증
+→ TASK member를 canonical tasks/active에 먼저 직접 배치하여 읽음
+→ Task manifest에 따라 나머지 issued artifact를 canonical destination으로 직접 배치하고 hash 검증
 → IDE Executor가 task-listed canonical source를 읽음
 → source 변경 / 검증 / report / temporary target bundle 생성
 → Task File을 `.aiassistant/tasks/done/`으로 이동
-→ 사람이 target bundle을 Browser Command Center에 제출
+→ Executor가 완성된 target folder의 인접 outbound ZIP을 생성하고 CRC/내용 검증
+→ inbound ZIP/staging을 best effort로 정리하고 잔여 경로 보고
+→ 사람이 검증된 outbound ZIP을 Browser Command Center에 제출
 → Task / Report / changed files / evidence / human result 판정
 → terminal judgment 생성
 → Cycle Record 생성 또는 갱신
@@ -43,9 +46,9 @@ Self-dogfooding cutover 뒤에는 일부 단계가 AISCC runtime으로 자동화
 Command Center가 Task File을 발행하면 Browser chat에는 기본적으로 다음을 제공한다.
 
 1. 현재 발행 artifact만 포함한 flat ZIP download link
-2. issued artifact별 exact filename과 SHA-256
-3. source root와 exact canonical destination
-4. transport-first Short Prompt와 substantive Task path
+2. delivery ZIP의 exact filename과 expected SHA-256
+3. Downloads root와 exact TASK member filename
+4. TASK 우선 배치·읽기와 bootstrap STOP 규칙을 담은 간결한 Short Prompt
 5. 중요한 주의사항 1~3줄
 
 Task 전문은 `.md` artifact에 둔다. 사용자가 전문 출력을 명시적으로 요구한 경우에만 chat에 출력한다.
@@ -82,22 +85,38 @@ Browser Handoff/session migration은 explicit Human request, phase/context migra
 
 ### 3.3 artifact delivery와 Executor transport
 
-Command Center가 `TASK / CYCLE / JUDGMENT / HANDOFF` 중 어떤 subset을 발행하든, 같은 Browser turn은 존재하는 issued artifact만 담은 하나의 flat ZIP을 제공한다. absent artifact type은 생성하지 않는다.
+Command Center는 현재 발행한 `TASK / CYCLE / JUDGMENT / HANDOFF` subset만 하나의 flat delivery ZIP에 담는다. absent artifact type은 만들지 않는다. Human은 ZIP만 `C:\Users\oracl\Downloads`에 다운로드한다. 수동 압축해제나 Markdown canonical 배치를 요구하지 않는다. Browser가 명시적으로 요구할 때만 Human이 새 IDE chat을 열고 Short Prompt를 전달한다.
 
-Human은 ZIP을 내려받아 `C:\Users\oracl\Downloads`에 flat 압축해제하고, 필요한 경우 새 IDE chat을 연 뒤 Short Prompt를 전달한다. Short Prompt는 artifact별 exact filename, expected SHA-256, source root, exact canonical destination, 아래 algorithm, stop semantics, transport PASS 후 읽을 substantive Task path를 포함한다.
+Short Prompt는 수십 줄 이하의 bootstrap descriptor를 기본으로 한다. Downloads root, exact ZIP filename, expected ZIP SHA-256, exact TASK filename, bootstrap STOP 규칙, TASK 우선 배치·읽기 지시만 담는다. per-file hash, canonical destination, workspace gate, implementation/evidence/export contract와 Git allowlist는 Task artifact가 소유한다.
 
-Canonical destination:
+Executor bootstrap:
+
+1. exact inbound ZIP의 존재와 Short Prompt의 SHA-256 일치를 검증한다.
+2. archive readability/CRC integrity와 member safety를 검증한다. 중복·절대경로·상위경로 탈출 등 모호한 member를 허용하지 않는다.
+3. exact TASK member를 `.aiassistant/tasks/active/<TASK filename>`에 가장 먼저 직접 materialize하고 byte equality를 확인한다.
+4. canonical Task를 읽고 그 manifest에 따라 나머지 artifact를 exact canonical destination에 배치한다.
+5. 직접 member 배치 API가 없을 때만 package-specific staging directory를 사용한다. Downloads root flat extraction은 필수가 아니다.
+
+Canonical destination의 기본 범주:
 
 ```text
-TASK     → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\tasks\active\
-CYCLE    → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\records\aiscc\cycles\
-JUDGMENT → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\reports\aiscc\
-HANDOFF  → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\reports\aiscc\
+TASK     → .aiassistant/tasks/active/
+CYCLE    → .aiassistant/records/aiscc/cycles/
+JUDGMENT → .aiassistant/reports/aiscc/
+HANDOFF  → .aiassistant/reports/aiscc/
 ```
 
-Executor는 issued artifact마다 source 존재와 expected SHA-256을 먼저 확인하고 canonical destination을 검사한다. destination이 없으면 byte-preserving copy 후 source/destination hash equality를 요구한다. destination이 있으면 기존 hash를 먼저 계산하여 같을 때 overwrite하지 않고, 다를 때만 current issued source로 overwrite한 뒤 equality를 다시 요구한다. equality가 확인된 artifact의 flat Downloads source만 제거하며 ZIP은 제거하지 않는다.
+Task가 predecessor Task의 done 경로를 지정한 경우 해당 exact destination을 따른다. 나머지 member는 expected SHA-256, 기존 destination 상태, materialization 후 destination SHA-256을 검증한다. 같은 hash이면 불필요하게 overwrite하지 않는다. 다른 기존 bytes의 overwrite 권한은 Task가 명시해야 하며 differing done predecessor는 임의 덮어쓰지 않는다.
 
-이 hash-aware overwrite는 current package가 exact하게 발행한 파일에만 적용한다. source missing, expected hash mismatch, destination/copy/overwrite failure, post-copy hash mismatch, ambiguous result가 하나라도 있으면 substantive Task 실행 전에 STOP한다. 목적은 Human의 canonical file 배치 실수가 missing-artifact 또는 wrong-path blocker를 만드는 것을 방지하는 것이다.
+Short Prompt의 delivery ZIP hash는 TASK 자체와 archive membership의 bootstrap integrity anchor다. Task에 자신의 whole-file SHA를 포함하도록 요구하지 않는다. Task는 나머지 artifact의 expected hashes 또는 authoritative hash source와 exact destination을 명시한다.
+
+### 3.4 blocking bootstrap와 non-blocking cleanup
+
+TASK canonical 배치 전 ZIP missing/hash mismatch, archive corrupt/unreadable/unsafe, TASK member absent, TASK placement failure이면 즉시 STOP한다. report/export와 substantive project mutation을 하지 않고 inbound ZIP을 보존하며 Human에게 재다운로드/재배치를 요청한다. 대체 파일/경로를 탐색하지 않는다. TASK 배치 후 required artifact의 hash/placement 실패나 repository authority/workspace mismatch는 Task의 mandatory stop 계약을 따른다.
+
+모든 issued member가 exact canonical destination에 도달한 뒤 transport는 PASS다. terminal outcome과 outbound ZIP 검증 후 exact inbound ZIP 및 Task-owned staging cleanup을 best effort로만 시도한다. 거절/실패는 `NON_BLOCKING_LOCAL_RESIDUE`로 exact 잔여 경로와 사유를 기록한다. substantive work나 결과를 무효화하지 않고 같은 turn에서 다른 삭제 수단으로 재시도하지 않는다. broad/wildcard Downloads cleanup을 금지한다.
+
+Outbound result ZIP은 필수 제출물이다. `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`에 따라 완성된 folder 옆에 `<bundle-name>.zip`을 생성·검증하고 folder를 보존한다. outbound 생성/검증 실패는 `ZIP_EXPORT_FAILED`이며 inbound cleanup 실패와 구분한다. 최종 응답에는 folder와 ZIP의 exact path를 모두 제공한다.
 
 ## 4. instruction transport contract
 

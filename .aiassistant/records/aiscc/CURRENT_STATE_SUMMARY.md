@@ -31,9 +31,10 @@
 | P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Project Memory and Cycle Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P2-1 Command Center Web UI | `ACCEPTED / CLOSED / PERSISTED` |
-| P2-2 Synthetic Demo Repository | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
+| P2-2 Synthetic Demo Repository | `ACCEPTED / CLOSED / PERSISTED` |
+| P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
 
-## P1 closure, P2-1 terminal closure, and P2-2 entry state
+## P1 closure, P2-2 terminal closure, and P2-3 entry state
 
 The Browser Command Center-authorized terminal state is:
 
@@ -56,7 +57,7 @@ P1:
 ACCEPTED / CLOSED
 
 P2-1:
-ACCEPTED / CLOSED
+ACCEPTED / CLOSED / PERSISTED
 
 P2-1 persistence commit:
 1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
@@ -65,10 +66,22 @@ P2:
 IN_PROGRESS
 
 P2-2:
+ACCEPTED / CLOSED / PERSISTED
+
+P2-2 canonical commit:
+05185c57a6265a4002050ce25cdfde3dc87e9779
+
+P2-3:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+
+1700 P2-3 source/contract audit:
+BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
+
+PUBLIC_RECORDED_REPLAY:
+NOT_ADMITTED
 ```
 
 Closure authority:
@@ -80,17 +93,22 @@ P2-1 terminal authority:
 - `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`
 - `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
 
-Current governance prerequisite before P2-2 execution:
+P2-2 terminal authority:
+
+- `.aiassistant/records/aiscc/cycles/20260908_1700_aiscc-p2-2-terminal-closure-p2-3-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260908_1700_aiscc-p2-2-terminal-closure-judgment-1.md`
+
+Current governance reconciliation before retrying the P2-3 audit:
 
 ```text
-Command Center workflow correction:
+P2-3 entry authority and direct ZIP workflow reconciliation:
 READY_FOR_BROWSER_COMMAND_CENTER_JUDGMENT
 
-P2-2 execution:
+P2-3 implementation:
 NOT_STARTED
 ```
 
-The correction canonicalizes task-scoped fresh IDE sessions, conditional Browser session/Handoff boundaries, and flat ZIP artifact transport through `C:\Users\oracl\Downloads` before substantive Task execution.
+The 1700 audit was blocked and is not accepted as a completed source/contract audit. After this reconciliation is accepted, retry it in a separate Task. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -942,7 +960,11 @@ Terminal Cycle:
 - P2: `IN_PROGRESS`
 - P2-1 Command Center Web UI: `ACCEPTED / CLOSED / PERSISTED`
 - P2-1 persistence commit: `1fb9fd5e29e85481fa3c6ce78542de1fda6bf138`
-- P2-2 Synthetic Demo Repository: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
+- P2-2 Synthetic Demo Repository: `ACCEPTED / CLOSED / PERSISTED`
+- P2-2 canonical commit: `05185c57a6265a4002050ce25cdfde3dc87e9779`
+- P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
+- 1700 P2-3 source/contract audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`
+- Public Recorded Replay: `NOT_ADMITTED`
 
 ## non-substitution statement
 

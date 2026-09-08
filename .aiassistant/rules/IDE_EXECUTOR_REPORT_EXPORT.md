@@ -72,6 +72,20 @@ canonical report 후보:
 
 chat-only 작업은 `TASK.md`를 생략할 수 있으나 manifest에 `task_file: chat-only`를 기록한다.
 
+### 6.1 자동 outbound result ZIP
+
+필수 bundle folder `.aiassistant/reports/target/<bundle-name>/`를 완성한 뒤 Executor는 인접한 `.aiassistant/reports/target/<bundle-name>.zip`을 자동 생성한다. 이 outbound ZIP은 필수 제출물이다.
+
+- 정확히 하나의 최상위 `<bundle-name>/` 디렉터리 아래에 완성된 bundle 전체를 담는다.
+- bundle-relative 경로를 보존하고 unrelated target bundle/file은 포함하지 않는다.
+- archive readability와 모든 member의 CRC/integrity를 검증한다.
+- 필수 root 파일과 전체 folder/archive 파일 목록 및 내용 일치를 확인한다.
+- 원본 bundle folder를 보존하며 최종 응답에 folder와 ZIP의 exact path를 모두 적는다.
+
+생성 또는 검증 실패는 `ZIP_EXPORT_FAILED`다. 완성된 folder를 보존하고 정확한 blocker를 보고하며 ZIP 성공이나 export 완료를 주장하지 않는다.
+
+Inbound Command Center ZIP과 staging의 정리는 별개다. exact canonical artifact transport 이후 terminal 시점에 best effort로만 시도한다. 거절/실패는 `NON_BLOCKING_LOCAL_RESIDUE`로 exact 잔여 경로를 기록하며 substantive work나 결과를 무효화하지 않는다. 같은 turn에서 다른 삭제 수단으로 재시도하지 않는다. 자세한 inbound bootstrap 계약은 `.aiassistant/records/command-center/COMMAND_CENTER_WORKFLOW.md`와 현재 Task가 소유한다.
+
 ## 7. task lifecycle
 
 ```text
@@ -228,7 +242,7 @@ Task가 exact action을 명시하지 않으면 다음을 수행하지 않는다.
 ## 17. final response
 
 1. result: completed / blocked / rejected-candidate
-2. target bundle path
+2. target bundle folder path와 검증된 outbound ZIP path
 3. changed files
 4. removed files
 5. human verification

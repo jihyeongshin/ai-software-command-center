@@ -12,7 +12,7 @@
 
 ## 1. 목적
 
-IDE Executor chat에는 issued artifact transport와 Task File path, 핵심 evidence 규칙만 전달한다. Task 전문을 함께 붙여넣지 않는다.
+IDE Executor chat에는 verified ZIP과 TASK 우선 배치에 필요한 간결한 bootstrap만 전달한다. 상세 transport/evidence/Git/export 권한은 Task artifact에 둔다.
 
 ## 2. Human-visible fresh IDE chat notice
 
@@ -26,98 +26,41 @@ fresh IDE Executor chat이 `REQUIRED`일 때만 Browser response의 Short Prompt
 
 이 notice는 Human action을 위한 Browser text다. Short Prompt 안에 넣거나 IDE Executor에게 새 chat 생성/open을 지시하지 않는다.
 
-## 3. transport-first prompt
+## 3. 기본 direct-ZIP bootstrap prompt
 
-Command Center가 artifact를 발행한 turn은 다음 block에서 실제 issued artifact subset만 열거한다. absent artifact type과 HANDOFF를 임의 생성하지 않는다.
+Human은 ZIP만 Downloads에 내려받는다. 수동 압축해제와 Markdown 배치는 요구하지 않는다. 아래 기본 Short Prompt는 수십 줄 이하로 유지하며 per-file hash/destination, workspace/evidence/Git allowlist를 중복하지 않는다.
 
-```markdown
-이번 Command Center 발행 artifact transport부터 먼저 수행하라.
+```text
+이번 Command Center artifact transport부터 수행하라.
 
-Human이 이번 발행 ZIP의 파일들을 아래 경로에 flat 압축해제한 상태다.
-
+Downloads:
 C:\Users\oracl\Downloads
 
-[ISSUED ARTIFACTS]
+ZIP:
+<exact delivery ZIP filename>
 
-<TYPE>
-<exact filename>
+SHA-256:
+<exact expected ZIP SHA-256>
 
-expected SHA-256:
-<exact sha256>
+ZIP이 없거나 hash 검증, archive 검증, TASK canonical bootstrap이 실패하면
+프로젝트 작업/report/export 없이 즉시 STOP하고 Human에게 ZIP 재다운로드/재배치를 요청하라.
 
-[SOURCE ROOT]
+정상이면 ZIP에서 아래 TASK를 canonical tasks/active 경로로 가장 먼저 직접 배치해 읽고,
+TASK의 지시에 따라 나머지 artifact와 작업을 수행하라.
 
-C:\Users\oracl\Downloads
-
-[REPOSITORY ROOT]
-
-C:\Users\oracl\IdeaProjects\ai-software-command-center
-
-[CANONICAL DESTINATIONS]
-
-<TYPE>
-→ <exact canonical destination including filename>
-
-[TRANSPORT PROCEDURE]
-
-각 issued artifact마다 독립적으로 수행하라.
-
-1. Downloads source 존재 확인
-2. source SHA-256 계산
-3. expected SHA-256과 exact 비교
-4. canonical destination 존재 여부 확인
-
-destination이 없으면 source를 byte-preserving copy하고 destination SHA-256을 계산하여 source == destination을 확인하라.
-
-destination이 이미 있으면 기존 destination SHA-256을 먼저 계산하라. source와 같으면 overwrite하지 않는다. 다르면 current issued source로 overwrite한 뒤 destination SHA-256을 다시 계산하여 source == destination을 확인하라.
-
-hash equality가 확인된 artifact에 대해서만 Downloads의 해당 flat source 파일을 remove하라. ZIP 자체는 remove하지 마라. package에 명시되지 않은 Downloads 파일을 읽거나 이동하거나 삭제하지 마라.
-
-source missing, expected SHA mismatch, destination path failure, copy/overwrite failure, source/destination hash mismatch 또는 transport result ambiguity가 있으면 substantive Task를 시작하지 말고 STOP하라.
-
-[AFTER TRANSPORT]
-
-모든 issued artifact transport가 PASS한 뒤에만 아래 active Task를 직접 읽어라.
-
-<exact substantive Task path>
+<exact TASK member filename>
 ```
 
-## 4. 기본 prompt
+## 4. Task와 canonical workflow가 소유하는 상세 계약
 
-```markdown
-작업 지시서는 아래 파일이다.
+- ZIP hash는 TASK와 archive membership의 bootstrap integrity anchor다. TASK 자신의 whole-file SHA를 요구하지 않는다.
+- `.aiassistant/records/command-center/TASK_FILE_TEMPLATE.md`에 따라 Task에 remaining member별 hash/authoritative source, canonical destination, expected state, repository gate, evidence, Git allowlist와 export 계약을 기록한다.
+- Executor는 archive readability/CRC/member safety를 검증하고 직접 member → canonical path 배치를 우선한다. package-specific staging은 직접 배치 불가 시에만 사용한다.
+- exact canonical transport 이후 inbound ZIP/staging cleanup 실패는 `NON_BLOCKING_LOCAL_RESIDUE`다. terminal 시점에 best effort로 시도하고 exact 경로를 보고한다. 같은 turn에서 다른 삭제 수단으로 재시도하지 않는다.
+- outbound result ZIP은 필수다. `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`에 따라 folder 완성 후 adjacent ZIP을 생성·검증하며 folder와 ZIP 경로를 모두 보고한다. 실패는 `ZIP_EXPORT_FAILED`다.
+- 자세한 bootstrap STOP와 cleanup 경계는 `.aiassistant/records/command-center/COMMAND_CENTER_WORKFLOW.md`를 따른다.
 
-.aiassistant/tasks/active/<task-file>.md
-
-작업 전 이 파일을 읽고 이번 턴의 기준으로 삼아라.
-
-repository-root instruction entrypoint는 thin transport bootstrap이며 project policy authority가 아니다.
-Project Rules UI 또는 automatic retrieval만으로 canonical rule body가 Agent context에 전달됐다고 가정하지 마라.
-
-자동 발견된 instructions, Task File이 지정한 canonical sources, current source, accepted evidence가 충돌하면 구현하지 말고 conflict investigation으로 보고하라.
-
-Task File의 읽을 문서 목록은 minimum authoritative context set이다.
-exact path를 직접 읽고 unrelated rules/records/source/logs를 bulk-read하지 마라.
-
-.aiassistant에는 tracked governance provenance와 ignored temporary artifacts가 함께 존재한다.
-product source, governance/provenance, repository configuration 변경을 보고서에서 분리하라.
-
-Task File의 evidence contract가 executor_required, reuse_allowed, human_owned, not_required, forbidden 범위를 결정한다.
-Agent claim을 evidence로 과장하지 말고, human_owned verification을 완료했다고 주장하지 마라.
-
-빈 report 항목을 채우기 위해 DB, HTTP runtime, browser, network, credential, full suite 또는 비목표 evidence를 추가 수집하지 마라.
-새 환경이나 비목표 검증이 필요하면 EVIDENCE_SCOPE_EXPANSION_REQUIRED로 중단하라.
-
-named blocker 이후에는 blocker를 입증하는 최소 evidence, workspace inventory, report/export와 안전한 종료만 수행하라.
-
-report/export는 아래 canonical rules를 따른다.
-
-- .aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md
-- .aiassistant/rules/IDE_EXECUTOR_ASSET_GIT_AND_ENCODING_POLICY.md
-
-Target bundle:
-.aiassistant/reports/target/YYYYMMDD_HHmm_<safe-slug>/
-```
+아래 추가 문구는 필요한 좁은 예외에서만 사용한다. 기본 Short Prompt를 장문 Task 복제본으로 확장하지 않는다.
 
 ## 5. 문서 기준선 작업 추가 문구
 

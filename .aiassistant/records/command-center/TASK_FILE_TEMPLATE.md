@@ -22,7 +22,7 @@ YYYYMMDD_HHmm_<safe-slug>.md
 
 ## 2. template
 
-```markdown
+````markdown
 # 작업지시서: <작업명>
 
 ## meta
@@ -101,8 +101,27 @@ forbidden_actions:
 - issued_artifacts: NONE / TASK / CYCLE / JUDGMENT / HANDOFF 중 현재 존재하는 subset
 - delivery_package: NONE / ONE_FLAT_ZIP
 - source_root: `C:\Users\oracl\Downloads` / NOT_APPLICABLE
-- artifact_prerequisites: <exact filename / expected SHA-256 / canonical destination or NOT_APPLICABLE>
-- substantive_task_after_transport: <exact path or NOT_APPLICABLE>
+- delivery_zip_filename: <exact ZIP filename>
+- bootstrap_integrity_anchor: <Browser Short Prompt의 expected delivery ZIP SHA-256>
+- task_member_filename: <exact TASK filename>
+- canonical_task_path: `.aiassistant/tasks/active/<TASK filename>`
+
+## issued artifact manifest / transport contract
+
+발행이 관련될 때 exact 상세 계약을 Task 안에 작성한다. Short Prompt에 이 section을 중복 출력하지 않는다. TASK 자신의 whole-file SHA는 요구하지 않으며 verified delivery ZIP hash를 bootstrap anchor로 사용한다.
+
+- issued member별 type / exact filename / expected SHA-256 또는 authoritative hash source / exact canonical destination
+- expected destination state와 differing bytes의 overwrite 허용 여부; differing done predecessor는 덮어쓰지 않음
+- required repository branch / HEAD / tree / index / exact dirty-path set
+- exact allowed actions / evidence / Git allowlist / export contract
+
+Bootstrap: Human은 ZIP만 다운로드한다. Executor가 ZIP hash, archive readability/CRC/member safety를 검증하고 TASK member를 canonical tasks/active에 가장 먼저 직접 배치·검증하여 읽는다. 나머지는 이 manifest를 따라 archive member → exact canonical destination으로 직접 배치한다. 직접 member 배치가 불가능할 때만 package-specific staging을 사용한다.
+
+나머지 artifact의 member 존재 → expected hash → destination 상태 → exact materialization → destination hash equality를 검증한다. member 경로 탈출과 모호한 member를 허용하지 않는다.
+
+TASK 배치 전 ZIP missing/hash mismatch, archive failure, TASK missing/placement failure이면 STOP한다. report/export와 substantive project 작업을 하지 않고 ZIP을 보존하며 Human에게 재다운로드/재배치를 요청한다. canonical 배치 이후 required transport/repository 실패의 exact mandatory stop 규칙은 이 Task에 명시한다.
+
+모든 artifact canonical transport PASS 이후 inbound ZIP/staging cleanup은 terminal outcome과 outbound ZIP 검증 뒤 best effort다. 거절은 `NON_BLOCKING_LOCAL_RESIDUE`로 exact 경로를 기록하고 substantive work/result를 유지한다. 같은 turn의 다른 삭제 수단 재시도와 broad Downloads cleanup은 금지한다.
 
 ## 조사할 source
 
@@ -223,6 +242,8 @@ Required root:
 - changed files preserving project-relative paths
 - `REMOVED_FILES.md` only when deletion exists
 
+Folder 완성 후 인접 `.aiassistant/reports/target/<bundle-name>.zip`을 자동 생성한다. 정확히 하나의 최상위 `<bundle-name>/` 아래 전체 내용과 relative layout을 보존하며 readability/CRC, required root, folder/archive 목록·내용 일치를 검증한다. 원본 folder는 보존한다. 실패는 `ZIP_EXPORT_FAILED`이며 export 완료를 주장하지 않는다. `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`를 따른다.
+
 ## 사람 검증 요구
 
 -
@@ -230,12 +251,12 @@ Required root:
 ## 최종 응답 형식
 
 1. result: completed / blocked / rejected-candidate
-2. target bundle path
+2. target bundle folder path와 검증된 outbound ZIP path
 3. changed files
 4. removed files
 5. human verification
 6. unverified items
-```
+````
 
 ## 3. 작성 규칙
 

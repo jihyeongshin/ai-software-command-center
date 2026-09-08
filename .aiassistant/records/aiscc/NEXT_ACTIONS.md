@@ -29,6 +29,7 @@ P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design → HU
 P1-8 Project Memory and Cycle Admission Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1 → ACCEPTED / CLOSED
 P2-1 Command Center Web UI → ACCEPTED / CLOSED / PERSISTED
+P2-2 Synthetic Demo Repository → ACCEPTED / CLOSED / PERSISTED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -37,7 +38,7 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1 is closed and P2 entry is ready without starting P2:
+accepted. P1, P2-1 and P2-2 are closed; P2-3 is the next executable phase:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -51,7 +52,10 @@ P1 -> ACCEPTED / CLOSED
 P2-1 -> ACCEPTED / CLOSED / PERSISTED
 P2-1 persistence commit -> 1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
 P2 -> IN_PROGRESS
-P2-2 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+P2-2 -> ACCEPTED / CLOSED / PERSISTED
+P2-2 canonical commit -> 05185c57a6265a4002050ce25cdfde3dc87e9779
+P2-3 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+1700 P2-3 source/contract audit -> BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
 ```
 
 1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
@@ -64,12 +68,12 @@ P2-2 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 8. `P1-8 Prerequisite Owner Authority Exact Contract` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 10. `P2-1` — Command Center Web UI (`ACCEPTED / CLOSED / PERSISTED`)
-11. `P2-2` — Synthetic Demo Repository (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`)
-12. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
-13. `P2-4` — Self-Dogfooding Cutover
-14. `P3-1` — Comparative Evaluation
-15. `P3-2` — Public Repository Documentation
-16. `P3-3` — Public Release and Competition Submission
+11. `P2-2` — Synthetic Demo Repository (`ACCEPTED / CLOSED / PERSISTED`)
+12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`); reconciliation 판정 이후 source/contract audit 재시도
+13. `P2-4` — Self-Dogfooding Cutover (`NOT_STARTED`)
+14. `P3-1` — Comparative Evaluation (`NOT_STARTED`)
+15. `P3-2` — Public Repository Documentation (`NOT_STARTED`)
+16. `P3-3` — Public Release and Competition Submission (`NOT_STARTED`)
 
 ## P1-5 terminal evidence
 
@@ -157,33 +161,55 @@ P2:
 IN_PROGRESS
 
 P2-2:
+ACCEPTED / CLOSED / PERSISTED
+
+P2-2 canonical commit:
+05185c57a6265a4002050ce25cdfde3dc87e9779
+
+P2-3:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+
+1700 P2-3 source/contract audit:
+BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
+
+PUBLIC_RECORDED_REPLAY:
+NOT_ADMITTED
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-and P2-1 are closed. P2-2 implementation has not started, and later demo/release verification remains required.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 implementation has not started, and later demo/release verification remains required.
 
 ## current next action
 
 ```text
 phase:
-P2
+P2-3
 
 title:
-P2-2 Synthetic Demo Repository
+P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus
 
 status:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 first subtask:
-issue a separate exact P2-2 Task before any P2-2 execution
+retry the source/contract audit in a separate Task after reconciliation acceptance
 
-pre-step:
-use the terminal P2-1 state and corrected Command Center session/artifact-delivery workflow; do not infer P2-2 started status from entry readiness
+1700 audit:
+BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
+not accepted as a completed audit
+
+P2-4:
+NOT_STARTED
+
+P3:
+NOT_STARTED
 ```
+
+현재 reconciliation Task는 P2-3 audit이나 implementation을 재개하지 않는다.
+상태 근거는 `.aiassistant/records/aiscc/cycles/20260908_1700_aiscc-p2-2-terminal-closure-p2-3-entry-1.cycle.md`와 `.aiassistant/reports/aiscc/20260908_1700_aiscc-p2-2-terminal-closure-judgment-1.md`다.
 
 ## P1-6 outer authority already inherited
 
@@ -271,5 +297,5 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `HUMAN_PROVIDED / ACCEPTED / CLOSED` under the terminal closure authority and must continue to preserve
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
-P1 is `ACCEPTED / CLOSED`; P2-1 is `ACCEPTED / CLOSED / PERSISTED`; P2-2 is
-`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`. Public Bounded Live remains `NOT_RELEASED`.
+P1 is `ACCEPTED / CLOSED`; P2-1 and P2-2 are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
+`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`.
