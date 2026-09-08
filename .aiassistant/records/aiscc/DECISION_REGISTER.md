@@ -791,3 +791,48 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - closure authority Cycle: `.aiassistant/records/aiscc/cycles/20260902_2329_aiscc-p1-8-governance-commit-b-substantive-acceptance-and-terminal-closure-authority-1.cycle.md`
 - next owner: `P2-1 Command Center Web UI`
 - public release: `NOT_RELEASED`
+
+## AISCC-P2-1-TERMINAL-CLOSURE-V1
+
+- decision: P2-1 Command Center Web UI is `ACCEPTED / CLOSED`; its accepted implementation and governance provenance are persisted.
+- decision_status: `HUMAN_PROVIDED / ACCEPTED / CLOSED / PERSISTED`
+- persistence commit: `1fb9fd5e29e85481fa3c6ce78542de1fda6bf138`
+- persistence tree: `eaed171656a15440ea5444ba2d56ac939f625f56`
+- terminal authority: `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`; `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
+- next owner: `P2-2 Synthetic Demo Repository`
+- next state: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
+- public release: `NOT_RELEASED`
+
+## AISCC-COMMAND-CENTER-IDE-FRESH-SESSION-V1
+
+- decision: fresh IDE Executor chat은 universal rule이 아니라 successor Task의 explicit authority/context boundary로 결정하는 task-scoped rule이다.
+- decision_status: `HUMAN_PROVIDED / CANONICALIZED`
+- required behavior: `REQUIRED`이면 Browser Command Center가 Short Prompt 위에 `이번 작업은 IDE Executor에서 새 채팅세션을 열고 시작해야 합니다.`와 짧은 이유를 표시한다.
+- human boundary: 새 IDE chat은 Human이 연다. Short Prompt는 IDE Executor에게 chat을 생성하거나 열라고 지시하지 않는다.
+- provenance: `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`; `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
+- implementation_status: Command Center workflow/templates에 반영
+- supersession_rule: 모든 Task transition에 fresh IDE chat을 자동 강제하지 않는다. 변경에는 explicit Human/Command Center workflow decision이 필요하다.
+
+## AISCC-COMMAND-CENTER-BROWSER-SESSION-BOUNDARY-V1
+
+- decision: IDE fresh-session requirement, Browser Command Center rotation, Cycle issuance, Handoff issuance는 서로 독립적인 결정이다.
+- decision_status: `HUMAN_PROVIDED / CANONICALIZED`
+- superseded rule: `every substantive Executor-bundle judgment → Cycle + Handoff → mandatory new Browser Command Center session`
+- superseded_status: `SUPERSEDED / INVALID_GENERALIZATION`
+- active rule: Browser Handoff/session migration은 explicit Human request, phase/context migration의 authority ambiguity, material context exhaustion/unsafe continuation, 또는 다른 explicit Browser-session boundary가 있을 때만 사용한다.
+- inference guard: `cycle_record_action=create`만으로 Browser rotation이나 Handoff를 추론하지 않는다.
+- provenance: `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`; `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
+- supersession_rule: Browser sessions를 절대 rotate하지 않는 정책으로 재해석하지 않는다. 실제 boundary를 바꾸려면 explicit workflow decision이 필요하다.
+
+## AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-V1
+
+- decision: Command Center가 `TASK / CYCLE / JUDGMENT / HANDOFF` 중 존재하는 artifact를 발행하면 issued artifact만 담은 하나의 flat ZIP과 exact filename/hash/destination/transport Short Prompt를 같은 Browser turn에 제공한다.
+- decision_status: `HUMAN_PROVIDED / CANONICALIZED`
+- human action: ZIP download, `C:\Users\oracl\Downloads` flat extract, 필요 시 fresh IDE chat open, Short Prompt 전달.
+- executor action: issued source 존재와 expected SHA-256 확인, canonical destination 검사, hash-aware copy/overwrite, source/destination equality 확인, equality가 확인된 flat source만 Downloads에서 제거.
+- overwrite boundary: current Command Center package가 exact하게 발행한 파일에만 허용한다.
+- exclusions: ZIP은 제거하지 않고 absent artifact type을 생성하지 않으며 package에 없는 Downloads 파일을 읽거나 이동하거나 삭제하지 않는다.
+- failure semantics: source/hash/path/copy/overwrite/post-copy equality/transport ambiguity failure는 substantive Task 실행 전 STOP이다.
+- rationale: Human의 canonical file 배치 실수로 인한 `MISSING_REQUIRED_ARTIFACT`와 wrong-path blocker를 방지한다.
+- provenance: `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`; `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
+- supersession_rule: source root, canonical mappings, hash verification, cleanup 또는 stop semantics를 바꾸려면 explicit workflow decision이 필요하다.

@@ -20,8 +20,11 @@ Browser Command Center가 장문 chat instruction에 의존하지 않고 Task Co
 사람 토의 / 요구 정리
 → Command Center가 work type과 authority gap 분류
 → Task File 생성
-→ 사람이 Task File을 `.aiassistant/tasks/active/`에 배치
-→ 짧은 executor prompt 전달
+→ Command Center가 현재 발행 artifact만 담은 flat ZIP과 Short Prompt 제공
+→ 사람이 ZIP을 `C:\Users\oracl\Downloads`에 flat 압축해제
+→ fresh IDE chat이 요구되면 사람이 새 IDE chat을 엶
+→ Executor가 issued artifact를 canonical destination으로 transport하고 hash 검증
+→ transport PASS 뒤 Task File을 읽음
 → IDE Executor가 task-listed canonical source를 읽음
 → source 변경 / 검증 / report / temporary target bundle 생성
 → Task File을 `.aiassistant/tasks/done/`으로 이동
@@ -37,14 +40,64 @@ Self-dogfooding cutover 뒤에는 일부 단계가 AISCC runtime으로 자동화
 
 ## 3. task-generation output contract
 
-Command Center가 Task File을 발행하면 Browser chat에는 기본적으로 다음만 제공한다.
+Command Center가 Task File을 발행하면 Browser chat에는 기본적으로 다음을 제공한다.
 
-1. Task File download link
-2. repository active path
-3. short executor prompt
-4. 중요한 주의사항 1~3줄
+1. 현재 발행 artifact만 포함한 flat ZIP download link
+2. issued artifact별 exact filename과 SHA-256
+3. source root와 exact canonical destination
+4. transport-first Short Prompt와 substantive Task path
+5. 중요한 주의사항 1~3줄
 
 Task 전문은 `.md` artifact에 둔다. 사용자가 전문 출력을 명시적으로 요구한 경우에만 chat에 출력한다.
+
+### 3.1 IDE Executor fresh-session decision
+
+fresh IDE Executor chat은 task-scoped decision이다. Command Center는 explicit authority/context boundary가 있을 때만 `REQUIRED`를 선택하고 이유를 남긴다. 모든 Task transition에서 freshness를 자동 추론하지 않는다.
+
+`REQUIRED`이면 Browser response는 Short Prompt 위에 다음 Human-visible 문장과 짧은 이유를 표시한다.
+
+```text
+이번 작업은 IDE Executor에서 새 채팅세션을 열고 시작해야 합니다.
+```
+
+Human이 새 IDE chat을 연다. Short Prompt는 IDE Executor에게 chat을 만들거나 열라고 지시해서는 안 된다.
+
+### 3.2 Browser session과 Handoff boundary
+
+```text
+fresh IDE Executor session != fresh Browser Command Center session
+Cycle issuance != Browser session termination
+Handoff issuance != mandatory after every substantive judgment
+```
+
+다음 generalized rule은 `SUPERSEDED / INVALID_GENERALIZATION`이다.
+
+```text
+every substantive Executor-bundle judgment
+→ Cycle + Handoff
+→ mandatory new Browser Command Center session
+```
+
+Browser Handoff/session migration은 explicit Human request, phase/context migration으로 인한 authority ambiguity, material context exhaustion/unsafe continuation, 또는 Human/Command Center가 선택한 다른 explicit Browser-session boundary가 실제로 있을 때만 사용한다. 일반 standard cycle과 `cycle_record_action=create`는 Browser rotation을 자동 발생시키지 않는다.
+
+### 3.3 artifact delivery와 Executor transport
+
+Command Center가 `TASK / CYCLE / JUDGMENT / HANDOFF` 중 어떤 subset을 발행하든, 같은 Browser turn은 존재하는 issued artifact만 담은 하나의 flat ZIP을 제공한다. absent artifact type은 생성하지 않는다.
+
+Human은 ZIP을 내려받아 `C:\Users\oracl\Downloads`에 flat 압축해제하고, 필요한 경우 새 IDE chat을 연 뒤 Short Prompt를 전달한다. Short Prompt는 artifact별 exact filename, expected SHA-256, source root, exact canonical destination, 아래 algorithm, stop semantics, transport PASS 후 읽을 substantive Task path를 포함한다.
+
+Canonical destination:
+
+```text
+TASK     → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\tasks\active\
+CYCLE    → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\records\aiscc\cycles\
+JUDGMENT → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\reports\aiscc\
+HANDOFF  → C:\Users\oracl\IdeaProjects\ai-software-command-center\.aiassistant\reports\aiscc\
+```
+
+Executor는 issued artifact마다 source 존재와 expected SHA-256을 먼저 확인하고 canonical destination을 검사한다. destination이 없으면 byte-preserving copy 후 source/destination hash equality를 요구한다. destination이 있으면 기존 hash를 먼저 계산하여 같을 때 overwrite하지 않고, 다를 때만 current issued source로 overwrite한 뒤 equality를 다시 요구한다. equality가 확인된 artifact의 flat Downloads source만 제거하며 ZIP은 제거하지 않는다.
+
+이 hash-aware overwrite는 current package가 exact하게 발행한 파일에만 적용한다. source missing, expected hash mismatch, destination/copy/overwrite failure, post-copy hash mismatch, ambiguous result가 하나라도 있으면 substantive Task 실행 전에 STOP한다. 목적은 Human의 canonical file 배치 실수가 missing-artifact 또는 wrong-path blocker를 만드는 것을 방지하는 것이다.
 
 ## 4. instruction transport contract
 

@@ -142,7 +142,19 @@ ACCEPTED_PENDING_SOURCE_MIRROR_SYNC
 - `.gitignore` 변경이 task 범위 밖임
 - generated target/bundle이 product change로 보고됨
 
-## 11. cycle record action
+## 11. successor session / Handoff decision
+
+다음 세 field를 judgment마다 명시한다.
+
+- `fresh_ide_executor_chat_for_successor`: `REQUIRED / NOT_REQUIRED`
+- `browser_session_action`: `CONTINUE_CURRENT_BROWSER_SESSION / ROTATE_BROWSER_SESSION`
+- `handoff_required`: `Yes / No`
+
+fresh IDE decision은 successor Task의 explicit authority/context boundary로 판단한다. `REQUIRED`이면 Browser response가 Short Prompt 위에서 Human에게 exact fresh-chat notice와 이유를 표시하는지 확인한다. Human이 새 IDE chat을 열며 Short Prompt는 Executor에게 chat 생성을 지시하지 않는다.
+
+Browser rotation과 Handoff는 실제 Browser-session boundary가 있을 때만 선택한다. Cycle 생성 자체는 Browser session termination이나 Handoff 요구의 근거가 아니다.
+
+## 12. cycle record action
 
 `create`:
 
@@ -169,7 +181,9 @@ ACCEPTED_PENDING_SOURCE_MIRROR_SYNC
 - terminal judgment 전 중간 질문
 - 저장할 evidence가 불충분
 
-## 12. result 출력 template
+`cycle_record_action=create`에서 `browser_session_action` 또는 `handoff_required`를 자동 추론하지 않는다.
+
+## 13. result 출력 template
 
 ```markdown
 판정: <result_status>
@@ -180,6 +194,9 @@ cycle_record_action: create / update / skip
 cycle_record_path: .aiassistant/records/aiscc/cycles/<cycle>.cycle.md or none
 source_mirror_sync: not-required / pending / confirmed
 execution_mode: MANUAL_COMMAND_CENTER / AISCC_SELF_DOGFOOD
+fresh_ide_executor_chat_for_successor: REQUIRED / NOT_REQUIRED
+browser_session_action: CONTINUE_CURRENT_BROWSER_SESSION / ROTATE_BROWSER_SESSION
+handoff_required: Yes / No
 
 accepted scope:
 -

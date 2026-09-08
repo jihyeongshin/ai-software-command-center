@@ -20,13 +20,23 @@
 
 ```text
 Task File
+→ issued artifact flat ZIP / Short Prompt
+→ Downloads transport verification
 → Executor Report / temporary target bundle
 → Command Center Judgment
 → Curated Cycle Record
 → Stable Next Action
 ```
 
-장문 지시는 Task File에 두고 Browser chat에는 download link, active path, short prompt, 핵심 주의사항만 둔다.
+장문 지시는 Task File에 둔다. Command Center가 `TASK / CYCLE / JUDGMENT / HANDOFF` 중 존재하는 artifact를 발행하면 해당 파일만 담은 하나의 flat ZIP과 exact filename/hash/destination을 포함한 Short Prompt를 같은 Browser turn에 제공한다.
+
+fresh IDE Executor chat은 모든 Task에 자동 적용하지 않는다. explicit authority/context boundary가 있을 때 Command Center가 Task별로 결정하고, 필요하면 Short Prompt 위에서 Human에게 다음 문장을 이유와 함께 표시한다.
+
+```text
+이번 작업은 IDE Executor에서 새 채팅세션을 열고 시작해야 합니다.
+```
+
+새 IDE chat은 Human이 연다. Short Prompt는 IDE Executor에게 chat을 만들거나 열라고 지시하지 않는다. 이 결정은 Browser Command Center session과 독립적이며, Cycle 발행은 Browser session 종료를 뜻하지 않고 Handoff도 모든 substantive judgment 뒤의 필수 artifact가 아니다.
 
 ## 3. 파일 역할
 

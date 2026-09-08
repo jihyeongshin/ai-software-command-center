@@ -30,8 +30,10 @@
 | P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
 | P1-8 Project Memory and Cycle Admission Runtime | `HUMAN_PROVIDED / ACCEPTED / CLOSED` |
+| P2-1 Command Center Web UI | `ACCEPTED / CLOSED / PERSISTED` |
+| P2-2 Synthetic Demo Repository | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
 
-## P1 terminal closure and P2 entry state
+## P1 closure, P2-1 terminal closure, and P2-2 entry state
 
 The Browser Command Center-authorized terminal state is:
 
@@ -53,11 +55,17 @@ COMPLETED
 P1:
 ACCEPTED / CLOSED
 
-P2:
-NOT_STARTED / ENTRY_READY
+P2-1:
+ACCEPTED / CLOSED
 
-next executable:
-P2-1 Command Center Web UI
+P2-1 persistence commit:
+1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
+
+P2:
+IN_PROGRESS
+
+P2-2:
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
@@ -66,6 +74,23 @@ NOT_RELEASED
 Closure authority:
 
 `.aiassistant/records/aiscc/cycles/20260902_2329_aiscc-p1-8-governance-commit-b-substantive-acceptance-and-terminal-closure-authority-1.cycle.md`
+
+P2-1 terminal authority:
+
+- `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
+
+Current governance prerequisite before P2-2 execution:
+
+```text
+Command Center workflow correction:
+READY_FOR_BROWSER_COMMAND_CENTER_JUDGMENT
+
+P2-2 execution:
+NOT_STARTED
+```
+
+The correction canonicalizes task-scoped fresh IDE sessions, conditional Browser session/Handoff boundaries, and flat ZIP artifact transport through `C:\Users\oracl\Downloads` before substantive Task execution.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -914,8 +939,10 @@ Terminal Cycle:
 - P1-8 prerequisite design blocker: `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`
 - P1-8 Runtime: `HUMAN_PROVIDED / ACCEPTED / CLOSED`
 - historical pre-acceptance P1-8 runtime candidate: `19 paths / 84641ac35f7384e18faa086be249c36094eed1e4650550c6607ba0c57d1cfd42`
-- P2: `NOT_STARTED / ENTRY_READY`
-- next executable: `P2-1 Command Center Web UI`
+- P2: `IN_PROGRESS`
+- P2-1 Command Center Web UI: `ACCEPTED / CLOSED / PERSISTED`
+- P2-1 persistence commit: `1fb9fd5e29e85481fa3c6ce78542de1fda6bf138`
+- P2-2 Synthetic Demo Repository: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
 
 ## non-substitution statement
 

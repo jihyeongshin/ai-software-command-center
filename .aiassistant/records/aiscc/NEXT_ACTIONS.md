@@ -28,6 +28,7 @@ P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision → HUMAN_PROVIDED 
 P1-8 Prerequisite Owner Authority Exact-Contract/Source-Enrollment Design → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1-8 Project Memory and Cycle Admission Runtime → HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1 → ACCEPTED / CLOSED
+P2-1 Command Center Web UI → ACCEPTED / CLOSED / PERSISTED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -47,8 +48,10 @@ P1-8 prerequisite owner-authority exact-contract/source-enrollment design -> HUM
 P1-8 prerequisite design blocker -> CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN
 P1-8 Runtime -> HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1 -> ACCEPTED / CLOSED
-P2 -> NOT_STARTED / ENTRY_READY
-next executable -> P2-1 Command Center Web UI
+P2-1 -> ACCEPTED / CLOSED / PERSISTED
+P2-1 persistence commit -> 1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
+P2 -> IN_PROGRESS
+P2-2 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 ```
 
 1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
@@ -60,8 +63,8 @@ next executable -> P2-1 Command Center Web UI
 7. `P1-8 NEXT_ACTION_CONTEXT Source Authority Corrected Revision` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 8. `P1-8 Prerequisite Owner Authority Exact Contract` (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
-10. `P2-1` — Command Center Web UI (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`)
-11. `P2-2` — Synthetic Demo Repository
+10. `P2-1` — Command Center Web UI (`ACCEPTED / CLOSED / PERSISTED`)
+11. `P2-2` — Synthetic Demo Repository (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`)
 12. `P2-3` — Canonical Scenario Pack and Recorded Replay Corpus
 13. `P2-4` — Self-Dogfooding Cutover
 14. `P3-1` — Comparative Evaluation
@@ -144,33 +147,42 @@ HUMAN_PROVIDED / ACCEPTED / CLOSED
 P1:
 ACCEPTED / CLOSED
 
+P2-1:
+ACCEPTED / CLOSED / PERSISTED
+
+P2-1 persistence commit:
+1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
+
 P2:
-NOT_STARTED / ENTRY_READY
+IN_PROGRESS
+
+P2-2:
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 ```
 
-The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime and P1
-are closed. P2 implementation has not started, and later demo/release verification remains required.
+The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
+and P2-1 are closed. P2-2 implementation has not started, and later demo/release verification remains required.
 
 ## current next action
 
 ```text
 phase:
-P2 Entry
+P2
 
 title:
-P2-1 Command Center Web UI
+P2-2 Synthetic Demo Repository
 
 status:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 first subtask:
-issue a separate exact P2-1 design/implementation Task before any P2 execution
+issue a separate exact P2-2 Task before any P2-2 execution
 
 pre-step:
-use the terminal P1 canonical state and phase handoff; do not infer P2 started status from entry readiness
+use the terminal P2-1 state and corrected Command Center session/artifact-delivery workflow; do not infer P2-2 started status from entry readiness
 ```
 
 ## P1-6 outer authority already inherited
@@ -259,5 +271,5 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `HUMAN_PROVIDED / ACCEPTED / CLOSED` under the terminal closure authority and must continue to preserve
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
-P1 is `ACCEPTED / CLOSED`; P2 is `NOT_STARTED / ENTRY_READY`; the next executable is
-`P2-1 Command Center Web UI`. Public Bounded Live remains `NOT_RELEASED`.
+P1 is `ACCEPTED / CLOSED`; P2-1 is `ACCEPTED / CLOSED / PERSISTED`; P2-2 is
+`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`. Public Bounded Live remains `NOT_RELEASED`.

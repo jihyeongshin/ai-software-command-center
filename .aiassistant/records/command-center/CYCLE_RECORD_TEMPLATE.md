@@ -53,6 +53,10 @@ Cycle은 accepted-only 기록이 아니다.
 - reject_cause:
 - cycle_record_action:
 - source_mirror_sync: not-required / pending / confirmed
+- fresh_ide_executor_chat_for_successor: REQUIRED / NOT_REQUIRED
+- fresh_ide_executor_chat_reason: <reason or none>
+- browser_session_action: CONTINUE_CURRENT_BROWSER_SESSION / ROTATE_BROWSER_SESSION
+- handoff_required: Yes / No
 - canonical_cycle_path:
 
 ## product/repository snapshot
@@ -65,6 +69,19 @@ Cycle은 accepted-only 기록이 아니다.
 - workspace_after:
 
 ## command summary
+
+## Command Center artifact transport
+
+- applicability: NOT_APPLICABLE / REQUIRED
+- issued_artifacts: <TASK / CYCLE / JUDGMENT / HANDOFF subset or none>
+- flat_zip_provided: Yes / No / NOT_APPLICABLE
+- source_root: `C:\Users\oracl\Downloads` / NOT_APPLICABLE
+- expected_hash_verification: PASS / FAIL / NOT_APPLICABLE
+- destination_hash_verification: PASS / FAIL / NOT_APPLICABLE
+- downloads_flat_source_cleanup: PASS / FAIL / NOT_APPLICABLE
+- zip_cleanup: NOT_RUN
+- transport_result: PASS / STOP / NOT_APPLICABLE
+- substantive_execution_started_after_pass: Yes / No / NOT_APPLICABLE
 
 ## task contract summary
 
@@ -266,3 +283,5 @@ next_action:
 - rejected/blocked/hold도 다음 판단에 영향을 주면 기록한다.
 - self-dogfooding은 execution mode와 transition trace를 반드시 남긴다.
 - 민감정보, token, credential, private source를 public Cycle에 넣지 않는다.
+- fresh IDE successor decision, Browser session action, Handoff requirement를 서로 독립적으로 기록한다.
+- Cycle 생성만으로 Browser rotation 또는 Handoff를 추론하지 않는다.

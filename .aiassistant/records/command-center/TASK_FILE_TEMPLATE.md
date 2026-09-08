@@ -34,6 +34,10 @@ YYYYMMDD_HHmm_<safe-slug>.md
 - execution_mode: MANUAL_COMMAND_CENTER / AISCC_SELF_DOGFOOD
 - expected_orchestrator_version_or_commit: NOT_APPLICABLE / <value>
 - primary_semantic_owner:
+- fresh_ide_executor_chat: REQUIRED / NOT_REQUIRED
+- fresh_ide_executor_chat_reason: <reason or none>
+- browser_session_action: CONTINUE_CURRENT_BROWSER_SESSION / ROTATE_BROWSER_SESSION / NOT_APPLICABLE
+- handoff_required: Yes / No
 
 ## 현재 상태
 
@@ -85,6 +89,20 @@ forbidden_actions:
 - unrelated rules/records/source/logs를 bulk-read하지 않는다.
 - active Task File, canonical rule, current source, accepted evidence가 충돌하면 구현을 중단하고 conflict investigation으로 보고한다.
 - human-owned evidence를 executor-completed로 주장하지 않는다.
+
+## session / delivery boundary
+
+이 section은 session 또는 issued artifact transport가 실제로 관련될 때만 채운다.
+
+- fresh IDE chat은 explicit authority/context boundary가 있을 때만 `REQUIRED`다.
+- `REQUIRED`이면 Browser response가 Short Prompt 위에서 Human에게 exact notice와 이유를 표시하고 Human이 새 chat을 연다.
+- Short Prompt는 IDE Executor에게 chat을 만들거나 열라고 지시하지 않는다.
+- fresh IDE session, Browser session rotation, Cycle issuance, Handoff issuance를 서로 자동 연동하지 않는다.
+- issued_artifacts: NONE / TASK / CYCLE / JUDGMENT / HANDOFF 중 현재 존재하는 subset
+- delivery_package: NONE / ONE_FLAT_ZIP
+- source_root: `C:\Users\oracl\Downloads` / NOT_APPLICABLE
+- artifact_prerequisites: <exact filename / expected SHA-256 / canonical destination or NOT_APPLICABLE>
+- substantive_task_after_transport: <exact path or NOT_APPLICABLE>
 
 ## 조사할 source
 
@@ -227,3 +245,4 @@ Required root:
 - predecessor evidence는 provenance와 changed-path 적용 조건이 맞을 때만 재사용한다.
 - 작은 task에 불필요한 owner/invariant를 강제하지 않는다.
 - self-dogfooding task도 일반 accept/reject 기준을 우회하지 않는다.
+- simple Task에서 의미 없는 session/delivery field를 억지로 확장하지 않고 `NOT_APPLICABLE` 또는 section 생략을 사용한다.
