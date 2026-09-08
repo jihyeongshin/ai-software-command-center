@@ -1,0 +1,5 @@
+[
+  {"sku":"BOX-A","on_hand":12,"reserved":2,"reorder_level":3},
+  {"sku":"BOX-B","on_hand":5,"reserved":5,"reorder_level":2},
+  {"sku":"BOX-C","on_hand":4,"reserved":1,"reorder_level":3}
+]
