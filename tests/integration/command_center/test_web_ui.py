@@ -228,6 +228,7 @@ def test_ui_mutation_methods_are_rejected_with_security_boundary() -> None:
         "/command-center",
         "/command-center/projects/project-ui",
         "/command-center/work-runs/run-ui-1",
+        "/command-center/cycles/cycle-ui-1",
         "/command-center/assets/app.css",
         "/command-center/assets/app.js",
     )
@@ -340,6 +341,116 @@ def test_detail_read_endpoints_have_independent_etags_and_empty_states() -> None
     ]
 
 
+def test_cycle_shell_is_query_free_and_project_integration_uses_local_assets() -> None:
+    queries = QueueQuerySpy()
+    with TestClient(create_app(cast(CommandCenterQueries, queries))) as client:
+        cycle = client.get("/command-center/cycles/cycle-ui-1")
+        project = client.get("/command-center/projects/project-ui")
+        script = client.get("/command-center/assets/app.js")
+    assert cycle.status_code == project.status_code == script.status_code == 200
+    assert queries.calls == queries.detail_calls == []
+    assert 'data-cycle-id="cycle-ui-1"' in cycle.text
+    assert "Cycle 계보" in cycle.text
+    assert 'id="cycle-content"' in cycle.text
+    assert 'id="next-action-content"' in project.text
+    assert 'id="outcomes-content"' in project.text
+    assert "현재 프로젝트 메모리 맥락" in script.text
+    assert 'readLink("cycles", cycle.cycle_id' in script.text
+    _assert_security_headers(cycle, html=True)
+    _assert_security_headers(project, html=True)
+
+
+def _assert_cycle_next_action_runtime(
+    server: _DefaultEntrypointServer, seeded: dict[str, str]
+) -> dict[str, Any]:
+    """Exercise existing normal-entrypoint harness; return only safe evidence metadata."""
+    project_id = seeded["project_id"]
+    cycle_id = seeded["cycle_id"]
+    observations: dict[str, Any] = {"project_id": project_id, "cycle_id": cycle_id, "reads": []}
+    for path in (
+        "/command-center",
+        f"/command-center/projects/{project_id}",
+        f"/command-center/cycles/{cycle_id}",
+    ):
+        status, headers, body = server.request(path)
+        assert status == 200
+        assert b'<html lang="ko">' in body
+        assert headers["x-aiscc-exposure"] == "LOCAL_PRIVATE_ONLY"
+        assert "unsafe-inline" not in headers["content-security-policy"]
+        observations["reads"].append({"path": path, "status": status})
+    script_status, _, script = server.request("/command-center/assets/app.js")
+    assert script_status == 200
+    assert b'readLink("cycles", cycle.cycle_id' in script
+    assert b'nextActionSection.read(projectApi + "/next-action")' in script
+    api_paths = {
+        "outcomes": f"/v1/command-center/projects/{project_id}/outcomes",
+        "cycle": f"/v1/command-center/cycles/{cycle_id}",
+        "next_action": f"/v1/command-center/projects/{project_id}/next-action",
+    }
+    payloads: dict[str, Any] = {}
+    for key, path in api_paths.items():
+        status, headers, body = server.request(path)
+        assert status == 200
+        assert headers["x-aiscc-exposure"] == "LOCAL_PRIVATE_ONLY"
+        assert "etag" in headers
+        assert b"DO_NOT_EXPORT" not in body
+        payloads[key] = json.loads(body)["data"]
+        unchanged = server.request(path, headers={"If-None-Match": headers["etag"]})
+        assert unchanged[0] == 304 and unchanged[2] == b""
+        # Query rejection is a read-only failure hook; subsequent read must recover.
+        invalid_status, _, invalid_body = server.request(path + "?unexpected=1")
+        assert invalid_status == 400
+        assert json.loads(invalid_body)["error"]["code"] == "INVALID_QUERY"
+        recovery_status, recovery_headers, recovery_body = server.request(path)
+        assert recovery_status == 200
+        assert json.loads(recovery_body)["data"] == payloads[key]
+        assert recovery_headers["etag"] == headers["etag"]
+        assert server.request(path, headers={"If-None-Match": headers["etag"]})[0] == 304
+        observations["reads"].append({
+            "path": path, "status": status, "own_etag_status": unchanged[0],
+            "failure_status": invalid_status, "recovery_status": recovery_status,
+            "recovery_data_equal": True, "recovery_etag_equal": True,
+        })
+    outcomes = payloads["outcomes"]["items"]
+    admitted = next(item for item in outcomes if item["work_run_id"] == seeded["accepted_run_id"])
+    assert admitted["admitted_cycle"]["presence"] == "PRESENT"
+    assert admitted["admitted_cycle"]["cycle_id"] == cycle_id
+    assert admitted["admitted_cycle"]["cycle_ref"] == payloads["cycle"]["cycle_ref"]
+    assert any(item["admitted_cycle"]["presence"] == "NONE" for item in outcomes)
+    assert payloads["cycle"]["project_id"] == project_id
+    assert payloads["cycle"]["work_run_id"] == seeded["accepted_run_id"]
+    assert payloads["cycle"]["current_memory"][0]["applicability"] == "CURRENT"
+    assert payloads["next_action"]["selection"]["selection_id"] == seeded["selection_id"]
+    assert payloads["next_action"]["task_issuance_candidate"]["presence"] == "PRESENT"
+    for path in (
+        "/v1/command-center/cycles/missing-p2-1e-cycle",
+        "/v1/command-center/projects/missing-p2-1e-project/next-action",
+    ):
+        status, _, body = server.request(path)
+        assert status == 404 and json.loads(body)["error"]["code"] == "NOT_FOUND"
+        observations["reads"].append({"path": path, "status": status})
+    for path in (f"/command-center/cycles/{cycle_id}", *api_paths.values()):
+        for method in ("POST", "PUT", "PATCH", "DELETE"):
+            assert server.request(path, method=method)[0] == 405
+    # Exercise the accepted cursor and follow-on page without inventing IDs.
+    first_path = api_paths["outcomes"] + "?limit=1"
+    status, _, body = server.request(first_path)
+    assert status == 200
+    first = json.loads(body)
+    assert len(first["data"]["items"]) == 1
+    cursor = first["meta"]["next_cursor"]
+    assert cursor is not None
+    from urllib.parse import quote
+
+    status, _, body = server.request(first_path + "&cursor=" + quote(cursor, safe=""))
+    assert status == 200
+    assert json.loads(body)["data"]["items"][0] != first["data"]["items"][0]
+    observations["outcome_navigation_ref_match"] = True
+    observations["outcome_pagination"] = "PASS"
+    observations["write_methods"] = "405"
+    return observations
+
+
 @pytest.mark.postgres
 def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
     database_url = os.environ.get("AISCC_TEST_DATABASE_URL")
@@ -351,6 +462,7 @@ def test_default_entrypoint_ui_queue_etag_and_event_no_mutation() -> None:
     before = run(_event_counts(database_url, project_id))
 
     with _DefaultEntrypointServer(database_url) as server:
+        _assert_cycle_next_action_runtime(server, seeded)
         ui_paths = (
             "/command-center",
             f"/command-center/projects/{project_id}",

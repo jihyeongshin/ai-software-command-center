@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse
 from aiscc.command_center.web import (
     APP_CSS,
     APP_JS,
+    render_cycle_page,
     render_landing_page,
     render_project_page,
     render_work_run_page,
@@ -13,6 +14,11 @@ from aiscc.command_center.web import (
 )
 
 router = APIRouter(tags=["command-center-ui"])
+
+
+@router.get("/command-center/cycles/{cycle_id}", response_class=HTMLResponse)
+async def command_center_cycle(cycle_id: str) -> HTMLResponse:
+    return HTMLResponse(render_cycle_page(cycle_id), headers=security_headers(html=True))
 
 
 @router.get("/command-center", response_class=HTMLResponse)

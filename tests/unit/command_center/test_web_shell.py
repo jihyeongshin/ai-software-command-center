@@ -18,6 +18,7 @@ def test_exact_ui_route_set_is_get_only_and_includes_work_run_detail() -> None:
         "/command-center": {"GET"},
         "/command-center/projects/{project_id}": {"GET"},
         "/command-center/work-runs/{work_run_id}": {"GET"},
+        "/command-center/cycles/{cycle_id}": {"GET"},
         "/command-center/assets/app.css": {"GET"},
         "/command-center/assets/app.js": {"GET"},
     }
@@ -46,6 +47,120 @@ def test_shell_is_static_and_project_navigation_encodes_the_known_id() -> None:
     assert ".work_run(" not in route_source
     assert ".transitions(" not in route_source
     assert ".execution(" not in route_source
+
+
+def test_cycle_shell_and_project_sections_keep_safe_distinct_read_authorities() -> None:
+    cycle = web.render_cycle_page('cycle-1"><script>unsafe</script>')
+    project = web.render_project_page("project-1")
+    assert '<html lang="ko">' in cycle
+    assert '<script>unsafe</script>' not in cycle
+    assert 'data-page="cycle-detail"' in cycle
+    assert 'id="cycle-refresh-button"' in cycle
+    assert 'id="cycle-state"' in cycle
+    assert "저장소 Markdown Cycle 문서와는 별도" in cycle
+    assert 'id="next-action-content"' in project
+    assert 'id="outcomes-content"' in project
+    assert project.index('id="queue-list"') < project.index('id="next-action-content"')
+    assert "Task 발행 후보" in project
+    assert "REFERENCE_ONLY" in project
+    source = web.APP_JS
+    cycle_source = source.split("function renderCycle", 1)[1].split(
+        'if (page === "work-run-detail")', 1
+    )[0]
+    assert "현재 프로젝트 메모리 맥락 · 과거 Cycle 결과와 별개" in cycle_source
+    for field in (
+        "cycle_id", "cycle_version", "cycle_ref", "cycle_fingerprint", "project_id",
+        "work_run_id", "task_contract", "terminal_state_version", "transition_decision_id",
+        "judgment_ref", "evidence_attestation_ref", "evidence_root", "admission_sequence",
+        "admitted_at", "task_constraint", "current_memory",
+    ):
+        assert f"data.{field}" in cycle_source
+    assert "setTimeout" not in cycle_source
+    assert "visibilitychange" not in cycle_source
+    assert '"/v1/command-center/cycles/"' in cycle_source
+    assert 'readLink("projects", data.project_id' in cycle_source
+    assert 'readLink("work-runs", data.work_run_id' in cycle_source
+    project_source = source.split("function renderNextAction", 1)[1].split(
+        "projectLabel.textContent", 1
+    )[0]
+    assert "data.projection" in project_source
+    assert "data.selection" in project_source
+    assert "data.task_issuance_candidate" in project_source
+    assert '"required_post_issuance_human_input"' in project_source
+    assert 'const cycle = item.admitted_cycle' in project_source
+    assert 'cycle.presence === "PRESENT"' in project_source
+    assert 'typeof cycle.cycle_id === "string" && cycle.cycle_id.trim()' in project_source
+    assert 'readLink("cycles", cycle.cycle_id, "Cycle 계보 보기")' in project_source
+    for forbidden in (
+        "innerHTML", "insertAdjacentHTML", "eval(", "new Function", ".canonical_body",
+        ".private_comment_ref", ".rationale", ".storage_ref", ".commit_hash",
+    ):
+        assert forbidden not in source
+
+
+def test_new_read_sections_commit_only_validated_success_and_recover_without_fabrication() -> None:
+    source = web.APP_JS.split("function createReadSection", 1)[1].split(
+        "function renderCycle", 1
+    )[0]
+    assert 'endpoint.hasData && endpoint.url === url && endpoint.etag' in source
+    assert 'headers["If-None-Match"] = endpoint.etag' in source
+    read_304 = source.split("response.status === 304", 1)[1].split(
+        "response.status !== 200", 1
+    )[0]
+    assert "endpoint.hasData && endpoint.url === url" in read_304
+    assert 'kind: "error"' in read_304
+    apply = source.split("function apply(result)", 1)[1]
+    unchanged = apply.split('result.kind === "not-modified"', 1)[1].split(
+        'result.kind !== "success"', 1
+    )[0]
+    assert "기존 snapshot 재확인" in unchanged
+    assert "replaceChildren" not in unchanged
+    assert "endpoint.etag =" not in unchanged
+    failed = apply.split('result.kind !== "success"', 1)[1].split("try {", 1)[0]
+    assert "retained(" in failed and "return false" in failed
+    assert "replaceChildren" not in failed and "endpoint.etag =" not in failed
+    assert apply.index("const fragment = render(") < apply.index("content.replaceChildren(")
+    assert apply.index("content.replaceChildren(") < apply.index("endpoint.etag = result.etag")
+    assert apply.index("endpoint.hasData = true") < apply.index("현재 조회 결과")
+    retained = source.split("function retained", 1)[1].split("async function read", 1)[0]
+    assert "retained/stale" in retained and "성공한 snapshot 없음" in retained
+    assert "최신" not in retained and "현재 조회 결과" not in retained
+    assert "replaceChildren" not in retained and "endpoint.etag =" not in retained
+    malformed = apply.split("catch (_error)", 1)[1]
+    assert "retained(" in malformed and "return false" in malformed
+
+
+def test_project_companions_share_queue_lifecycle_and_gate_current_authority() -> None:
+    source = web.APP_JS.split('if (page !== "project-queue")', 1)[1]
+    load = source.split("async function loadQueue", 1)[1].split(
+        'filterForm.addEventListener("submit"', 1
+    )[0]
+    assert 'nextActionSection.read(projectApi + "/next-action")' in load
+    assert 'projectApi + "/outcomes?limit=25"' in load
+    assert "Promise.all" in load
+    assert '.catch(() => null)' in load
+    assert 'envelope.data.project_id === projectId' in load
+    for start, end in (
+        ("if (!response)", "if (response.status === 304)"),
+        ("if (response.status !== 200)", "const envelope"),
+        ("if (items === null)", "lastSuccessfulEtag = response.headers"),
+    ):
+        failure = load.split(start, 1)[1].split(end, 1)[0]
+        assert "retainProjectSections()" in failure
+        assert "applyProjectSections(" not in failure
+    apply = source.split("function applyProjectSections", 1)[1].split(
+        "projectLabel.textContent", 1
+    )[0]
+    assert "nextActionSection.apply(nextActionResult);" in apply
+    assert "outcomesSection.apply(outcomesResult)" in apply
+    assert 'outcomesResult.kind === "success"' in apply
+    assert source.count("POLL_INTERVAL_MS = 10000") == 1
+    assert source.count("pollTimer = window.setTimeout") == 1
+    assert 'document.visibilityState === "visible" && hasNonterminalWorkRun' in source
+    assert 'if (document.visibilityState === "hidden")' in source
+    assert '"&cursor=" + encodeURIComponent(requestedOutcomeCursor)' in load
+    assert "outcomesNext.disabled = true" in load
+    assert "outcomesNext.disabled = !nextOutcomeCursor" in load
 
 
 def test_landing_project_field_has_explicit_spacing_and_coherent_focus_contract() -> None:

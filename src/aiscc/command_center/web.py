@@ -101,7 +101,7 @@ def render_project_page(project_id: str) -> str:
           <p class="kicker">읽기 projection 제어</p>
           <h2 id="filters-heading">큐 필터</h2>
         </div>
-        <button id="refresh-button" type="button">큐 새로고침</button>
+        <button id="refresh-button" type="button">큐 새로고침 · 다음 행동 / 결과 함께</button>
       </div>
       <form id="filter-form" class="filter-grid">
         <label><span class="label-stack"><span class="label-primary">워크플로</span>
@@ -181,6 +181,73 @@ def render_project_page(project_id: str) -> str:
         <span id="page-note">현재 브라우저 페이지에서만 cursor 이력을 유지합니다.</span>
         <button id="next-page" type="button" class="secondary-button" disabled>다음</button>
       </div>
+    </section>
+    <section class="panel queue-panel" aria-labelledby="next-action-heading">
+      <div class="section-heading-row">
+        <h2 id="next-action-heading">다음 행동 (NextAction)</h2>
+        <p id="next-action-state" class="section-read-state" aria-live="polite">불러오는 중</p>
+      </div>
+      <p class="projection-note">
+        현재 projection, 선택 기록, Task 발행 후보는 별개입니다.
+        조회로 선택하거나 발행하지 않습니다.
+        제목 정보가 없는 행동은 참조만 표시합니다 (REFERENCE_ONLY).
+      </p>
+      <div id="next-action-content" class="detail-grid"></div>
+    </section>
+    <section class="panel queue-panel" aria-labelledby="outcomes-heading">
+      <div class="section-heading-row">
+        <h2 id="outcomes-heading">작업 결과 / Cycle 계보</h2>
+        <p id="outcomes-state" class="section-read-state" aria-live="polite">불러오는 중</p>
+      </div>
+      <p class="projection-note">
+        큐 필터와 별도로 프로젝트 결과를 조회합니다. 입장된 Cycle 참조가 있을 때만 연결합니다.
+      </p>
+      <div id="outcomes-content" class="record-list"></div>
+      <div class="pagination" aria-label="작업 결과 페이지 이동">
+        <button id="outcomes-first" type="button" class="secondary-button" disabled>
+          결과 처음</button>
+        <button id="outcomes-next" type="button" class="secondary-button" disabled>
+          다음 결과</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def render_cycle_page(cycle_id: str) -> str:
+    safe_cycle_id = escape(cycle_id, quote=True)
+    return f"""<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cycle 계보 · AI Software Command Center</title>
+  <link rel="stylesheet" href="/command-center/assets/app.css">
+  <script src="/command-center/assets/app.js" defer></script>
+</head>
+<body data-page="cycle-detail" data-cycle-id="{safe_cycle_id}">
+  <header class="site-header">
+    <div>
+      <a class="back-link" href="/command-center">← Command Center</a>
+      <p class="eyebrow">입장된 런타임 Cycle</p>
+      <h1>Cycle 계보</h1>
+    </div>
+    <p class="exposure-badge">로컬 / 비공개 / 읽기 전용 (LOCAL / PRIVATE / READ ONLY)</p>
+  </header>
+  <main class="detail-main">
+    <section class="panel detail-panel" aria-labelledby="cycle-heading">
+      <div class="section-heading-row">
+        <h2 id="cycle-heading">작업 / 판정 / 증거 계보</h2>
+        <button id="cycle-refresh-button" type="button">수동 새로고침</button>
+      </div>
+      <p class="projection-note">
+        런타임 AdmittedCycle을 조회합니다. 저장소 Markdown Cycle 문서와는 별도입니다.
+        판정 참조와 전이·증거 참조를 구분합니다.
+      </p>
+      <p id="cycle-state" class="section-read-state" aria-live="polite">불러오는 중</p>
+      <div id="cycle-content" class="detail-grid"></div>
     </section>
   </main>
 </body>
@@ -724,6 +791,198 @@ APP_JS = r"""(() => {
       window.location.assign("/command-center/projects/" + encodeURIComponent(projectId));
     });
     projectInput.addEventListener("input", () => projectInput.setCustomValidity(""));
+    return;
+  }
+
+  // These read sections commit a fully validated detached tree, never a partial snapshot.
+  function readText(value) {
+    if (value === null || value === undefined || value === "") return "제공되지 않음";
+    if (typeof value !== "string" && typeof value !== "number") {
+      throw new Error("invalid scalar");
+    }
+    return String(value);
+  }
+
+  function requireId(value) {
+    if (typeof value !== "string" || !value.trim()) throw new Error("missing identity");
+    return value;
+  }
+
+  function readDefinition(label, values, wide = false) {
+    const list = document.createElement("dl");
+    list.className = "detail-definition" + (wide ? " detail-definition-wide" : "");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    values.forEach(([name, value]) => {
+      const line = document.createElement("p");
+      line.className = "cell-line";
+      line.textContent = name + ": " + readText(value);
+      description.appendChild(line);
+    });
+    list.append(term, description);
+    return list;
+  }
+
+  function readLink(kind, id, label) {
+    const link = document.createElement("a");
+    link.className = "work-run-detail-link";
+    link.href = "/command-center/" + kind + "/" + encodeURIComponent(requireId(id));
+    link.textContent = label;
+    return link;
+  }
+
+  function presenceFields(value, fields) {
+    if (!value || !["PRESENT", "NONE"].includes(value.presence)) {
+      throw new Error("invalid presence");
+    }
+    return value.presence === "NONE"
+      ? [["기록", "없음 (NONE)"]]
+      : [["기록", "있음 (PRESENT)"], ...fields.map(([label, key]) => [label, value[key]])];
+  }
+
+  function createReadSection(contentId, stateId, label, render) {
+    const content = document.getElementById(contentId);
+    const state = document.getElementById(stateId);
+    const endpoint = { etag: null, url: null, hasData: false };
+    function retained(reason) {
+      state.textContent = endpoint.hasData
+        ? label + " · 마지막 성공 결과 보존 (retained/stale) · " + reason
+        : label + " · 성공한 snapshot 없음 · " + reason;
+    }
+    async function read(url) {
+      const headers = {};
+      if (endpoint.hasData && endpoint.url === url && endpoint.etag) {
+        headers["If-None-Match"] = endpoint.etag;
+      }
+      try {
+        const response = await fetch(url, {
+          method: "GET", headers, cache: "no-store", credentials: "same-origin",
+        });
+        if (response.status === 304) {
+          return endpoint.hasData && endpoint.url === url
+            ? { kind: "not-modified", url }
+            : { kind: "error", reason: "확인할 이전 snapshot 없이 304 응답" };
+        }
+        if (response.status !== 200) {
+          const failures = {
+            400: "조회 요청 오류", 404: "요청한 기록 없음",
+            409: "권위 상태 충돌", 503: "조회 projection 사용 불가",
+          };
+          return { kind: "error", reason: failures[response.status] || "조회 오류" };
+        }
+        const envelope = await response.json();
+        return {
+          kind: "success", url, data: envelope.data, meta: envelope.meta,
+          etag: response.headers.get("ETag"),
+        };
+      } catch (_error) {
+        return { kind: "error", reason: "읽기 요청을 완료하지 못했습니다" };
+      }
+    }
+    function apply(result) {
+      if (result.kind === "not-modified" && endpoint.hasData && endpoint.url === result.url) {
+        state.textContent = label + " · 변경 없음 · 기존 snapshot 재확인";
+        return true;
+      }
+      if (result.kind !== "success") {
+        retained("새로고침 실패 · " + (result.reason || "조회 오류"));
+        return false;
+      }
+      try {
+        const fragment = render(result.data, result.meta);
+        content.replaceChildren(fragment);
+        endpoint.etag = result.etag;
+        endpoint.url = result.url;
+        endpoint.hasData = true;
+        state.textContent = label + " · 현재 조회 결과";
+        return true;
+      } catch (_error) {
+        retained("새로고침 실패 · projection 형식을 확인할 수 없습니다");
+        return false;
+      }
+    }
+    return { read, apply, retained };
+  }
+
+  function renderCycle(data) {
+    if (!data || data.cycle_id !== document.body.dataset.cycleId ||
+        !data.task_contract || !data.task_constraint || !Array.isArray(data.current_memory)) {
+      throw new Error("invalid Cycle projection");
+    }
+    const fragment = document.createDocumentFragment();
+    const navigation = document.createElement("nav");
+    navigation.className = "detail-definition-wide";
+    navigation.setAttribute("aria-label", "Cycle 연결된 프로젝트와 작업");
+    navigation.append(
+      readLink("projects", data.project_id, "프로젝트 큐 / 다음 행동으로"),
+      document.createTextNode(" · "),
+      readLink("work-runs", data.work_run_id, "WorkRun 증거 / 사람 검토 / 판정으로"),
+    );
+    fragment.append(
+      navigation,
+      readDefinition("Cycle 식별 / 입장 계보", [
+        ["Cycle ID", data.cycle_id], ["version", data.cycle_version],
+        ["참조", data.cycle_ref], ["fingerprint", data.cycle_fingerprint],
+        ["입장 순번", data.admission_sequence], ["입장 시각", data.admitted_at],
+      ]),
+      readDefinition("작업 연결", [
+        ["Project ID", data.project_id], ["WorkRun ID", data.work_run_id],
+        ["TaskContract ID", data.task_contract.id],
+        ["TaskContract version", data.task_contract.version],
+      ]),
+      readDefinition("판정 / 전이 계보 (서로 다른 참조)", [
+        ["Judgment ref", data.judgment_ref],
+        ["TransitionDecision ID", data.transition_decision_id],
+        ["종료 상태 버전", data.terminal_state_version],
+      ]),
+      readDefinition("입장된 증거 계보", [
+        ["Evidence attestation ref", data.evidence_attestation_ref],
+        ["Evidence root", data.evidence_root],
+      ]),
+      readDefinition("Task 제약 참조", presenceFields(data.task_constraint, [
+        ["constraint_ref", "constraint_ref"], ["constraint_fingerprint", "constraint_fingerprint"],
+        ["snapshot_ref", "snapshot_ref"], ["snapshot_fingerprint", "snapshot_fingerprint"],
+        ["owner_event_high_watermark", "owner_event_high_watermark"],
+      ])),
+    );
+    const memory = document.createElement("section");
+    memory.className = "detail-definition-wide record-list";
+    const heading = document.createElement("h3");
+    heading.textContent = "현재 프로젝트 메모리 맥락 · 과거 Cycle 결과와 별개";
+    memory.appendChild(heading);
+    if (data.current_memory.length === 0) {
+      const empty = document.createElement("p");
+      empty.textContent = "표시 가능한 현재 프로젝트 메모리 없음";
+      memory.appendChild(empty);
+    }
+    data.current_memory.forEach((item) => memory.appendChild(readDefinition("메모리 요약", [
+      ["entry_id", item.entry_id], ["category", item.category], ["privacy", item.privacy],
+      ["content_fingerprint", item.content_fingerprint], ["applicability", item.applicability],
+      ["authority_revision", item.authority_revision], ["created_at", item.created_at],
+    ])));
+    fragment.appendChild(memory);
+    return fragment;
+  }
+
+  if (page === "cycle-detail") {
+    const url = "/v1/command-center/cycles/" + encodeURIComponent(document.body.dataset.cycleId);
+    const cycle = createReadSection("cycle-content", "cycle-state", "Cycle", renderCycle);
+    const refresh = document.getElementById("cycle-refresh-button");
+    let inFlight = false;
+    async function loadCycle() {
+      if (inFlight) return;
+      inFlight = true;
+      refresh.disabled = true;
+      try {
+        cycle.apply(await cycle.read(url));
+      } finally {
+        inFlight = false;
+        refresh.disabled = false;
+      }
+    }
+    refresh.addEventListener("click", () => void loadCycle());
+    void loadCycle();
     return;
   }
 
@@ -1817,6 +2076,100 @@ APP_JS = r"""(() => {
   const stateMessage = document.getElementById("state-message");
   const readState = stateName.parentElement;
 
+  const outcomesFirst = document.getElementById("outcomes-first");
+  const outcomesNext = document.getElementById("outcomes-next");
+  const projectApi = "/v1/command-center/projects/" + encodeURIComponent(projectId);
+  let outcomeCursor = "";
+  let shownOutcomeCursor = "";
+  let nextOutcomeCursor = null;
+
+  function renderNextAction(data) {
+    if (!data || data.project_id !== projectId) throw new Error("invalid project binding");
+    const fragment = document.createDocumentFragment();
+    fragment.append(
+      readDefinition("프로젝트", [["Project ID", data.project_id]]),
+      readDefinition("현재 projection (선택 실행 아님)", presenceFields(data.projection, [
+        ["상태", "state"], ["사유", "reason"], ["Project revision", "project_revision"],
+        ["event sequence", "latest_event_sequence"], ["갱신 시각", "updated_at"],
+      ])),
+      readDefinition("선택 기록 (Task 발행 아님)", presenceFields(data.selection, [
+        ["selection_id", "selection_id"], ["selection_ref", "selection_ref"],
+        ["행동 참조 (REFERENCE_ONLY)", "action_ref"],
+        ["Project revision", "project_revision"], ["선택 시각", "selected_at"],
+      ])),
+      readDefinition("Task 발행 후보 (발행 완료 아님)", presenceFields(
+        data.task_issuance_candidate, [
+        ["candidate_id", "candidate_id"], ["발행 소유자", "issuance_owner"],
+        ["발행 후 필요한 사람 입력", "required_post_issuance_human_input"],
+        ["생성 시각", "created_at"],
+        ],
+      )),
+    );
+    return fragment;
+  }
+
+  function renderOutcomes(data) {
+    if (!data || data.project_id !== projectId || !Array.isArray(data.items)) {
+      throw new Error("invalid outcomes projection");
+    }
+    const fragment = document.createDocumentFragment();
+    if (data.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "이 페이지에 작업 결과 기록 없음";
+      fragment.appendChild(empty);
+    }
+    data.items.forEach((item) => {
+      if (item.project_id !== projectId || !item.workflow || !item.task_contract) {
+        throw new Error("invalid outcome binding");
+      }
+      const card = document.createElement("article");
+      card.className = "work-run-card";
+      const heading = document.createElement("h3");
+      heading.textContent = "작업 결과 · " + requireId(item.work_run_id);
+      card.append(heading, readLink("work-runs", item.work_run_id, "WorkRun 상세"));
+      card.appendChild(readDefinition("작업 / 워크플로", [
+        ["TaskContract ID", item.task_contract.id], ["version", item.task_contract.version],
+        ["WorkflowState", item.workflow.state], ["state_version", item.workflow.state_version],
+      ]));
+      card.appendChild(readDefinition("판정 (워크플로와 별개)", presenceFields(item.judgment, [
+        ["Judgment ID", "judgment_id"], ["종류", "kind"], ["소유 정책", "owner_policy"],
+      ])));
+      const cycle = item.admitted_cycle;
+      card.appendChild(readDefinition("입장된 Cycle 참조", presenceFields(cycle, [
+        ["Cycle ID", "cycle_id"], ["참조", "cycle_ref"],
+        ["입장 순번", "admission_sequence"], ["입장 시각", "admitted_at"],
+      ])));
+      if (cycle.presence === "PRESENT" &&
+          typeof cycle.cycle_id === "string" && cycle.cycle_id.trim()) {
+        card.appendChild(readLink("cycles", cycle.cycle_id, "Cycle 계보 보기"));
+      }
+      fragment.appendChild(card);
+    });
+    return fragment;
+  }
+
+  const nextActionSection = createReadSection(
+    "next-action-content", "next-action-state", "NextAction", renderNextAction,
+  );
+  const outcomesSection = createReadSection(
+    "outcomes-content", "outcomes-state", "작업 결과", renderOutcomes,
+  );
+
+  function retainProjectSections() {
+    nextActionSection.retained("프로젝트 큐 현재 상태를 확인하지 못했습니다");
+    outcomesSection.retained("프로젝트 큐 현재 상태를 확인하지 못했습니다");
+  }
+
+  function applyProjectSections(nextActionResult, outcomesResult, requestedCursor) {
+    nextActionSection.apply(nextActionResult);
+    if (outcomesSection.apply(outcomesResult) && outcomesResult.kind === "success") {
+      shownOutcomeCursor = requestedCursor;
+      nextOutcomeCursor = outcomesResult.meta && typeof outcomesResult.meta.next_cursor === "string"
+        ? outcomesResult.meta.next_cursor : null;
+    }
+  }
+
   projectLabel.textContent = projectId;
 
   let currentQueryShape = null;
@@ -2067,8 +2420,13 @@ APP_JS = r"""(() => {
       return;
     }
     requestInFlight = true;
+    outcomesFirst.disabled = true;
+    outcomesNext.disabled = true;
     stopPolling();
     const request = buildQueueRequest();
+    const requestedOutcomeCursor = outcomeCursor;
+    const outcomesUrl = projectApi + "/outcomes?limit=25" + (requestedOutcomeCursor
+      ? "&cursor=" + encodeURIComponent(requestedOutcomeCursor) : "");
     if (request.shape !== currentQueryShape) {
       currentQueryShape = request.shape;
       lastSuccessfulEtag = null;
@@ -2086,29 +2444,44 @@ APP_JS = r"""(() => {
       headers["If-None-Match"] = lastSuccessfulEtag;
     }
     try {
-      const response = await fetch(request.url, {
-        method: "GET",
-        headers,
-        cache: "no-store",
-        credentials: "same-origin",
-      });
+      const [response, nextActionResult, outcomesResult] = await Promise.all([
+        fetch(request.url, {
+          method: "GET", headers, cache: "no-store", credentials: "same-origin",
+        }).catch(() => null),
+        nextActionSection.read(projectApi + "/next-action"),
+        outcomesSection.read(outcomesUrl),
+      ]);
+      if (!response) {
+        setReadState("UNEXPECTED_ERROR");
+        retainProjectSections();
+        return;
+      }
       if (response.status === 304) {
+        if (!lastSuccessfulEtag) {
+          setReadState("UNEXPECTED_ERROR");
+          retainProjectSections();
+          return;
+        }
         setReadState(
           renderedItemCount === 0 ? "EMPTY" : "READY",
           "큐가 변경되지 않았습니다.",
         );
+        applyProjectSections(nextActionResult, outcomesResult, requestedOutcomeCursor);
         return;
       }
       if (response.status !== 200) {
         setReadState(mapFailure(response.status));
+        retainProjectSections();
         return;
       }
       const envelope = await response.json();
-      const items = envelope && envelope.data && Array.isArray(envelope.data.items)
+      const items = envelope && envelope.data && envelope.data.project_id === projectId &&
+        Array.isArray(envelope.data.items)
         ? envelope.data.items
         : null;
       if (items === null) {
         setReadState("UNEXPECTED_ERROR");
+        retainProjectSections();
         return;
       }
       lastSuccessfulEtag = response.headers.get("ETag");
@@ -2123,10 +2496,14 @@ APP_JS = r"""(() => {
       });
       setReadState(items.length === 0 ? "EMPTY" : "READY");
       updatePagination();
+      applyProjectSections(nextActionResult, outcomesResult, requestedOutcomeCursor);
     } catch (_error) {
       setReadState("UNEXPECTED_ERROR");
+      retainProjectSections();
     } finally {
       requestInFlight = false;
+      outcomesFirst.disabled = !shownOutcomeCursor;
+      outcomesNext.disabled = !nextOutcomeCursor;
       if (focusAfterLoad) {
         restorePaginationFocus(focusAfterLoad);
       }
@@ -2160,6 +2537,15 @@ APP_JS = r"""(() => {
   });
 
   refreshButton.addEventListener("click", () => void loadQueue());
+  outcomesFirst.addEventListener("click", () => {
+    outcomeCursor = "";
+    void loadQueue();
+  });
+  outcomesNext.addEventListener("click", () => {
+    if (!nextOutcomeCursor) return;
+    outcomeCursor = nextOutcomeCursor;
+    void loadQueue();
+  });
   previousButton.addEventListener("click", () => {
     const previousCursor = cursorHistory.pop();
     cursorInput.value = previousCursor || "";
