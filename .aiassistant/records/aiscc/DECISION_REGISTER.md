@@ -826,6 +826,11 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 
 ## AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-V1
 
+- status: `SUPERSEDED`
+- current_operational_authority: `NO`
+- superseded_by: `AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-ZIP-DIRECT-V2`
+- historical_scope: 아래 원문과 `HUMAN_PROVIDED / CANONICALIZED` 표시는 당시 결정의 provenance로 보존한다. Human flat extraction, flat source transport, ZIP 보존 및 cleanup/STOP 문장은 현재 운영 규칙이 아니며, 현재 artifact delivery에는 아래 V2만 적용한다.
+
 - decision: Command Center가 `TASK / CYCLE / JUDGMENT / HANDOFF` 중 존재하는 artifact를 발행하면 issued artifact만 담은 하나의 flat ZIP과 exact filename/hash/destination/transport Short Prompt를 같은 Browser turn에 제공한다.
 - decision_status: `HUMAN_PROVIDED / CANONICALIZED`
 - human action: ZIP download, `C:\Users\oracl\Downloads` flat extract, 필요 시 fresh IDE chat open, Short Prompt 전달.
@@ -836,3 +841,28 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - rationale: Human의 canonical file 배치 실수로 인한 `MISSING_REQUIRED_ARTIFACT`와 wrong-path blocker를 방지한다.
 - provenance: `.aiassistant/records/aiscc/cycles/20260908_1415_aiscc-p2-1-terminal-closure-and-workflow-correction-entry-1.cycle.md`; `.aiassistant/reports/aiscc/20260908_1415_aiscc-p2-1-terminal-closure-judgment-1.md`
 - supersession_rule: source root, canonical mappings, hash verification, cleanup 또는 stop semantics를 바꾸려면 explicit workflow decision이 필요하다.
+
+## AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-ZIP-DIRECT-V2
+
+- decision_id: `AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-ZIP-DIRECT-V2`
+- decision: 이미 Human-provided로 승인되고 저장된 ZIP-direct artifact delivery를 현재 운영 규칙으로 명시한다. Command Center는 현재 발행한 `TASK / CYCLE / JUDGMENT / HANDOFF` subset만 하나의 flat delivery ZIP에 담으며 absent artifact type은 생성하지 않는다.
+- decision_source: `HUMAN_PROVIDED / CANONICALIZED / PERSISTED`
+- decision_status: `CURRENT / CANONICALIZED / PERSISTED`
+- current_operational_authority: `YES`
+- authority_commit: `89ebcffacd9b8e74d3c598ddf6e3274a69a9bc1c`
+- human responsibility: Command Center delivery ZIP 하나만 `C:\Users\oracl\Downloads`에 다운로드한다. Markdown artifact를 수동 flat-extract하거나 canonical 경로에 수동 배치하지 않는다. fresh IDE chat은 Browser가 명시적으로 요구할 때만 Human이 연다.
+- Browser Short Prompt: Downloads root, exact ZIP filename, exact ZIP SHA-256, exact TASK filename, bootstrap STOP rule만 담는 compact bootstrap이다. remaining artifact hash/destination, workspace, implementation/evidence/export, Git 상세 실행 권한은 Task가 소유한다.
+- executor bootstrap/transport: delivery ZIP hash와 archive readability/CRC/member safety를 검증한다. 직접 archive member → canonical placement를 우선하고 TASK를 `tasks/active`에 가장 먼저 배치·byte equality 검증하여 읽는다. 나머지 `CYCLE / JUDGMENT / HANDOFF`의 hash와 exact destination은 Task를 따른다. 직접 배치가 불가능할 때만 package-specific staging을 사용한다.
+- placement boundary: remaining member의 expected hash, 기존 destination 상태, 배치 후 destination hash equality를 검증한다. 동일 hash는 불필요하게 overwrite하지 않으며 differing bytes overwrite는 Task의 explicit authorization이 필요하다. differing done predecessor는 임의 덮어쓰지 않는다.
+- bootstrap STOP: canonical TASK 배치 전 ZIP missing/hash mismatch, archive corrupt/unreadable/unsafe, TASK missing/placement failure이면 프로젝트 작업과 report/export 없이 STOP하고 inbound ZIP을 보존하며 Human에게 재다운로드/재배치를 요청한다. TASK 배치 후 required artifact/repository 실패는 Task의 mandatory stop 계약을 따른다.
+- inbound cleanup: 모든 issued artifact의 exact canonical transport 이후 terminal outcome과 outbound ZIP 검증 뒤 exact inbound ZIP과 Task-owned temporary extraction/staging cleanup을 best effort로 시도한다. inbound ZIP delete refusal과 temporary extraction/staging cleanup refusal 또는 실패는 모두 `NON_BLOCKING_LOCAL_RESIDUE`로 exact 잔여 경로와 사유를 기록한다. substantive work나 accepted repository outcome을 무효화하지 않는다. 같은 turn의 다른 삭제 수단 재시도와 broad Downloads cleanup은 금지한다.
+- outbound result bundle: Executor completion에는 `.aiassistant/reports/target/<bundle-name>/`와 인접한 `.aiassistant/reports/target/<bundle-name>.zip`이 모두 필수다. 완성된 folder 전체를 하나의 최상위 `<bundle-name>/` 아래 담고 archive readability/CRC/integrity, required root files, folder/archive 목록·byte equality를 검증한다. folder와 검증된 ZIP을 보존하여 Human이 Browser Command Center에 직접 업로드할 수 있게 한다. outbound 생성/검증 실패는 `ZIP_EXPORT_FAILED`이며 inbound cleanup residue와 구분한다.
+- supersedes: `AISCC-COMMAND-CENTER-ARTIFACT-DELIVERY-V1`의 현재 artifact transport, Human extraction, inbound ZIP cleanup, Executor result ZIP delivery behavior를 이 결정이 대체한다. V1의 원문과 original Human-provided provenance는 historical-only로 보존한다.
+- provenance:
+  - `.aiassistant/records/aiscc/cycles/20260908_2200_aiscc-p2-3-entry-reconciliation-accepted-source-audit-retry-entry-1.cycle.md`
+  - `.aiassistant/reports/aiscc/20260908_2200_aiscc-p2-3-entry-reconciliation-final-acceptance-judgment-1.md`
+  - `.aiassistant/records/aiscc/cycles/20260908_2230_aiscc-p2-3-audit-blocked-stale-decision-register-reconciliation-entry-1.cycle.md`
+  - `.aiassistant/reports/aiscc/20260908_2230_aiscc-p2-3-audit-stale-decision-register-authority-conflict-judgment-1.md`
+- canonical owners: `.aiassistant/records/command-center/COMMAND_CENTER_WORKFLOW.md`, `.aiassistant/records/command-center/TASK_FILE_TEMPLATE.md`, `.aiassistant/records/command-center/SHORT_EXECUTOR_PROMPT_TEMPLATE.md`, `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`
+- verification boundary: 이 entry는 기존 승인된 delivery authority의 supersession reconciliation이다. 현재 Executor 결과의 Browser Command Center judgment를 대신하지 않으며 P2-3 source/contract audit와 implementation은 시작하지 않는다.
+- supersession_rule: 현재 delivery/bootstrap/cleanup/outbound 계약 변경에는 explicit Human/Command Center workflow decision과 해당 canonical owner의 일치하는 갱신이 필요하다.
