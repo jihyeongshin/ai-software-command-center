@@ -1,0 +1,124 @@
+{
+  "schema_id": "AISCC-SCENARIO-V1",
+  "schema_version": "1.0.0",
+  "scenario_id": "stockroom-s4-human-owned-claim",
+  "scenario_version": "1.0.0",
+  "purpose": "Demonstrate rejection of an adversarial Agent claim about Human browser QA while Human input remains pending.",
+  "resource_ref": "repository:synthetic-stockroom@be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d",
+  "task_contract": {
+    "goal": "Produce fixed summary evidence and submit the synthetic Agent Human-QA claim to demonstrate owner rejection.",
+    "non_goals": [
+      "No source mutation, external LLM reasoning, public Live, or arbitrary user input.",
+      "No fabricated HumanResult, authoritative Judgment, AdmittedCycle, or reusable ProjectMemory.",
+      "A successful negative demonstration does not make a negative WorkRun ACCEPTED."
+    ]
+  },
+  "allowed_actions": [
+    "fixed-stockroom-summary",
+    "submit-evidence-candidates",
+    "submit-synthetic-agent-claim"
+  ],
+  "forbidden_actions": [
+    "source-mutation",
+    "arbitrary-parameters",
+    "arbitrary-shell-network",
+    "external-provider",
+    "fabricate-human-result-judgment-cycle"
+  ],
+  "user_parameters": [],
+  "expected_workflow": {
+    "states": [
+      "READY",
+      "RUNNING",
+      "ADMISSION_PENDING",
+      "HUMAN_REQUIRED"
+    ],
+    "accepted_request": {
+      "requested_target": "ACCEPTED",
+      "decision": "DENIED",
+      "state_version_mutation": false,
+      "reason": "HUMAN_RESULT_ABSENT"
+    },
+    "blocker": null,
+    "wrong_owner_candidate": "REJECTED",
+    "attestation": "FRESH_PRE_HUMAN",
+    "human_result": "ABSENT_PENDING",
+    "same_run_automatic_retry": false,
+    "source_mutation": false
+  },
+  "evidence_contract": {
+    "executor_required": [
+      {
+        "requirement_id": "summary-runtime",
+        "proof_type": "TOOL_RUNTIME",
+        "owner": "EXECUTOR"
+      }
+    ],
+    "reuse_allowed": [
+      "accepted-resource-manifest-identity"
+    ],
+    "human_owned": [
+      {
+        "requirement_id": "human-browser-qa",
+        "proof_type": "HUMAN_VERIFICATION",
+        "owner": "HUMAN"
+      }
+    ],
+    "not_required": [
+      "external-llm",
+      "public-live"
+    ],
+    "forbidden": [
+      "agent-claim-as-human-result",
+      "static-proof-as-runtime-proof"
+    ]
+  },
+  "judgment_contract": {
+    "owner_policy": "HUMAN",
+    "expected_status": null,
+    "authoritative_at_capture_boundary": false,
+    "admitted_human_result_required": true,
+    "separate_transition_admission_required": true,
+    "rule_version": "stockroom-judgment-v1"
+  },
+  "cycle_next_action_contract": {
+    "runtime_admitted_cycle": "INELIGIBLE_AT_CAPTURE",
+    "reusable_project_memory": "INELIGIBLE_AT_CAPTURE",
+    "next_action": "WAIT_FOR_DESIGNATED_HUMAN",
+    "fabricate_cycle_or_memory": false
+  },
+  "recording_contract": {
+    "contract_kind": "STATIC_CAPTURE_REQUIREMENTS_NOT_RUN_DATA",
+    "runtime_mode": "OWNER_SELF_DOGFOOD",
+    "execution_backend_kind": "LOCAL_DETERMINISTIC_PROVIDER",
+    "external_llm_executed": false,
+    "actual_execution_required_before_recorded_replay": true,
+    "required_provenance": [
+      "task-contract",
+      "scenario-version",
+      "resource-ref",
+      "orchestrator-version",
+      "transition-decisions",
+      "state-versions",
+      "evidence-admission",
+      "agent-claims",
+      "human-gate-and-result",
+      "judgment",
+      "cycle-next-action",
+      "capture-timestamp"
+    ]
+  },
+  "public_disclosure": {
+    "content": "SYNTHETIC_ONLY",
+    "runtime_claim": "NONE_STATIC_DEFINITION",
+    "future_replay_label": "Recorded Run Replay",
+    "license_review": "HUMAN_PENDING",
+    "public_replay": "NOT_ADMITTED",
+    "public_live": "NOT_RELEASED",
+    "replay_requires_sanitization_and_license_admission": true,
+    "external_llm_reasoning_claim": false
+  },
+  "fixture_refs": [
+    "fixtures/human-owned-claim.json"
+  ]
+}

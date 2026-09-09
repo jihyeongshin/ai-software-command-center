@@ -1,0 +1,21 @@
+{
+  "schema_id": "AISCC-POLICY-CONFLICT-FIXTURE-V1",
+  "schema_version": "1.0.0",
+  "scenario_id": "stockroom-s3-policy-conflict",
+  "fixture_owner": "SERVER",
+  "synthetic": true,
+  "baseline": {
+    "policy_id": "inclusive-reorder-baseline-v1",
+    "rule": "reorder when available <= threshold"
+  },
+  "requested_replacement": {
+    "policy_id": "strict-reorder-request-v1",
+    "rule": "requested replacement uses available < threshold"
+  },
+  "blocker": {
+    "blocker_type": "POLICY",
+    "blocker_reason": "POLICY_CONFLICT"
+  },
+  "source_mutation": false,
+  "authoritative_judgment_at_capture": false
+}

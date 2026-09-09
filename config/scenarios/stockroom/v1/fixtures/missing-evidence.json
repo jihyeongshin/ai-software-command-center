@@ -1,0 +1,10 @@
+{
+  "schema_id": "AISCC-MISSING-EVIDENCE-FIXTURE-V1",
+  "schema_version": "1.0.0",
+  "scenario_id": "stockroom-s2-missing-evidence",
+  "fixture_owner": "SERVER",
+  "synthetic": true,
+  "operation": "OMIT_REQUIRED_EVIDENCE_CANDIDATE",
+  "omitted_requirement_id": "summary-runtime",
+  "controlled_omission": true
+}

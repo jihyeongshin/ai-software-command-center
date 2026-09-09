@@ -1,0 +1,114 @@
+{
+  "schema_id": "AISCC-SCENARIO-V1",
+  "schema_version": "1.0.0",
+  "scenario_id": "stockroom-s3-policy-conflict",
+  "scenario_version": "1.0.0",
+  "purpose": "Demonstrate a policy conflict between the inclusive baseline and a strict replacement request.",
+  "resource_ref": "repository:synthetic-stockroom@be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d",
+  "task_contract": {
+    "goal": "Compare the two fixed synthetic reorder policies and stop at their unresolved authority conflict.",
+    "non_goals": [
+      "No source mutation, external LLM reasoning, public Live, or arbitrary user input.",
+      "No fabricated HumanResult, authoritative Judgment, AdmittedCycle, or reusable ProjectMemory.",
+      "A successful negative demonstration does not make a negative WorkRun ACCEPTED."
+    ]
+  },
+  "allowed_actions": [
+    "compare-fixed-synthetic-policies"
+  ],
+  "forbidden_actions": [
+    "source-mutation",
+    "arbitrary-parameters",
+    "arbitrary-shell-network",
+    "external-provider",
+    "fabricate-human-result-judgment-cycle"
+  ],
+  "user_parameters": [],
+  "expected_workflow": {
+    "states": [
+      "READY",
+      "RUNNING",
+      "BLOCKED"
+    ],
+    "accepted_request": null,
+    "blocker": {
+      "blocker_type": "POLICY",
+      "blocker_reason": "POLICY_CONFLICT"
+    },
+    "wrong_owner_candidate": "NOT_APPLICABLE",
+    "attestation": "NOT_REQUIRED",
+    "human_result": "NOT_REQUIRED",
+    "same_run_automatic_retry": false,
+    "source_mutation": false
+  },
+  "evidence_contract": {
+    "executor_required": [
+      {
+        "requirement_id": "policy-conflict-static",
+        "proof_type": "STATIC_SOURCE",
+        "owner": "EXECUTOR"
+      }
+    ],
+    "reuse_allowed": [
+      "accepted-resource-manifest-identity"
+    ],
+    "human_owned": [],
+    "not_required": [
+      "external-llm",
+      "public-live",
+      "browser-qa"
+    ],
+    "forbidden": [
+      "agent-claim-as-human-result",
+      "static-proof-as-runtime-proof"
+    ]
+  },
+  "judgment_contract": {
+    "owner_policy": "SYSTEM_DETERMINISTIC",
+    "expected_status": null,
+    "authoritative_at_capture_boundary": false,
+    "admitted_human_result_required": false,
+    "separate_transition_admission_required": true,
+    "rule_version": "stockroom-judgment-v1"
+  },
+  "cycle_next_action_contract": {
+    "runtime_admitted_cycle": "INELIGIBLE_AT_CAPTURE",
+    "reusable_project_memory": "INELIGIBLE_AT_CAPTURE",
+    "next_action": "HUMAN_COMMAND_CENTER_POLICY_RESOLUTION",
+    "fabricate_cycle_or_memory": false
+  },
+  "recording_contract": {
+    "contract_kind": "STATIC_CAPTURE_REQUIREMENTS_NOT_RUN_DATA",
+    "runtime_mode": "OWNER_SELF_DOGFOOD",
+    "execution_backend_kind": "LOCAL_DETERMINISTIC_PROVIDER",
+    "external_llm_executed": false,
+    "actual_execution_required_before_recorded_replay": true,
+    "required_provenance": [
+      "task-contract",
+      "scenario-version",
+      "resource-ref",
+      "orchestrator-version",
+      "transition-decisions",
+      "state-versions",
+      "evidence-admission",
+      "agent-claims",
+      "human-gate-and-result",
+      "judgment",
+      "cycle-next-action",
+      "capture-timestamp"
+    ]
+  },
+  "public_disclosure": {
+    "content": "SYNTHETIC_ONLY",
+    "runtime_claim": "NONE_STATIC_DEFINITION",
+    "future_replay_label": "Recorded Run Replay",
+    "license_review": "HUMAN_PENDING",
+    "public_replay": "NOT_ADMITTED",
+    "public_live": "NOT_RELEASED",
+    "replay_requires_sanitization_and_license_admission": true,
+    "external_llm_reasoning_claim": false
+  },
+  "fixture_refs": [
+    "fixtures/policy-conflict.json"
+  ]
+}

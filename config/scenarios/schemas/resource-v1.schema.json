@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "ResourceFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "mode": {
+          "const": "100644",
+          "title": "Mode",
+          "type": "string"
+        },
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "mode",
+        "bytes",
+        "sha256"
+      ],
+      "title": "ResourceFile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "const": "AISCC-SYNTHETIC-RESOURCE-V1",
+      "title": "Schema Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "resource_id": {
+      "const": "repository:synthetic-stockroom",
+      "title": "Resource Id",
+      "type": "string"
+    },
+    "resource_version": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Resource Version",
+      "type": "string"
+    },
+    "resource_ref": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Resource Ref",
+      "type": "string"
+    },
+    "source_commit": {
+      "const": "05185c57a6265a4002050ce25cdfde3dc87e9779",
+      "title": "Source Commit",
+      "type": "string"
+    },
+    "subroot": {
+      "const": "examples/synthetic-stockroom/",
+      "title": "Subroot",
+      "type": "string"
+    },
+    "git_subtree": {
+      "const": "f3d9203321ae3535abf8e92a7285da1067f6c55e",
+      "title": "Git Subtree",
+      "type": "string"
+    },
+    "file_count": {
+      "maximum": 14,
+      "minimum": 14,
+      "title": "File Count",
+      "type": "integer"
+    },
+    "aggregate_algorithm": {
+      "const": "AISCC-SOURCE-MANIFEST-SHA256-V1",
+      "title": "Aggregate Algorithm",
+      "type": "string"
+    },
+    "aggregate_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Aggregate Sha256",
+      "type": "string"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ResourceFile"
+      },
+      "maxItems": 14,
+      "minItems": 14,
+      "title": "Files",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_id",
+    "schema_version",
+    "resource_id",
+    "resource_version",
+    "resource_ref",
+    "source_commit",
+    "subroot",
+    "git_subtree",
+    "file_count",
+    "aggregate_algorithm",
+    "aggregate_sha256",
+    "files"
+  ],
+  "title": "Resource",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Static v1 shape; loader additionally enforces identity, aggregate and scenario-specific cross-field semantics."
+}

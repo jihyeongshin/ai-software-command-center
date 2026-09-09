@@ -1,0 +1,46 @@
+{
+  "schema_id": "AISCC-SCENARIO-CATALOG-V1",
+  "schema_version": "1.0.0",
+  "resource_path": "resource.json",
+  "resource_ref": "repository:synthetic-stockroom@be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d",
+  "public_selection_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "scenario_id"
+    ],
+    "properties": {
+      "scenario_id": {
+        "type": "string",
+        "enum": [
+          "stockroom-s1-normal",
+          "stockroom-s2-missing-evidence",
+          "stockroom-s3-policy-conflict",
+          "stockroom-s4-human-owned-claim"
+        ]
+      }
+    }
+  },
+  "scenarios": [
+    {
+      "scenario_id": "stockroom-s1-normal",
+      "scenario_version": "1.0.0",
+      "path": "s1-normal.json"
+    },
+    {
+      "scenario_id": "stockroom-s2-missing-evidence",
+      "scenario_version": "1.0.0",
+      "path": "s2-missing-evidence.json"
+    },
+    {
+      "scenario_id": "stockroom-s3-policy-conflict",
+      "scenario_version": "1.0.0",
+      "path": "s3-policy-conflict.json"
+    },
+    {
+      "scenario_id": "stockroom-s4-human-owned-claim",
+      "scenario_version": "1.0.0",
+      "path": "s4-human-owned-claim.json"
+    }
+  ]
+}

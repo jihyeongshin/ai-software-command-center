@@ -1,0 +1,614 @@
+{
+  "$defs": {
+    "CycleNextActionContract": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime_admitted_cycle": {
+          "enum": [
+            "AFTER_ACCEPTED_TERMINAL_LINEAGE",
+            "INELIGIBLE_AT_CAPTURE"
+          ],
+          "title": "Runtime Admitted Cycle",
+          "type": "string"
+        },
+        "reusable_project_memory": {
+          "enum": [
+            "AFTER_ACCEPTED_TERMINAL_LINEAGE",
+            "INELIGIBLE_AT_CAPTURE"
+          ],
+          "title": "Reusable Project Memory",
+          "type": "string"
+        },
+        "next_action": {
+          "enum": [
+            "SEPARATE_SUCCESSOR_TASK",
+            "EXPLICIT_REWORK_REVISION",
+            "HUMAN_COMMAND_CENTER_POLICY_RESOLUTION",
+            "WAIT_FOR_DESIGNATED_HUMAN"
+          ],
+          "title": "Next Action",
+          "type": "string"
+        },
+        "fabricate_cycle_or_memory": {
+          "const": false,
+          "title": "Fabricate Cycle Or Memory",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "runtime_admitted_cycle",
+        "reusable_project_memory",
+        "next_action",
+        "fabricate_cycle_or_memory"
+      ],
+      "title": "CycleNextActionContract",
+      "type": "object"
+    },
+    "DeniedAcceptance": {
+      "additionalProperties": false,
+      "properties": {
+        "requested_target": {
+          "const": "ACCEPTED",
+          "title": "Requested Target",
+          "type": "string"
+        },
+        "decision": {
+          "const": "DENIED",
+          "title": "Decision",
+          "type": "string"
+        },
+        "state_version_mutation": {
+          "const": false,
+          "title": "State Version Mutation",
+          "type": "boolean"
+        },
+        "reason": {
+          "enum": [
+            "MISSING_EVIDENCE",
+            "HUMAN_RESULT_ABSENT"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requested_target",
+        "decision",
+        "state_version_mutation",
+        "reason"
+      ],
+      "title": "DeniedAcceptance",
+      "type": "object"
+    },
+    "EvidenceContract": {
+      "additionalProperties": false,
+      "properties": {
+        "executor_required": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRequirement"
+          },
+          "title": "Executor Required",
+          "type": "array"
+        },
+        "reuse_allowed": {
+          "items": {
+            "const": "accepted-resource-manifest-identity",
+            "type": "string"
+          },
+          "title": "Reuse Allowed",
+          "type": "array"
+        },
+        "human_owned": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRequirement"
+          },
+          "title": "Human Owned",
+          "type": "array"
+        },
+        "not_required": {
+          "items": {
+            "enum": [
+              "external-llm",
+              "public-live",
+              "browser-qa"
+            ],
+            "type": "string"
+          },
+          "title": "Not Required",
+          "type": "array"
+        },
+        "forbidden": {
+          "items": {
+            "enum": [
+              "agent-claim-as-human-result",
+              "static-proof-as-runtime-proof"
+            ],
+            "type": "string"
+          },
+          "title": "Forbidden",
+          "type": "array"
+        }
+      },
+      "required": [
+        "executor_required",
+        "reuse_allowed",
+        "human_owned",
+        "not_required",
+        "forbidden"
+      ],
+      "title": "EvidenceContract",
+      "type": "object"
+    },
+    "EvidenceRequirement": {
+      "additionalProperties": false,
+      "properties": {
+        "requirement_id": {
+          "enum": [
+            "summary-runtime",
+            "policy-conflict-static",
+            "human-browser-qa"
+          ],
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "proof_type": {
+          "enum": [
+            "TOOL_RUNTIME",
+            "STATIC_SOURCE",
+            "HUMAN_VERIFICATION"
+          ],
+          "title": "Proof Type",
+          "type": "string"
+        },
+        "owner": {
+          "enum": [
+            "EXECUTOR",
+            "HUMAN"
+          ],
+          "title": "Owner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "proof_type",
+        "owner"
+      ],
+      "title": "EvidenceRequirement",
+      "type": "object"
+    },
+    "ExpectedWorkflow": {
+      "additionalProperties": false,
+      "properties": {
+        "states": {
+          "items": {
+            "enum": [
+              "READY",
+              "RUNNING",
+              "ADMISSION_PENDING",
+              "ACCEPTED",
+              "REWORK_REQUIRED",
+              "BLOCKED",
+              "HUMAN_REQUIRED"
+            ],
+            "type": "string"
+          },
+          "title": "States",
+          "type": "array"
+        },
+        "accepted_request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DeniedAcceptance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "blocker": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PolicyBlocker"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "wrong_owner_candidate": {
+          "enum": [
+            "NOT_APPLICABLE",
+            "REJECTED"
+          ],
+          "title": "Wrong Owner Candidate",
+          "type": "string"
+        },
+        "attestation": {
+          "enum": [
+            "NOT_REQUIRED",
+            "FRESH_PRE_HUMAN"
+          ],
+          "title": "Attestation",
+          "type": "string"
+        },
+        "human_result": {
+          "enum": [
+            "NOT_REQUIRED",
+            "ABSENT_PENDING"
+          ],
+          "title": "Human Result",
+          "type": "string"
+        },
+        "same_run_automatic_retry": {
+          "const": false,
+          "title": "Same Run Automatic Retry",
+          "type": "boolean"
+        },
+        "source_mutation": {
+          "const": false,
+          "title": "Source Mutation",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "states",
+        "accepted_request",
+        "blocker",
+        "wrong_owner_candidate",
+        "attestation",
+        "human_result",
+        "same_run_automatic_retry",
+        "source_mutation"
+      ],
+      "title": "ExpectedWorkflow",
+      "type": "object"
+    },
+    "JudgmentContract": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_policy": {
+          "enum": [
+            "SYSTEM_DETERMINISTIC",
+            "HUMAN"
+          ],
+          "title": "Owner Policy",
+          "type": "string"
+        },
+        "expected_status": {
+          "anyOf": [
+            {
+              "enum": [
+                "ACCEPTED",
+                "HOLD_REWORK_REQUIRED"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Expected Status"
+        },
+        "authoritative_at_capture_boundary": {
+          "title": "Authoritative At Capture Boundary",
+          "type": "boolean"
+        },
+        "admitted_human_result_required": {
+          "title": "Admitted Human Result Required",
+          "type": "boolean"
+        },
+        "separate_transition_admission_required": {
+          "const": true,
+          "title": "Separate Transition Admission Required",
+          "type": "boolean"
+        },
+        "rule_version": {
+          "const": "stockroom-judgment-v1",
+          "title": "Rule Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_policy",
+        "expected_status",
+        "authoritative_at_capture_boundary",
+        "admitted_human_result_required",
+        "separate_transition_admission_required",
+        "rule_version"
+      ],
+      "title": "JudgmentContract",
+      "type": "object"
+    },
+    "PolicyBlocker": {
+      "additionalProperties": false,
+      "properties": {
+        "blocker_type": {
+          "const": "POLICY",
+          "title": "Blocker Type",
+          "type": "string"
+        },
+        "blocker_reason": {
+          "const": "POLICY_CONFLICT",
+          "title": "Blocker Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "blocker_type",
+        "blocker_reason"
+      ],
+      "title": "PolicyBlocker",
+      "type": "object"
+    },
+    "PublicDisclosure": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "const": "SYNTHETIC_ONLY",
+          "title": "Content",
+          "type": "string"
+        },
+        "runtime_claim": {
+          "const": "NONE_STATIC_DEFINITION",
+          "title": "Runtime Claim",
+          "type": "string"
+        },
+        "future_replay_label": {
+          "const": "Recorded Run Replay",
+          "title": "Future Replay Label",
+          "type": "string"
+        },
+        "license_review": {
+          "const": "HUMAN_PENDING",
+          "title": "License Review",
+          "type": "string"
+        },
+        "public_replay": {
+          "const": "NOT_ADMITTED",
+          "title": "Public Replay",
+          "type": "string"
+        },
+        "public_live": {
+          "const": "NOT_RELEASED",
+          "title": "Public Live",
+          "type": "string"
+        },
+        "replay_requires_sanitization_and_license_admission": {
+          "const": true,
+          "title": "Replay Requires Sanitization And License Admission",
+          "type": "boolean"
+        },
+        "external_llm_reasoning_claim": {
+          "const": false,
+          "title": "External Llm Reasoning Claim",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "content",
+        "runtime_claim",
+        "future_replay_label",
+        "license_review",
+        "public_replay",
+        "public_live",
+        "replay_requires_sanitization_and_license_admission",
+        "external_llm_reasoning_claim"
+      ],
+      "title": "PublicDisclosure",
+      "type": "object"
+    },
+    "RecordingContract": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_kind": {
+          "const": "STATIC_CAPTURE_REQUIREMENTS_NOT_RUN_DATA",
+          "title": "Contract Kind",
+          "type": "string"
+        },
+        "runtime_mode": {
+          "const": "OWNER_SELF_DOGFOOD",
+          "title": "Runtime Mode",
+          "type": "string"
+        },
+        "execution_backend_kind": {
+          "const": "LOCAL_DETERMINISTIC_PROVIDER",
+          "title": "Execution Backend Kind",
+          "type": "string"
+        },
+        "external_llm_executed": {
+          "const": false,
+          "title": "External Llm Executed",
+          "type": "boolean"
+        },
+        "actual_execution_required_before_recorded_replay": {
+          "const": true,
+          "title": "Actual Execution Required Before Recorded Replay",
+          "type": "boolean"
+        },
+        "required_provenance": {
+          "items": {
+            "enum": [
+              "task-contract",
+              "scenario-version",
+              "resource-ref",
+              "orchestrator-version",
+              "transition-decisions",
+              "state-versions",
+              "evidence-admission",
+              "agent-claims",
+              "human-gate-and-result",
+              "judgment",
+              "cycle-next-action",
+              "capture-timestamp"
+            ],
+            "type": "string"
+          },
+          "title": "Required Provenance",
+          "type": "array"
+        }
+      },
+      "required": [
+        "contract_kind",
+        "runtime_mode",
+        "execution_backend_kind",
+        "external_llm_executed",
+        "actual_execution_required_before_recorded_replay",
+        "required_provenance"
+      ],
+      "title": "RecordingContract",
+      "type": "object"
+    },
+    "TaskContract": {
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "title": "Goal",
+          "type": "string"
+        },
+        "non_goals": {
+          "items": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Non Goals",
+          "type": "array"
+        }
+      },
+      "required": [
+        "goal",
+        "non_goals"
+      ],
+      "title": "TaskContract",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_id": {
+      "const": "AISCC-SCENARIO-V1",
+      "title": "Schema Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scenario_id": {
+      "enum": [
+        "stockroom-s1-normal",
+        "stockroom-s2-missing-evidence",
+        "stockroom-s3-policy-conflict",
+        "stockroom-s4-human-owned-claim"
+      ],
+      "title": "Scenario Id",
+      "type": "string"
+    },
+    "scenario_version": {
+      "const": "1.0.0",
+      "title": "Scenario Version",
+      "type": "string"
+    },
+    "purpose": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Purpose",
+      "type": "string"
+    },
+    "resource_ref": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Resource Ref",
+      "type": "string"
+    },
+    "task_contract": {
+      "$ref": "#/$defs/TaskContract"
+    },
+    "allowed_actions": {
+      "items": {
+        "enum": [
+          "fixed-stockroom-summary",
+          "compare-fixed-synthetic-policies",
+          "submit-evidence-candidates",
+          "submit-synthetic-agent-claim"
+        ],
+        "type": "string"
+      },
+      "title": "Allowed Actions",
+      "type": "array"
+    },
+    "forbidden_actions": {
+      "items": {
+        "enum": [
+          "source-mutation",
+          "arbitrary-parameters",
+          "arbitrary-shell-network",
+          "external-provider",
+          "fabricate-human-result-judgment-cycle"
+        ],
+        "type": "string"
+      },
+      "title": "Forbidden Actions",
+      "type": "array"
+    },
+    "user_parameters": {
+      "maxItems": 0,
+      "minItems": 0,
+      "title": "User Parameters",
+      "type": "array"
+    },
+    "expected_workflow": {
+      "$ref": "#/$defs/ExpectedWorkflow"
+    },
+    "evidence_contract": {
+      "$ref": "#/$defs/EvidenceContract"
+    },
+    "judgment_contract": {
+      "$ref": "#/$defs/JudgmentContract"
+    },
+    "cycle_next_action_contract": {
+      "$ref": "#/$defs/CycleNextActionContract"
+    },
+    "recording_contract": {
+      "$ref": "#/$defs/RecordingContract"
+    },
+    "public_disclosure": {
+      "$ref": "#/$defs/PublicDisclosure"
+    },
+    "fixture_refs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Fixture Refs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_id",
+    "schema_version",
+    "scenario_id",
+    "scenario_version",
+    "purpose",
+    "resource_ref",
+    "task_contract",
+    "allowed_actions",
+    "forbidden_actions",
+    "user_parameters",
+    "expected_workflow",
+    "evidence_contract",
+    "judgment_contract",
+    "cycle_next_action_contract",
+    "recording_contract",
+    "public_disclosure",
+    "fixture_refs"
+  ],
+  "title": "Scenario",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Static v1 shape; loader additionally enforces identity, aggregate and scenario-specific cross-field semantics."
+}
