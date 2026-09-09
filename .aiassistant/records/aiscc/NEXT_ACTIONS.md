@@ -34,6 +34,7 @@ P2-3 source/contract audit → ACCEPTED_DESIGN / COMPLETE
 P2-3 Phase 1A static scenario/resource contract → ACCEPTED / CLOSED / PERSISTED
 P2-3 Phase 1B source/integration-surface audit → ACCEPTED_DESIGN / COMPLETE
 P2-3 Phase 1B-B1 pinned resource materializer → ACCEPTED / CLOSED / PERSISTED
+P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment → ACCEPTED / CLOSED / PERSISTED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -42,7 +43,7 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1, P2-1, P2-2, P2-3 Phase 1A and Phase 1B-B1 are closed; bounded Phase 1B-B2 implementation is next under the accepted 1329 Phase 1B integration design:
+accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1, and Phase 1B-B2 are closed; bounded Phase 1B-B3 driver/composition/bootstrap implementation is next under the accepted Phase 1B integration design:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -66,8 +67,9 @@ P2-3 Phase 1B -> IN_PROGRESS
 P2-3 Phase 1B source/integration-surface audit -> ACCEPTED_DESIGN / COMPLETE
 P2-3 Phase 1B-B1 -> ACCEPTED / CLOSED / PERSISTED
 B1 persistence commit -> ffbaa11986de54269cbac0f55e980440b639b5a6
-P2-3 Phase 1B-B2 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
-P2-3 Phase 1B-B3 -> NOT_STARTED
+P2-3 Phase 1B-B2 -> ACCEPTED / CLOSED / PERSISTED
+B2 persistence commit -> 8abcfb7cd4dbf7c639e6883dce8be3b33c48b516
+P2-3 Phase 1B-B3 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 P2-3 actual scenario capture -> NOT_STARTED
 P2-3 Replay -> NOT_STARTED
 P2-4 -> NOT_STARTED
@@ -85,7 +87,7 @@ P3 -> NOT_STARTED
 9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 10. `P2-1` — Command Center Web UI (`ACCEPTED / CLOSED / PERSISTED`)
 11. `P2-2` — Synthetic Demo Repository (`ACCEPTED / CLOSED / PERSISTED`)
-12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`IN_PROGRESS`); Phase 1A and Phase 1B-B1 `ACCEPTED / CLOSED / PERSISTED`; Phase 1B audit `ACCEPTED_DESIGN / COMPLETE`; Phase 1B-B2 `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` for bounded implementation under the accepted 1329 design; B3 `NOT_STARTED`
+12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`IN_PROGRESS`); Phase 1A, Phase 1B-B1, and Phase 1B-B2 `ACCEPTED / CLOSED / PERSISTED`; Phase 1B audit `ACCEPTED_DESIGN / COMPLETE`; Phase 1B-B3 `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` for bounded implementation under the accepted Phase 1B design
 13. `P2-4` — Self-Dogfooding Cutover (`NOT_STARTED`)
 14. `P3-1` — Comparative Evaluation (`NOT_STARTED`)
 15. `P3-2` — Public Repository Documentation (`NOT_STARTED`)
@@ -207,10 +209,13 @@ B1 persistence commit:
 ffbaa11986de54269cbac0f55e980440b639b5a6
 
 P2-3 Phase 1B-B2:
-NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+ACCEPTED / CLOSED / PERSISTED
+
+B2 persistence commit:
+8abcfb7cd4dbf7c639e6883dce8be3b33c48b516
 
 P2-3 Phase 1B-B3:
-NOT_STARTED
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 P2-3 actual scenario capture:
 NOT_STARTED
@@ -229,33 +234,33 @@ HUMAN_PENDING
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; B2 and B3 implementation has not started, and later capture/Replay/release verification remains required.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`. B3 implementation and later capture/Replay/release verification have not started.
 
 ## current next action
 
 ```text
 phase:
-P2-3 Phase 1B-B2
+P2-3 Phase 1B-B3
 
 title:
-Scenario/tool/provider/security enrollment
+Driver/composition/bootstrap
 
 status:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 next subtask:
-bounded B2 implementation under accepted 1329 Phase 1B integration design
+bounded B3 driver/composition/bootstrap implementation under the accepted Phase 1B integration design
 
-B2 scope:
-scenario enrollment
-+ bounded Stockroom tool
-+ LOCAL_DETERMINISTIC_PROVIDER
-+ security profile/policy binding
-
-Phase 1B-B2 implementation:
-NOT_STARTED
+B3 scope:
+scenario runtime driver
++ composition owner
++ bootstrap binding
++ no-side-effect integration verification
 
 Phase 1B-B3:
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+
+Phase 1B-B3 implementation:
 NOT_STARTED
 
 actual scenario capture:
@@ -271,13 +276,14 @@ P3:
 NOT_STARTED
 ```
 
-The next separate Task implements bounded B2 scenario/tool/provider/security enrollment under the accepted 1329 Phase 1B integration design. B2 is `OWNER_SELF_DOGFOOD` only; `external_llm_executed=false` remains the accepted first-capture target. `PUBLIC_BOUNDED_LIVE` remains `NOT_RELEASED`. Entry readiness does not authorize actual runtime execution, and this reconciliation does not start B2 implementation.
+The next separate Task implements bounded B3 driver/composition/bootstrap under the accepted Phase 1B integration design. B3 remains `OWNER_SELF_DOGFOOD`-only composition; `external_llm_executed=false` remains the accepted first-capture target. `PUBLIC_BOUNDED_LIVE` remains `NOT_RELEASED`. B3 entry readiness alone does not authorize actual scenario execution, and this reconciliation does not start B3 implementation.
 
 Current authority:
 
 - `.aiassistant/reports/aiscc/20260909_1329_aiscc-p2-3-phase1b-runtime-integration-audit-final-acceptance-judgment-1.md`
-- `.aiassistant/records/aiscc/cycles/20260909_1537_aiscc-p2-3-b1-persisted-b2-entry-1.cycle.md`
-- `.aiassistant/reports/aiscc/20260909_1537_aiscc-p2-3-b1-persistence-final-acceptance-judgment-1.md`
+- `.aiassistant/tasks/done/20260909_1805_aiscc-p2-3-phase1b-b2-final-acceptance-git-persistence-1.md`
+- `.aiassistant/records/aiscc/cycles/20260909_2018_aiscc-p2-3-b2-persisted-b3-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260909_2018_aiscc-p2-3-b2-persistence-final-acceptance-judgment-1.md`
 
 Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`, not accepted as a completed audit. The later 2330 retry is accepted; this historical blocker is not the current next action.
 
@@ -368,4 +374,4 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
 P1 is `ACCEPTED / CLOSED`; P2-1, P2-2 and P2-3 Phase 1A are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
-`IN_PROGRESS` with Phase 1B-B1 `ACCEPTED / CLOSED / PERSISTED` and Phase 1B-B2 `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` for bounded implementation under the accepted 1329 design. Phase 1B-B3, actual scenario capture and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`.
+`IN_PROGRESS` with Phase 1B-B1 and Phase 1B-B2 `ACCEPTED / CLOSED / PERSISTED`. Phase 1B-B3 is `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` for bounded driver/composition/bootstrap implementation under the accepted Phase 1B design. Actual scenario capture and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`.
