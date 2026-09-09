@@ -30,6 +30,8 @@ P1-8 Project Memory and Cycle Admission Runtime → HUMAN_PROVIDED / ACCEPTED / 
 P1 → ACCEPTED / CLOSED
 P2-1 Command Center Web UI → ACCEPTED / CLOSED / PERSISTED
 P2-2 Synthetic Demo Repository → ACCEPTED / CLOSED / PERSISTED
+P2-3 source/contract audit → ACCEPTED_DESIGN / COMPLETE
+P2-3 Phase 1A static scenario/resource contract → ACCEPTED / CLOSED / PERSISTED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -38,7 +40,7 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1, P2-1 and P2-2 are closed; P2-3 is the next executable phase:
+accepted. P1, P2-1, P2-2 and P2-3 Phase 1A are closed; P2-3 Phase 1B is next, beginning with a bounded source/integration-surface audit:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -54,8 +56,15 @@ P2-1 persistence commit -> 1fb9fd5e29e85481fa3c6ce78542de1fda6bf138
 P2 -> IN_PROGRESS
 P2-2 -> ACCEPTED / CLOSED / PERSISTED
 P2-2 canonical commit -> 05185c57a6265a4002050ce25cdfde3dc87e9779
-P2-3 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
-1700 P2-3 source/contract audit -> BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
+P2-3 -> IN_PROGRESS
+P2-3 source/contract audit -> ACCEPTED_DESIGN / COMPLETE
+P2-3 Phase 1A -> ACCEPTED / CLOSED / PERSISTED
+Phase 1A persistence commit -> c9214ce21010978682a35ea6e55743610996097d
+P2-3 Phase 1B -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+P2-3 actual scenario capture -> NOT_STARTED
+P2-3 Replay -> NOT_STARTED
+P2-4 -> NOT_STARTED
+P3 -> NOT_STARTED
 ```
 
 1. `P1-6` — Evidence Admission (`ACCEPTED / CLOSED`)
@@ -69,7 +78,7 @@ P2-3 -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 10. `P2-1` — Command Center Web UI (`ACCEPTED / CLOSED / PERSISTED`)
 11. `P2-2` — Synthetic Demo Repository (`ACCEPTED / CLOSED / PERSISTED`)
-12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`); reconciliation 판정 이후 source/contract audit 재시도
+12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`IN_PROGRESS`); Phase 1A `ACCEPTED / CLOSED / PERSISTED`; Phase 1B `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`, starting with a bounded source/integration-surface audit before runtime mutation
 13. `P2-4` — Self-Dogfooding Cutover (`NOT_STARTED`)
 14. `P3-1` — Comparative Evaluation (`NOT_STARTED`)
 15. `P3-2` — Public Repository Documentation (`NOT_STARTED`)
@@ -167,39 +176,56 @@ P2-2 canonical commit:
 05185c57a6265a4002050ce25cdfde3dc87e9779
 
 P2-3:
+IN_PROGRESS
+
+P2-3 source/contract audit:
+ACCEPTED_DESIGN / COMPLETE
+
+P2-3 Phase 1A:
+ACCEPTED / CLOSED / PERSISTED
+
+Phase 1A persistence commit:
+c9214ce21010978682a35ea6e55743610996097d
+
+P2-3 Phase 1B:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
-1700 P2-3 source/contract audit:
-BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
+P2-3 actual scenario capture:
+NOT_STARTED
+
+P2-3 Replay:
+NOT_STARTED
 
 PUBLIC_BOUNDED_LIVE:
 NOT_RELEASED
 
 PUBLIC_RECORDED_REPLAY:
 NOT_ADMITTED
+
+public distribution/license:
+HUMAN_PENDING
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 implementation has not started, and later demo/release verification remains required.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B implementation has not started, and later capture/Replay/release verification remains required.
 
 ## current next action
 
 ```text
 phase:
-P2-3
+P2-3 Phase 1B
 
 title:
-P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus
+Synthetic repository materialization + bounded runtime enrollment
 
 status:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
-first subtask:
-retry the source/contract audit in a separate Task after reconciliation acceptance
+next subtask:
+bounded Phase 1B source/integration-surface audit before runtime mutation
 
-1700 audit:
-BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED
-not accepted as a completed audit
+Phase 1B implementation:
+NOT_STARTED
 
 P2-4:
 NOT_STARTED
@@ -208,8 +234,14 @@ P3:
 NOT_STARTED
 ```
 
-현재 reconciliation Task는 P2-3 audit이나 implementation을 재개하지 않는다.
-상태 근거는 `.aiassistant/records/aiscc/cycles/20260908_1700_aiscc-p2-2-terminal-closure-p2-3-entry-1.cycle.md`와 `.aiassistant/reports/aiscc/20260908_1700_aiscc-p2-2-terminal-closure-judgment-1.md`다.
+The next separate Task audits exact current integration boundaries for synthetic repository materialization, scenario enrollment/driver, Stockroom bounded tool enrollment, and provider/profile/security/bootstrap composition before mutation allowlists are issued. This reconciliation does not start Phase 1B audit or implementation.
+
+Current authority:
+
+- `.aiassistant/records/aiscc/cycles/20260909_1203_aiscc-p2-3-phase1a-persisted-phase1b-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260909_1203_aiscc-p2-3-phase1a-persistence-final-acceptance-judgment-1.md`
+
+Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`, not accepted as a completed audit. The later 2330 retry is accepted; this historical blocker is not the current next action.
 
 ## P1-6 outer authority already inherited
 
@@ -297,5 +329,5 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `HUMAN_PROVIDED / ACCEPTED / CLOSED` under the terminal closure authority and must continue to preserve
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
-P1 is `ACCEPTED / CLOSED`; P2-1 and P2-2 are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
-`NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`.
+P1 is `ACCEPTED / CLOSED`; P2-1, P2-2 and P2-3 Phase 1A are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
+`IN_PROGRESS` with Phase 1B `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`, starting with a bounded source/integration-surface audit. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`.
