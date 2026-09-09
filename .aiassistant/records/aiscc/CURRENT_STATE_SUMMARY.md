@@ -35,13 +35,15 @@
 | P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus | `IN_PROGRESS` |
 | P2-3 source/contract audit | `ACCEPTED_DESIGN / COMPLETE` |
 | P2-3 Phase 1A static scenario/resource contract | `ACCEPTED / CLOSED / PERSISTED` |
-| P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment | `IN_PROGRESS` |
+| P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment | `ACCEPTED / CLOSED / PERSISTED` |
 | P2-3 Phase 1B source/integration-surface audit | `ACCEPTED_DESIGN / COMPLETE` |
 | P2-3 Phase 1B-B1 pinned resource materializer | `ACCEPTED / CLOSED / PERSISTED` |
 | P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment | `ACCEPTED / CLOSED / PERSISTED` |
-| P2-3 Phase 1B-B3 driver/composition/bootstrap | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
+| P2-3 Phase 1B-B3 driver/composition/bootstrap | `ACCEPTED / CLOSED / PERSISTED` |
+| P2-3 actual scenario capture | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
+| P2-3 Replay | `NOT_STARTED` |
 
-## P1 closure, P2-2 terminal closure, and P2-3 Phase 1B-B3 entry state
+## P1 closure, P2-2 terminal closure, and P2-3 Phase 1B terminal / actual capture entry state
 
 The Browser Command Center-authorized terminal state is:
 
@@ -91,7 +93,7 @@ Phase 1A persistence commit:
 c9214ce21010978682a35ea6e55743610996097d
 
 P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment:
-IN_PROGRESS
+ACCEPTED / CLOSED / PERSISTED
 
 P2-3 Phase 1B source/integration-surface audit:
 ACCEPTED_DESIGN / COMPLETE
@@ -109,10 +111,17 @@ B2 persistence commit:
 8abcfb7cd4dbf7c639e6883dce8be3b33c48b516
 
 P2-3 Phase 1B-B3 driver/composition/bootstrap:
-NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+ACCEPTED / CLOSED / PERSISTED
+
+B3 persistence commit:
+cf3d8c28efbc7c382f7253dde443b60419d9386b
+
+B3 candidate authorship:
+UNKNOWN
+correctness admitted by exact-byte Command Center QA
 
 P2-3 actual scenario capture:
-NOT_STARTED
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
 
 P2-3 Replay:
 NOT_STARTED
@@ -154,17 +163,32 @@ P2-3 Phase 1B audit, B1 terminal, and B2 terminal authority:
 - `.aiassistant/records/aiscc/cycles/20260909_2018_aiscc-p2-3-b2-persisted-b3-entry-1.cycle.md`
 - `.aiassistant/reports/aiscc/20260909_2018_aiscc-p2-3-b2-persistence-final-acceptance-judgment-1.md`
 
+P2-3 Phase 1B-B3 terminal and Phase 1B closure authority:
+
+- `.aiassistant/records/aiscc/cycles/20260910_0205_aiscc-p2-3-phase1b-b3-persisted-actual-capture-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260910_0205_aiscc-p2-3-phase1b-b3-persistence-final-acceptance-judgment-1.md`
+
+The initial 0102 ZIP export failure is historical process provenance. Command Center accepted the recovered export and already-completed Git persistence as `ACCEPTED_WITH_RECORDED_NON_SUBSTANTIVE_EXPORT_RECOVERY`; it is not a current Phase 1B blocker and does not relax future mandatory STOP rules.
+
 Current next action:
 
 ```text
-P2-3 Phase 1B-B3 next subtask:
-bounded B3 driver/composition/bootstrap implementation under the accepted Phase 1B integration design
+P2-3 actual scenario capture next subtask:
+bounded OWNER_SELF_DOGFOOD actual-capture runtime entry
 
-P2-3 Phase 1B-B3 implementation:
+P2-3 actual scenario capture:
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+
+first-capture target:
+four exact Stockroom v1 scenarios
+LOCAL_DETERMINISTIC_PROVIDER
+external_llm_executed=false
+
+actual scenario execution:
 NOT_STARTED
 ```
 
-Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. The next separate Task implements bounded B3 driver/composition/bootstrap under the accepted Phase 1B integration design. B3 remains `OWNER_SELF_DOGFOOD`-only composition with `external_llm_executed=false` as the accepted first-capture target; entry readiness does not authorize actual scenario execution. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
+Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. B3 and Phase 1B are now `ACCEPTED / CLOSED / PERSISTED`. The next separate Task addresses bounded `OWNER_SELF_DOGFOOD` actual-capture runtime entry for four exact Stockroom v1 scenarios with `LOCAL_DETERMINISTIC_PROVIDER` and `external_llm_executed=false`; entry readiness does not authorize actual scenario execution in this reconciliation. No public runtime mode is authorized. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -1022,15 +1046,17 @@ Terminal Cycle:
 - P2-3 source/contract audit: `ACCEPTED_DESIGN / COMPLETE`
 - P2-3 Phase 1A static scenario/resource contract: `ACCEPTED / CLOSED / PERSISTED`
 - Phase 1A persistence commit: `c9214ce21010978682a35ea6e55743610996097d`
-- P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment: `IN_PROGRESS`
+- P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment: `ACCEPTED / CLOSED / PERSISTED`
 - P2-3 Phase 1B source/integration-surface audit: `ACCEPTED_DESIGN / COMPLETE`
 - P2-3 Phase 1B-B1 pinned resource materializer: `ACCEPTED / CLOSED / PERSISTED`
 - B1 persistence commit: `ffbaa11986de54269cbac0f55e980440b639b5a6`
 - P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment: `ACCEPTED / CLOSED / PERSISTED`
 - B2 persistence commit: `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`
-- P2-3 Phase 1B-B3 driver/composition/bootstrap: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
-- next subtask: bounded B3 driver/composition/bootstrap implementation under the accepted Phase 1B integration design
-- P2-3 actual scenario capture: `NOT_STARTED`
+- P2-3 Phase 1B-B3 driver/composition/bootstrap: `ACCEPTED / CLOSED / PERSISTED`
+- B3 persistence commit: `cf3d8c28efbc7c382f7253dde443b60419d9386b`
+- B3 candidate authorship: `UNKNOWN`; correctness admitted by exact-byte Command Center QA
+- next subtask: bounded OWNER_SELF_DOGFOOD actual-capture runtime entry
+- P2-3 actual scenario capture: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
 - P2-3 Replay: `NOT_STARTED`
 - PUBLIC_BOUNDED_LIVE: `NOT_RELEASED`
 - Public Recorded Replay: `NOT_ADMITTED`
