@@ -35,9 +35,13 @@
 | P2-3 Canonical Demo Scenario Pack and Recorded Replay Corpus | `IN_PROGRESS` |
 | P2-3 source/contract audit | `ACCEPTED_DESIGN / COMPLETE` |
 | P2-3 Phase 1A static scenario/resource contract | `ACCEPTED / CLOSED / PERSISTED` |
-| P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
+| P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment | `IN_PROGRESS` |
+| P2-3 Phase 1B source/integration-surface audit | `ACCEPTED_DESIGN / COMPLETE` |
+| P2-3 Phase 1B-B1 pinned resource materializer | `ACCEPTED / CLOSED / PERSISTED` |
+| P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment | `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` |
+| P2-3 Phase 1B-B3 driver/composition/bootstrap | `NOT_STARTED` |
 
-## P1 closure, P2-2 terminal closure, and P2-3 Phase 1B entry state
+## P1 closure, P2-2 terminal closure, and P2-3 Phase 1B-B2 entry state
 
 The Browser Command Center-authorized terminal state is:
 
@@ -87,7 +91,22 @@ Phase 1A persistence commit:
 c9214ce21010978682a35ea6e55743610996097d
 
 P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment:
+IN_PROGRESS
+
+P2-3 Phase 1B source/integration-surface audit:
+ACCEPTED_DESIGN / COMPLETE
+
+P2-3 Phase 1B-B1 pinned resource materializer:
+ACCEPTED / CLOSED / PERSISTED
+
+B1 persistence commit:
+ffbaa11986de54269cbac0f55e980440b639b5a6
+
+P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment:
 NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+
+P2-3 Phase 1B-B3 driver/composition/bootstrap:
+NOT_STARTED
 
 P2-3 actual scenario capture:
 NOT_STARTED
@@ -124,17 +143,23 @@ P2-3 Phase 1A terminal authority:
 - `.aiassistant/records/aiscc/cycles/20260909_1203_aiscc-p2-3-phase1a-persisted-phase1b-entry-1.cycle.md`
 - `.aiassistant/reports/aiscc/20260909_1203_aiscc-p2-3-phase1a-persistence-final-acceptance-judgment-1.md`
 
+P2-3 Phase 1B audit and B1 terminal authority:
+
+- `.aiassistant/reports/aiscc/20260909_1329_aiscc-p2-3-phase1b-runtime-integration-audit-final-acceptance-judgment-1.md`
+- `.aiassistant/records/aiscc/cycles/20260909_1537_aiscc-p2-3-b1-persisted-b2-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260909_1537_aiscc-p2-3-b1-persistence-final-acceptance-judgment-1.md`
+
 Current next action:
 
 ```text
-P2-3 Phase 1B next subtask:
-bounded source/integration-surface audit before runtime mutation
+P2-3 Phase 1B-B2 next subtask:
+bounded B2 implementation under accepted 1329 Phase 1B integration design
 
-P2-3 Phase 1B implementation:
+P2-3 Phase 1B-B2 implementation:
 NOT_STARTED
 ```
 
-Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, and Phase 1A is now persisted. The next separate Task audits Phase 1B integration boundaries before runtime mutation. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
+Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, and Phase 1A is now persisted. The next separate Task implements bounded B2 enrollment under the accepted Phase 1B integration design. B2 remains `OWNER_SELF_DOGFOOD` only with `external_llm_executed=false`; entry readiness does not authorize runtime execution. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -992,8 +1017,13 @@ Terminal Cycle:
 - P2-3 source/contract audit: `ACCEPTED_DESIGN / COMPLETE`
 - P2-3 Phase 1A static scenario/resource contract: `ACCEPTED / CLOSED / PERSISTED`
 - Phase 1A persistence commit: `c9214ce21010978682a35ea6e55743610996097d`
-- P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
-- next subtask: bounded Phase 1B source/integration-surface audit before runtime mutation
+- P2-3 Phase 1B synthetic repository materialization + bounded runtime enrollment: `IN_PROGRESS`
+- P2-3 Phase 1B source/integration-surface audit: `ACCEPTED_DESIGN / COMPLETE`
+- P2-3 Phase 1B-B1 pinned resource materializer: `ACCEPTED / CLOSED / PERSISTED`
+- B1 persistence commit: `ffbaa11986de54269cbac0f55e980440b639b5a6`
+- P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment: `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`
+- next subtask: bounded B2 implementation under accepted 1329 Phase 1B integration design
+- P2-3 Phase 1B-B3 driver/composition/bootstrap: `NOT_STARTED`
 - P2-3 actual scenario capture: `NOT_STARTED`
 - P2-3 Replay: `NOT_STARTED`
 - Public Recorded Replay: `NOT_ADMITTED`
