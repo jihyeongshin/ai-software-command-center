@@ -15,6 +15,7 @@ from aiscc.providers.models import (
     ToolDefinition,
     ToolOutputRef,
 )
+from aiscc.security.capability import CapabilityConsumeRequest, CapabilityConsumptionReceipt
 
 
 class ProviderAdapter(Protocol):
@@ -49,4 +50,16 @@ class ToolDispatcher(Protocol):
         arguments: dict[str, object],
         *,
         secret: str | None = None,
+    ) -> ToolOutputRef: ...
+
+
+class ReceiptAwareToolDispatcher(Protocol):
+    def dispatch_with_receipts(
+        self,
+        definition: ToolDefinition,
+        arguments: dict[str, object],
+        *,
+        receipts: tuple[CapabilityConsumptionReceipt, ...],
+        requirements: tuple[CapabilityConsumeRequest, ...],
+        dispatch_identity: str,
     ) -> ToolOutputRef: ...

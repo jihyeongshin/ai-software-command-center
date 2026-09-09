@@ -1,0 +1,26 @@
+schema_version = "AISCC-STOCKROOM-TOOLS-V1"
+default_effect = "DENY"
+registry_id = "aiscc-stockroom-tools"
+registry_version = "1"
+
+[tool]
+tool_id = "stockroom_summary"
+schema_version = "1"
+action = "fixed-stockroom-summary"
+dispatcher_version = "stockroom-summary-v1"
+side_effect_classification = "READ_ONLY"
+allowed_scenarios = ["stockroom-s1-normal", "stockroom-s2-missing-evidence", "stockroom-s4-human-owned-claim"]
+allowed_profiles = ["stockroom-owner-s1-v1", "stockroom-owner-s2-v1", "stockroom-owner-s4-v1"]
+process_resource_id = "process:stockroom-summary-v1"
+image = "aiscc-stockroom-runtime@sha256:be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d"
+argv = ["python", "-B", "-m", "stockroom", "summary"]
+workdir = "/workspace"
+network = "none"
+stdout_limit_bytes = 4096
+stderr_limit_bytes = 4096
+operation_timeout_seconds = 5
+cleanup_timeout_seconds = 10
+attempt_timeout_seconds = 30
+retry_maximum = 1
+idempotency_policy = "READ_ONLY_NO_RETRY_AFTER_DISPATCH"
+output_byte_bound = 4096

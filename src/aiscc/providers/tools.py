@@ -20,8 +20,37 @@ from aiscc.providers.models import (
     parse_strict_json_object,
 )
 from aiscc.providers.ports import SecretResolver, ToolDispatcher
-from aiscc.security.capability import CapabilityConsumeRequest
+from aiscc.security.capability import (
+    CapabilityConsumeRequest,
+    CapabilityConsumptionReceipt,
+)
 from aiscc.security.policy import SecurityPolicy
+
+
+class KnownToolFailure(ValueError):
+    """A bounded dispatcher proved the terminal failure and effect disposition."""
+
+
+class UnknownToolOutcome(RuntimeError):
+    """Dispatch crossed, but termination/effect disposition is not proven."""
+
+
+@dataclass(frozen=True, slots=True)
+class ToolDispatchContext:
+    task_action: str
+    work_run_id: str
+    execution_attempt_id: str
+    state: str
+    state_version: int
+    runtime_mode: str
+    scenario_id: str
+    scenario_version: str
+    profile_id: str
+    profile_version: str
+    resource_ref: str
+    provider_operation_id: str
+    provider_call_id: str
+    resolved_spec_fingerprint: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,12 +60,15 @@ class PreparedToolDispatch:
     fingerprint: str
     capabilities: tuple[CapabilityConsumeRequest, ...]
     secret_request: SecretUseSelectorRequest | None
+    dispatch_context: ToolDispatchContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ConsumedToolDispatch:
     prepared: PreparedToolDispatch
     secret_lease: SecretResolutionLease | None
+    receipts: tuple[CapabilityConsumptionReceipt, ...] = ()
+    dispatch_identity: str = ""
 
 
 class ToolRegistryBroker:
@@ -51,6 +83,7 @@ class ToolRegistryBroker:
         mode: RuntimeMode,
         profile_id: str,
         scenario_id: str,
+        dispatch_context: ToolDispatchContext | None = None,
     ) -> tuple[ToolDefinition, dict[str, object], str]:
         definition = self.registry.tools.get(candidate.name)
         if definition is None:
@@ -66,6 +99,24 @@ class ToolRegistryBroker:
         errors = sorted(validator.iter_errors(arguments), key=lambda item: list(item.path))
         if errors:
             raise ValueError("TOOL_SCHEMA_DENIED")
+        if definition.dispatcher_version == "stockroom-summary-v1":
+            if (
+                type(dispatch_context) is not ToolDispatchContext
+                or dispatch_context.work_run_id == ""
+                or dispatch_context.execution_attempt_id == ""
+                or dispatch_context.state != "RUNNING"
+                or type(dispatch_context.state_version) is not int
+                or dispatch_context.state_version < 1
+                or dispatch_context.runtime_mode != mode.value
+                or dispatch_context.scenario_id != scenario_id
+                or dispatch_context.scenario_version != "1.0.0"
+                or dispatch_context.profile_id != profile_id
+                or dispatch_context.profile_version != "1"
+                or len(dispatch_context.resolved_spec_fingerprint) != 64
+            ):
+                raise ValueError("STOCKROOM_RESOLVED_DISPATCH_CONTEXT_REQUIRED")
+        elif dispatch_context is not None:
+            raise ValueError("LEGACY_TOOL_DISPATCH_CONTEXT_DENIED")
         fingerprint = canonical_sha256(
             {
                 "registry_id": self.registry.registry_id,
@@ -95,6 +146,28 @@ class ToolRegistryBroker:
                     if definition.secret_requirement is not None
                     else None
                 ),
+                "resolved_dispatch_context": (
+                    {
+                        "task_action": dispatch_context.task_action,
+                        "work_run_id": dispatch_context.work_run_id,
+                        "execution_attempt_id": dispatch_context.execution_attempt_id,
+                        "state": dispatch_context.state,
+                        "state_version": dispatch_context.state_version,
+                        "runtime_mode": dispatch_context.runtime_mode,
+                        "scenario_id": dispatch_context.scenario_id,
+                        "scenario_version": dispatch_context.scenario_version,
+                        "profile_id": dispatch_context.profile_id,
+                        "profile_version": dispatch_context.profile_version,
+                        "resource_ref": dispatch_context.resource_ref,
+                        "provider_operation_id": dispatch_context.provider_operation_id,
+                        "provider_call_id": dispatch_context.provider_call_id,
+                        "resolved_spec_fingerprint": (
+                            dispatch_context.resolved_spec_fingerprint
+                        ),
+                    }
+                    if dispatch_context is not None
+                    else None
+                ),
             }
         )
         return definition, arguments, fingerprint
@@ -110,6 +183,7 @@ class ToolRegistryBroker:
         capabilities: tuple[CapabilityConsumeRequest, ...],
         dispatcher: ToolDispatcher,
         secret_request: SecretUseSelectorRequest | None = None,
+        dispatch_context: ToolDispatchContext | None = None,
         secret_lease_authority: SecretResolutionLeaseAuthority | None = None,
         secret_resolver: SecretResolver | None = None,
     ) -> ToolOutputRef:
@@ -120,6 +194,7 @@ class ToolRegistryBroker:
             scenario_id=scenario_id,
             capabilities=capabilities,
             secret_request=secret_request,
+            dispatch_context=dispatch_context,
         )
         consumed = self.consume_prepared(
             prepared,
@@ -142,6 +217,7 @@ class ToolRegistryBroker:
         capabilities: tuple[CapabilityConsumeRequest, ...],
         secret_request: SecretUseSelectorRequest | None = None,
         context_requirements: tuple[tuple[ResourceDomain, str], ...] = (),
+        dispatch_context: ToolDispatchContext | None = None,
     ) -> PreparedToolDispatch:
         """Validate the exact declared authority set without consuming or dispatching."""
         definition, arguments, fingerprint = self.validate_candidate(
@@ -149,6 +225,7 @@ class ToolRegistryBroker:
             mode=mode,
             profile_id=profile_id,
             scenario_id=scenario_id,
+            dispatch_context=dispatch_context,
         )
         tool_resource_id = ":".join(
             (
@@ -215,6 +292,7 @@ class ToolRegistryBroker:
             fingerprint=fingerprint,
             capabilities=capabilities,
             secret_request=secret_request,
+            dispatch_context=dispatch_context,
         )
 
     @staticmethod
@@ -244,7 +322,26 @@ class ToolRegistryBroker:
             lease = secret_lease_authority.issue(
                 receipts[index], capabilities[index], prepared.secret_request
             )
-        return ConsumedToolDispatch(prepared=prepared, secret_lease=lease)
+        dispatch_identity = canonical_sha256(
+            {
+                "tool_fingerprint": prepared.fingerprint,
+                "receipt_ids": [receipt.receipt_id for receipt in receipts],
+            }
+        )
+        if definition.dispatcher_version == "stockroom-summary-v1":
+            stockroom_claimed = policy.claim_consumption_receipts_atomically(
+                receipts,
+                capabilities,
+                dispatch_identity=dispatch_identity,
+            )
+            if not stockroom_claimed:
+                raise ValueError("STOCKROOM_RECEIPT_CLAIM_DENIED")
+        return ConsumedToolDispatch(
+            prepared=prepared,
+            secret_lease=lease,
+            receipts=receipts,
+            dispatch_identity=dispatch_identity,
+        )
 
     def dispatch_prepared(
         self,
@@ -256,7 +353,18 @@ class ToolRegistryBroker:
         definition = consumed.prepared.definition
         arguments = consumed.prepared.arguments
         fingerprint = consumed.prepared.fingerprint
-        if consumed.secret_lease is None:
+        if definition.dispatcher_version == "stockroom-summary-v1":
+            dispatch = getattr(dispatcher, "dispatch_with_receipts", None)
+            if not callable(dispatch) or consumed.secret_lease is not None:
+                raise ValueError("STOCKROOM_RECEIPT_AWARE_DISPATCHER_REQUIRED")
+            result = dispatch(
+                definition,
+                arguments,
+                receipts=consumed.receipts,
+                requirements=consumed.prepared.capabilities,
+                dispatch_identity=consumed.dispatch_identity,
+            )
+        elif consumed.secret_lease is None:
             result = dispatcher.dispatch(definition, arguments)
         else:
             if secret_resolver is None:

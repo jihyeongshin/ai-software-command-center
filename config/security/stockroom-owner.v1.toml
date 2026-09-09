@@ -1,0 +1,50 @@
+schema_version = "stockroom-owner-v1"
+default_effect = "DENY"
+runtime_mode = "OWNER_SELF_DOGFOOD"
+resource_ref = "repository:synthetic-stockroom@be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d"
+tool_id = "stockroom_summary"
+tool_action = "fixed-stockroom-summary"
+network = "DENY"
+
+[scenarios.stockroom-s1-normal]
+scenario_version = "1.0.0"
+profile_id = "stockroom-owner-s1-v1"
+profile_version = "1"
+tool_allowed = true
+provider_call_limit = 2
+
+[scenarios.stockroom-s2-missing-evidence]
+scenario_version = "1.0.0"
+profile_id = "stockroom-owner-s2-v1"
+profile_version = "1"
+tool_allowed = true
+provider_call_limit = 2
+
+[scenarios.stockroom-s3-policy-conflict]
+scenario_version = "1.0.0"
+profile_id = "stockroom-owner-s3-v1"
+profile_version = "1"
+tool_allowed = false
+provider_call_limit = 1
+
+[scenarios.stockroom-s4-human-owned-claim]
+scenario_version = "1.0.0"
+profile_id = "stockroom-owner-s4-v1"
+profile_version = "1"
+tool_allowed = true
+provider_call_limit = 2
+
+[limits]
+provider_calls = 2
+tool_calls = 1
+process_calls = 1
+provider_timeout_seconds = 2
+process_timeout_seconds = 5
+cleanup_timeout_seconds = 10
+attempt_timeout_seconds = 30
+budget_units = 4
+
+[ownership]
+runtime_root = "SERVER_ISSUED_ONLY"
+materialized_resource = "SERVER_ISSUED_ONLY"
+capability_lease = "CURRENT_REQUIRED"

@@ -31,6 +31,14 @@ _MUTABLE_TARGET_ACTIONS = frozenset(
     }
 )
 _P1_5_OWNED_DOMAINS = frozenset({ResourceDomain.PROVIDER, ResourceDomain.TOOL})
+_STOCKROOM_SCENARIOS = frozenset(
+    {
+        "stockroom-s1-normal",
+        "stockroom-s2-missing-evidence",
+        "stockroom-s3-policy-conflict",
+        "stockroom-s4-human-owned-claim",
+    }
+)
 _PUBLIC_LIVE_PROCESS_SCOPE = ResourceScope(
     domain=ResourceDomain.PROCESS,
     resource_id="process:p1-3-synthetic-probe",
@@ -94,6 +102,7 @@ class SecurityPolicy:
         *,
         provider_tool_policy: object | None = None,
         secret_use_policy: object | None = None,
+        stockroom_policy: object | None = None,
     ) -> None:
         self._profiles = dict(profiles)
         self._resource_issuer_token = object()
@@ -107,8 +116,11 @@ class SecurityPolicy:
         self._capability_uses: dict[str, int] = {}
         self._revoked_capabilities: set[str] = set()
         self._consumption_receipts: dict[str, CapabilityConsumptionReceipt] = {}
+        self._claimed_consumption_receipts: dict[str, str] = {}
+        self._entered_dispatch_identities: set[str] = set()
         self._provider_tool_policy = provider_tool_policy
         self._secret_use_policy = secret_use_policy
+        self._stockroom_policy = stockroom_policy
 
     def issue_resource_grant(
         self,
@@ -124,6 +136,7 @@ class SecurityPolicy:
         selector_attestation_ref: str | None = None,
         selector_request: object | None = None,
         operation_fingerprint: str | None = None,
+        stockroom_context: object | None = None,
         now: datetime | None = None,
     ) -> ResourceGrant | None:
         current_time = now or datetime.now(UTC)
@@ -135,6 +148,16 @@ class SecurityPolicy:
             or profile.version != profile_version
             or action not in profile.actions
             or scope.domain not in profile.resources
+            or not self._stockroom_context_allows(
+                stockroom_context,
+                mode=mode,
+                scenario_id=scenario_id,
+                action=action,
+                scope=scope,
+                principal=principal,
+                run_id=run_id,
+                operation_fingerprint=operation_fingerprint,
+            )
             or not self._scope_is_policy_owned(
                 mode,
                 scenario_id,
@@ -490,6 +513,48 @@ class SecurityPolicy:
             and receipt.operation_fingerprint == requirement.operation_fingerprint
         )
 
+    def claim_consumption_receipts_atomically(
+        self,
+        receipts: tuple[CapabilityConsumptionReceipt, ...],
+        requirements: tuple[CapabilityConsumeRequest, ...],
+        *,
+        dispatch_identity: str,
+    ) -> bool:
+        if (
+            not receipts
+            or len(receipts) != len(requirements)
+            or len({receipt.receipt_id for receipt in receipts}) != len(receipts)
+            or len(dispatch_identity) != 64
+            or any(character not in "0123456789abcdef" for character in dispatch_identity)
+        ):
+            return False
+        for receipt, requirement in zip(receipts, requirements, strict=True):
+            if (
+                receipt.receipt_id in self._claimed_consumption_receipts
+                or not self.verify_consumption_receipt(receipt, requirement)
+            ):
+                return False
+        for receipt in receipts:
+            self._claimed_consumption_receipts[receipt.receipt_id] = dispatch_identity
+        return True
+
+    def enter_claimed_dispatch(
+        self,
+        receipt: CapabilityConsumptionReceipt,
+        requirement: CapabilityConsumeRequest,
+        *,
+        dispatch_identity: str,
+    ) -> bool:
+        """Cross a claimed process receipt exactly once for one dispatch identity."""
+        if (
+            self._claimed_consumption_receipts.get(receipt.receipt_id) != dispatch_identity
+            or dispatch_identity in self._entered_dispatch_identities
+            or not self.verify_consumption_receipt(receipt, requirement)
+        ):
+            return False
+        self._entered_dispatch_identities.add(dispatch_identity)
+        return True
+
     def revoke_capability(self, capability: Capability) -> bool:
         if self._capabilities.get(capability.capability_id) is not capability:
             return False
@@ -643,6 +708,36 @@ class SecurityPolicy:
         if scope.domain is ResourceDomain.SCENARIO:
             return scope == ResourceScope(ResourceDomain.SCENARIO, "scenario:p1-3-fixed-synthetic")
         return False
+
+    def _stockroom_context_allows(
+        self,
+        context: object | None,
+        *,
+        mode: RuntimeMode,
+        scenario_id: str | None,
+        action: SecurityActionClass,
+        scope: ResourceScope,
+        principal: str,
+        run_id: str,
+        operation_fingerprint: str | None,
+    ) -> bool:
+        if scenario_id not in _STOCKROOM_SCENARIOS:
+            return True
+        verifier = getattr(self._stockroom_policy, "allows", None)
+        return bool(
+            context is not None
+            and callable(verifier)
+            and verifier(
+                context,
+                mode=mode,
+                scenario_id=scenario_id,
+                action=action,
+                scope=scope,
+                principal=principal,
+                run_id=run_id,
+                operation_fingerprint=operation_fingerprint,
+            )
+        )
 
 
 def _secret_scope_identity(selector_request: object) -> str:

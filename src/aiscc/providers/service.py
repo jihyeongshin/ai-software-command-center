@@ -49,7 +49,7 @@ from aiscc.providers.ports import (
     SecretUseAuthorityPort,
     ToolDispatcher,
 )
-from aiscc.providers.tools import ToolRegistryBroker
+from aiscc.providers.tools import ToolDispatchContext, ToolRegistryBroker, UnknownToolOutcome
 from aiscc.security.capability import CapabilityConsumeRequest
 from aiscc.security.policy import SecurityPolicy
 from aiscc.workflow.models import AuthorityConflictError
@@ -89,6 +89,8 @@ class AgentExecutionService:
         tool_dispatcher: ToolDispatcher | None = None,
         execution_ref_authority: ExecutionReferenceAuthority | None = None,
         server_initial_inputs: dict[str, tuple[dict[str, Any], ...]] | None = None,
+        stockroom_context_factory: Callable[..., object] | None = None,
+        stockroom_dispatch_context_factory: Callable[..., ToolDispatchContext] | None = None,
         security_profile_version: str = "p1-3-v2",
         time_source: Callable[[], float] = monotonic,
         durable_time_source: Callable[[], datetime] = lambda: datetime.now(UTC),
@@ -106,6 +108,8 @@ class AgentExecutionService:
         self._tool_dispatcher = tool_dispatcher
         self._execution_ref_authority = execution_ref_authority
         self._server_initial_inputs = dict(server_initial_inputs or {})
+        self._stockroom_context_factory = stockroom_context_factory
+        self._stockroom_dispatch_context_factory = stockroom_dispatch_context_factory
         self._security_profile_version = security_profile_version
         self._time_source = time_source
         self._durable_time_source = durable_time_source
@@ -697,6 +701,9 @@ class AgentExecutionService:
                 selector_ref=provider_attestation.attestation_id,
                 selector_request=provider_selector,
                 fingerprint=call.operation_fingerprint,
+                execution_attempt_id=call.execution_attempt_id,
+                provider_profile_id=call.profile.profile_id,
+                provider_profile_version=call.profile.version,
             ),
             self._issue_capability(
                 current=current,
@@ -707,6 +714,9 @@ class AgentExecutionService:
                 selector_ref=secret_attestation.attestation_id,
                 selector_request=secret_selector,
                 fingerprint=call.operation_fingerprint,
+                execution_attempt_id=call.execution_attempt_id,
+                provider_profile_id=call.profile.profile_id,
+                provider_profile_version=call.profile.version,
             ),
         ]
         if call.runtime_mode is RuntimeMode.PUBLIC_BOUNDED_LIVE:
@@ -754,7 +764,26 @@ class AgentExecutionService:
         selector_request: object | None,
         fingerprint: str,
         action: SecurityActionClass = SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
+        execution_attempt_id: str = "",
+        provider_profile_id: str = "",
+        provider_profile_version: str = "",
+        resolved_spec_fingerprint: str = "",
     ) -> CapabilityConsumeRequest:
+        stockroom_context = None
+        if self._stockroom_context_factory is not None:
+            stockroom_context = self._stockroom_context_factory(
+                current=current,
+                mode=mode,
+                principal=principal,
+                scenario_id=scenario_id,
+                scope=scope,
+                action=action,
+                operation_fingerprint=fingerprint,
+                execution_attempt_id=execution_attempt_id,
+                provider_profile_id=provider_profile_id,
+                provider_profile_version=provider_profile_version,
+                resolved_spec_fingerprint=resolved_spec_fingerprint,
+            )
         grant = self._policy.issue_resource_grant(
             mode=mode,
             profile_version=self._security_profile_version,
@@ -766,6 +795,7 @@ class AgentExecutionService:
             selector_attestation_ref=selector_ref,
             selector_request=selector_request,
             operation_fingerprint=fingerprint,
+            stockroom_context=stockroom_context,
         )
         request = PermissionRequest(
             principal=principal,
@@ -839,12 +869,26 @@ class AgentExecutionService:
             raise AuthorityConflictError("durable tool RuntimeMode is missing")
         operations = await repository.load_operations(execution_attempt_id)
         ordinal = len(operations) + 1
+        operation_id = _stable_id("tool", execution_attempt_id, str(ordinal), candidate.call_id)
+        dispatch_context = (
+            self._stockroom_dispatch_context_factory(
+                current=current,
+                attempt=attempt,
+                profile=profile,
+                scenario_id=scenario_id,
+                operation_id=operation_id,
+                provider_call_id=candidate.call_id,
+            )
+            if self._stockroom_dispatch_context_factory is not None
+            else None
+        )
         try:
             definition, arguments, fingerprint = broker.validate_candidate(
                 candidate,
                 mode=attempt.runtime_mode,
                 profile_id=profile.profile_id,
                 scenario_id=scenario_id,
+                dispatch_context=dispatch_context,
             )
             resource_identity = ":".join(
                 (
@@ -865,7 +909,6 @@ class AgentExecutionService:
                 }
             )
             resource_identity = f"UNRESOLVED_TOOL:{candidate.name}"
-            operation_id = _stable_id("tool", execution_attempt_id, str(ordinal), candidate.call_id)
             await repository.create_operation(
                 operation_id=operation_id,
                 attempt_id=execution_attempt_id,
@@ -880,7 +923,6 @@ class AgentExecutionService:
                 failure_class="SECURITY_DENIAL",
             )
             return False
-        operation_id = _stable_id("tool", execution_attempt_id, str(ordinal), candidate.call_id)
         await repository.create_operation(
             operation_id=operation_id,
             attempt_id=execution_attempt_id,
@@ -918,6 +960,14 @@ class AgentExecutionService:
                     selector_ref=attestation.attestation_id,
                     selector_request=selector,
                     fingerprint=fingerprint,
+                    execution_attempt_id=execution_attempt_id,
+                    provider_profile_id=profile.profile_id,
+                    provider_profile_version=profile.version,
+                    resolved_spec_fingerprint=(
+                        dispatch_context.resolved_spec_fingerprint
+                        if dispatch_context is not None
+                        else ""
+                    ),
                 )
             ]
             for requirement in definition.underlying_resource_requirements:
@@ -932,6 +982,14 @@ class AgentExecutionService:
                         selector_request=None,
                         fingerprint=fingerprint,
                         action=requirement.action,
+                        execution_attempt_id=execution_attempt_id,
+                        provider_profile_id=profile.profile_id,
+                        provider_profile_version=profile.version,
+                        resolved_spec_fingerprint=(
+                            dispatch_context.resolved_spec_fingerprint
+                            if dispatch_context is not None
+                            else ""
+                        ),
                     )
                 )
             context_requirements: tuple[tuple[ResourceDomain, str], ...] = ()
@@ -1007,6 +1065,7 @@ class AgentExecutionService:
                 capabilities=capability_tuple,
                 secret_request=tool_secret_selector,
                 context_requirements=context_requirements,
+                dispatch_context=dispatch_context,
             )
             await repository.advance_operation(
                 operation_id,
@@ -1063,6 +1122,23 @@ class AgentExecutionService:
                 dispatcher=dispatcher,
                 secret_resolver=self._secret_resolver,
             )
+        except UnknownToolOutcome as exc:
+            await repository.advance_operation(
+                operation_id,
+                ExecutionOperationPhase.OUTCOME_UNKNOWN,
+                ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME,
+                refs={"sanitized_error": type(exc).__name__, "blind_retry": False},
+            )
+            await repository.transition_attempt(
+                execution_attempt_id,
+                "EXECUTION_FAILED",
+                refs={
+                    "failure_class": "UNKNOWN_OUTCOME",
+                    "reason": "TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME",
+                    "blind_retry": False,
+                },
+            )
+            return False
         except (AuthorityConflictError, ValueError) as exc:
             await repository.advance_operation(
                 operation_id,
