@@ -185,8 +185,7 @@ class DockerRuntime:
             and len(observation.stderr) <= spec.stderr_limit_bytes
         )
         settled = observation.termination_proven and observation.owner_reconciled
-        unknown = (observation.timed_out or observation.cancelled or not bounded) and not settled
-        if unknown:
+        if not settled:
             outcome = "UNKNOWN_TOOL_OUTCOME"
             quarantine = True
         elif (
