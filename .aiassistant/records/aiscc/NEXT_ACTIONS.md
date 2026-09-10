@@ -37,6 +37,9 @@ P2-3 Phase 1B-B1 pinned resource materializer → ACCEPTED / CLOSED / PERSISTED
 P2-3 Phase 1B-B2 scenario/tool/provider/security enrollment → ACCEPTED / CLOSED / PERSISTED
 P2-3 Phase 1B-B3 driver/composition/bootstrap → ACCEPTED / CLOSED / PERSISTED
 P2-3 Phase 1B → ACCEPTED / CLOSED / PERSISTED
+P2-3 actual-capture runtime-entry audit → ACCEPTED / COMPLETE
+P2-3 Stockroom process settlement fix → ACCEPTED / CLOSED / PERSISTED
+P2-3 A1 capture-runner core → ACCEPTED / CLOSED / PERSISTED
 ```
 
 The accepted preconditions include both the P1-6 durable-content design and runtime as
@@ -45,7 +48,7 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, and Phase 1B are closed; bounded OWNER_SELF_DOGFOOD actual-capture runtime entry is next:
+accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 production owner/bootstrap integration is next:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -74,7 +77,15 @@ B2 persistence commit -> 8abcfb7cd4dbf7c639e6883dce8be3b33c48b516
 P2-3 Phase 1B-B3 -> ACCEPTED / CLOSED / PERSISTED
 B3 persistence commit -> cf3d8c28efbc7c382f7253dde443b60419d9386b
 B3 candidate authorship -> UNKNOWN / correctness admitted by exact-byte Command Center QA
-P2-3 actual scenario capture -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+P2-3 actual-capture runtime-entry audit -> ACCEPTED / COMPLETE
+P2-3 Stockroom process settlement fix -> ACCEPTED / CLOSED / PERSISTED
+P2-3 A1 capture-runner core -> ACCEPTED / CLOSED / PERSISTED
+A1 source commit -> 6385ab41a92e43e438e8992bacf929e7daf5130d
+A1 post-commit reconciliation -> PASS / 21 of 21 RAW_EXACT / amend not required
+P2-3 A2 production owner/bootstrap integration -> NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE_REGION
+runtime prerequisites -> NOT_VERIFIED
+actual S1-S4 scenario execution -> NOT_STARTED
+capture/export corpus -> NOT_STARTED
 P2-3 Replay -> NOT_STARTED
 P2-4 -> NOT_STARTED
 P3 -> NOT_STARTED
@@ -91,7 +102,7 @@ P3 -> NOT_STARTED
 9. `P1-8 Runtime` — Project Memory and Cycle Admission Implementation (`HUMAN_PROVIDED / ACCEPTED / CLOSED`)
 10. `P2-1` — Command Center Web UI (`ACCEPTED / CLOSED / PERSISTED`)
 11. `P2-2` — Synthetic Demo Repository (`ACCEPTED / CLOSED / PERSISTED`)
-12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`IN_PROGRESS`); Phase 1A, Phase 1B-B1/B2/B3, and Phase 1B `ACCEPTED / CLOSED / PERSISTED`; Phase 1B audit `ACCEPTED_DESIGN / COMPLETE`; actual scenario capture `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE` for bounded OWNER_SELF_DOGFOOD actual-capture runtime entry
+12. `P2-3` — Canonical Demo Scenario Pack and Recorded Replay Corpus (`IN_PROGRESS`); Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`; Phase 1B audit `ACCEPTED_DESIGN / COMPLETE`; actual-capture runtime-entry audit `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE_REGION`
 13. `P2-4` — Self-Dogfooding Cutover (`NOT_STARTED`)
 14. `P3-1` — Comparative Evaluation (`NOT_STARTED`)
 15. `P3-2` — Public Repository Documentation (`NOT_STARTED`)
@@ -228,8 +239,32 @@ B3 candidate authorship:
 UNKNOWN
 correctness admitted by exact-byte Command Center QA
 
-P2-3 actual scenario capture:
-NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+P2-3 actual-capture runtime-entry audit:
+ACCEPTED / COMPLETE
+
+P2-3 Stockroom process settlement fix:
+ACCEPTED / CLOSED / PERSISTED
+
+P2-3 A1 capture-runner core:
+ACCEPTED / CLOSED / PERSISTED
+
+A1 source commit:
+6385ab41a92e43e438e8992bacf929e7daf5130d
+
+A1 post-commit reconciliation:
+PASS / 21 of 21 RAW_EXACT / amend not required
+
+P2-3 A2 production owner/bootstrap integration:
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE_REGION
+
+runtime prerequisites:
+NOT_VERIFIED
+
+actual S1-S4 scenario execution:
+NOT_STARTED
+
+capture/export corpus:
+NOT_STARTED
 
 P2-3 Replay:
 NOT_STARTED
@@ -245,27 +280,29 @@ HUMAN_PENDING
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. Actual capture is entry-ready; capture/Replay/release verification have not started.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 is entry-ready. Runtime prerequisites, actual captures, corpus/export, Replay, and release verification have not started.
 
 ## current next action
 
 ```text
 phase:
-P2-3 actual scenario capture
+P2-3 A2
 
 title:
-Bounded OWNER_SELF_DOGFOOD actual-capture runtime entry
+P2-3 A2 — production owner/bootstrap integration
 
 status:
-NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE_REGION
 
-next subtask:
-bounded OWNER_SELF_DOGFOOD actual-capture runtime entry
+purpose:
+bind the accepted A1 capture runner to real production-style durable owners
+resolve exact bootstrap construction
+resolve exact evidence/Human/Judgment policy/config enrollment
+add bounded PostgreSQL-backed integration proof
+do not execute Docker/materialization/provider/tool/actual scenario
 
-first-capture target:
-four exact Stockroom v1 scenarios
-LOCAL_DETERMINISTIC_PROVIDER
-external_llm_executed=false
+before A2 product/config mutation:
+the next Browser-issued Task may include a bounded pre-mutation feasibility/source gate to resolve exact config paths
 
 P2-3 Phase 1B-B1:
 ACCEPTED / CLOSED / PERSISTED
@@ -279,14 +316,20 @@ ACCEPTED / CLOSED / PERSISTED
 P2-3 Phase 1B:
 ACCEPTED / CLOSED / PERSISTED
 
-actual scenario capture:
-NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+runtime prerequisite provisioning/verification:
+NOT_STARTED / SEQUENCED_BEHIND_A2
 
-actual scenario execution:
-NOT_STARTED
+S1 private actual capture:
+NOT_STARTED / SEQUENCED_BEHIND_A2
+
+S2/S3/S4 private captures:
+NOT_STARTED / SEQUENCED_BEHIND_S1
+
+durable capture corpus/sanitization/export:
+NOT_STARTED / SEQUENCED_BEHIND_PRIVATE_CAPTURES
 
 Replay:
-NOT_STARTED
+NOT_STARTED / SEQUENCED_BEHIND_CORPUS_EXPORT
 
 P2-4:
 NOT_STARTED
@@ -295,7 +338,7 @@ P3:
 NOT_STARTED
 ```
 
-The next separate Task addresses bounded OWNER_SELF_DOGFOOD actual-capture runtime entry for four exact Stockroom v1 scenarios using `LOCAL_DETERMINISTIC_PROVIDER` with `external_llm_executed=false`. Actual capture entry is owner-self-dogfood only; no public runtime mode is authorized. `PUBLIC_BOUNDED_LIVE` remains `NOT_RELEASED`; `PUBLIC_RECORDED_REPLAY` remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`. Entry readiness does not mean capture has executed, and this reconciliation does not start runtime/capture execution.
+The next Browser-issued Task addresses P2-3 A2 production owner/bootstrap integration and may first perform a bounded pre-mutation feasibility/source gate to resolve exact config paths. The later order is runtime prerequisite provisioning/verification, S1 private actual capture, S2/S3/S4 private captures, durable capture corpus/sanitization/export, and Recorded Replay. `PUBLIC_BOUNDED_LIVE` remains `NOT_RELEASED`; `PUBLIC_RECORDED_REPLAY` remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`. This reconciliation does not start A2, runtime provisioning, Docker/materialization/provider/tool execution, or actual scenarios.
 
 Current authority:
 
@@ -305,6 +348,8 @@ Current authority:
 - `.aiassistant/reports/aiscc/20260909_2018_aiscc-p2-3-b2-persistence-final-acceptance-judgment-1.md`
 - `.aiassistant/records/aiscc/cycles/20260910_0205_aiscc-p2-3-phase1b-b3-persisted-actual-capture-entry-1.cycle.md`
 - `.aiassistant/reports/aiscc/20260910_0205_aiscc-p2-3-phase1b-b3-persistence-final-acceptance-judgment-1.md`
+- `.aiassistant/records/aiscc/cycles/20260910_1546_aiscc-p2-3-capture-runner-core-final-accepted-a2-entry-1.cycle.md`
+- `.aiassistant/reports/aiscc/20260910_1546_aiscc-p2-3-capture-runner-core-persistence-final-acceptance-judgment-1.md`
 
 The initial 0102 ZIP export failure remains historical process provenance; Command Center accepted the recovered export and B3 persistence. It is not a current Phase 1B blocker and does not authorize substantive work after future mandatory STOPs.
 
@@ -397,4 +442,4 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
 P1 is `ACCEPTED / CLOSED`; P2-1, P2-2 and P2-3 Phase 1A are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
-`IN_PROGRESS` with Phase 1B-B1/B2/B3 and Phase 1B `ACCEPTED / CLOSED / PERSISTED`. Actual scenario capture is `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE`; bounded OWNER_SELF_DOGFOOD actual-capture runtime entry is next. Replay remains `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.
+`IN_PROGRESS` with Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration is `NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE_REGION`. Runtime prerequisites are `NOT_VERIFIED`; actual S1-S4 scenario execution, capture/export corpus, and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.
