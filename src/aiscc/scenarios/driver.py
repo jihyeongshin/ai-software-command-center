@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
+from enum import StrEnum
 
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 from aiscc.evidence.service import EvidenceAdmissionService
@@ -193,6 +194,38 @@ class PreparedStockroomDriver:
             or type(self.owners) is not StockroomOwnerDependencies
         ):
             raise ValueError("STOCKROOM_PREPARED_DRIVER_BINDING_DENIED")
+
+
+class StockroomCaptureStatus(StrEnum):
+    COMPLETED = "COMPLETED"
+    STOPPED = "STOPPED"
+
+
+@dataclass(frozen=True, slots=True)
+class StockroomCaptureProgressRef:
+    owner: str
+    operation: str
+    owner_ref: str
+    status: str
+    workflow_state: WorkflowState
+    state_version: int
+
+
+@dataclass(frozen=True, slots=True)
+class StockroomCaptureResult:
+    scenario_id: str
+    run_id: str
+    attempt_id: str
+    status: StockroomCaptureStatus
+    workflow_state: WorkflowState
+    state_version: int
+    progress: tuple[StockroomCaptureProgressRef, ...]
+    evidence_refs: tuple[str, ...] = ()
+    human_gate_ref: str | None = None
+    human_result_ref: None = None
+    judgment_ref: str | None = None
+    stop_reason: str | None = None
+    retry_requires_new_attempt: bool = False
 
 
 def build_stockroom_driver_request(
