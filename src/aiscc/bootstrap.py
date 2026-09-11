@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,7 +17,8 @@ from aiscc.security.models import PermissionProfile
 from aiscc.security.policy import SecurityPolicy, default_profiles
 
 if TYPE_CHECKING:
-    from aiscc.runtime.docker import DockerRunSpec, StockroomProcessObservation
+    from aiscc.runtime.docker import StockroomCancellation
+    from aiscc.runtime.stockroom_image import StockroomImageProvenanceRef
     from aiscc.scenarios.stockroom_production import StockroomProductionApplication
 
 
@@ -51,7 +52,9 @@ async def build_stockroom_production(
     private_runtime_root: Path,
     downloads_root: Path,
     trusted_git_executable: Path,
-    docker_process_runner: Callable[[Sequence[str], DockerRunSpec], StockroomProcessObservation],
+    image_provenance_ref: StockroomImageProvenanceRef,
+    trusted_docker_executable: Path,
+    cancellation: StockroomCancellation,
     project_id: str,
     requester_identity: str,
     human_selector_fingerprint: str,
@@ -69,7 +72,9 @@ async def build_stockroom_production(
         private_runtime_root=private_runtime_root,
         downloads_root=downloads_root,
         trusted_git_executable=trusted_git_executable,
-        docker_process_runner=docker_process_runner,
+        image_provenance_ref=image_provenance_ref,
+        trusted_docker_executable=trusted_docker_executable,
+        cancellation=cancellation,
         project_id=project_id,
         requester_identity=requester_identity,
         human_selector_fingerprint=human_selector_fingerprint,

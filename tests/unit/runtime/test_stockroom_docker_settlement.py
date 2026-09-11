@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+import copy
+import io
+import json
 from dataclasses import replace
 from pathlib import Path
+from threading import Event
 from unittest.mock import Mock
 
 import pytest
 
 from aiscc.contracts.security import ResourceDomain
 from aiscc.contracts.workflow import WorkflowState
-from aiscc.runtime.docker import StockroomProcessObservation
+from aiscc.providers.stockroom_tool import build_stockroom_spec, load_stockroom_tool_config
+from aiscc.runtime.docker import (
+    DockerRuntime,
+    StockroomCancellation,
+    StockroomDockerRunner,
+    StockroomProcessObservation,
+)
 from tests.unit.providers.test_stockroom_tool import CANDIDATE, _composition, _success
+from tests.unit.runtime.test_stockroom_image import ROOT, synthetic_image
 
 
 @pytest.fixture(autouse=True)
@@ -180,3 +191,142 @@ def test_attempt_and_spec_fingerprint_cannot_rebind_capabilities(
             dispatch_context=context,
         )
     runner.assert_not_called()
+
+
+def _source_runner(tmp_path, monkeypatch, fault=None):
+    admitted, _, _, _, observation = synthetic_image(tmp_path, monkeypatch)
+    executable = tmp_path / "test-only-docker.exe"
+    executable.write_bytes(b"not executable; fake transport only")
+    signal = StockroomCancellation("run", "attempt", Event())
+    runner = StockroomDockerRunner(executable, admitted, signal)
+    config = load_stockroom_tool_config(ROOT / "config/providers/stockroom-tools.v2.toml")
+    spec = build_stockroom_spec(config, name="aiscc-attempt", run_id="run", workspace=tmp_path,
+                                image_provenance=admitted)
+    identity = "c" * 64
+    state = {"Status": "created", "Running": False, "ExitCode": 0}
+    calls = []
+    image_observation = copy.deepcopy(observation)
+    if fault == "labels":
+        image_observation["Config"]["Labels"]["io.aiscc.stockroom.python-version"] = "3.11"
+    if fault == "image-id":
+        image_observation["Id"] = "sha256:" + "b" * 64
+
+    class FakeProcess:
+        def __init__(self, argv, **kwargs):
+            assert argv[0] == str(executable)
+            assert kwargs["shell"] is False
+            assert kwargs["stdin"] == -3
+            assert set(kwargs["env"]) <= {"SystemRoot", "WINDIR"}
+            args = argv[1:]
+            calls.append(args)
+            self.returncode = 0
+            output = b""
+            error = b""
+            if args[:2] == ["image", "inspect"]:
+                assert args[2] == admitted.provenance.image.image_id
+                output = json.dumps([image_observation]).encode()
+            elif args[0] == "create":
+                assert args[1] == "--pull=never"
+                output = (identity + "\n").encode()
+                if fault == "create":
+                    output = b"uncertain"
+            elif args[:2] == ["container", "inspect"]:
+                assert args[2] == identity
+                labels = {"aiscc.run_id": spec.run_id, "aiscc.owner": "p1-3"}
+                if fault == "owner":
+                    labels["aiscc.run_id"] = "foreign"
+                output = json.dumps([{"Id": identity, "Name": "/" + spec.name,
+                                      "Config": {"Labels": labels}, "State": state}]).encode()
+                if fault == "inspect":
+                    self.returncode = 1
+            elif args[0] == "start":
+                assert args == ["start", "--attach", identity]
+                state.update(Status="exited", Running=False)
+                output = b"x" * (100000 if fault == "overflow" else 1)
+                error = b"y" * (100000 if fault == "overflow" else 0)
+                if fault == "start":
+                    raise OSError("synthetic uncertain start")
+                if fault == "cancel":
+                    state.update(Status="running", Running=True)
+                    signal.event.set()
+                    self.returncode = None
+            elif args[0] in {"stop", "kill"}:
+                assert args[-1] == identity
+                if args[0] == "kill":
+                    state.update(Status="exited", Running=False, ExitCode=137)
+            elif args[0] == "rm":
+                assert args == ["rm", identity]
+                if fault == "remove":
+                    self.returncode = 1
+            elif args[:2] == ["container", "ls"]:
+                if fault == "absence":
+                    output = identity.encode()
+            else:
+                raise AssertionError(args)
+            self.stdout = io.BytesIO(output)
+            self.stderr = io.BytesIO(error)
+
+        def poll(self):
+            return self.returncode
+
+        def kill(self):
+            self.returncode = -9
+
+        def wait(self, timeout):
+            return self.returncode
+
+    monkeypatch.setattr("subprocess.Popen", FakeProcess)
+    return runner, spec, calls
+
+
+@pytest.mark.parametrize("fault", [None, "overflow", "cancel", "labels", "image-id", "create",
+                                   "owner", "inspect", "start", "remove", "absence"])
+def test_source_runner_settlement_and_uncertainty(tmp_path, monkeypatch, fault):
+    runner, spec, calls = _source_runner(tmp_path, monkeypatch, fault)
+    args = DockerRuntime._secure_run_args(runner, spec)
+    result = runner(args, spec)
+    assert calls[0] == ["image", "inspect", spec.image]
+    if fault in {None, "overflow", "cancel"}:
+        assert result.termination_proven and result.owner_reconciled
+        assert result.exit_code == (137 if fault == "cancel" else 0)
+    else:
+        assert not (result.termination_proven and result.owner_reconciled)
+    if fault in {"labels", "image-id"}:
+        assert len(calls) == 1
+    if fault in {"owner", "inspect", "create"}:
+        assert not any(c[0] in {"rm", "start"} for c in calls)
+    if fault == "overflow":
+        assert len(result.stdout) == len(result.stderr) == 4097
+    if fault == "cancel":
+        assert result.cancelled
+        assert [c[0] for c in calls if c[0] in {"stop", "kill"}] == ["stop", "kill"]
+    before = len(calls)
+    with pytest.raises(ValueError, match="REDISPATCH"):
+        runner(args, spec)
+    assert len(calls) == before
+
+
+def test_source_runner_operation_timeout_is_settled(tmp_path, monkeypatch):
+    runner, spec, calls = _source_runner(tmp_path, monkeypatch)
+    process = runner._process
+
+    def timeout_start(args, timeout, *limits):
+        if args[0] == "start":
+            process(args, timeout, *limits)
+            return 1, b"", b"", True, False
+        return process(args, timeout, *limits)
+
+    monkeypatch.setattr(runner, "_process", timeout_start)
+    result = runner(DockerRuntime._secure_run_args(runner, spec), spec)
+    assert result.timed_out and result.termination_proven and result.owner_reconciled
+    assert any(c[0] == "rm" for c in calls)
+
+
+def test_runner_rejects_unbound_attempt_and_raw_authority(tmp_path, monkeypatch):
+    runner, spec, calls = _source_runner(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="ATTEMPT_BINDING"):
+        runner([], replace(spec, run_id="foreign"))
+    with pytest.raises(ValueError, match="ADMITTED_IMAGE"):
+        StockroomDockerRunner(Path(runner._executable), spec.image_provenance.provenance,
+                              runner._cancel)
+    assert not calls

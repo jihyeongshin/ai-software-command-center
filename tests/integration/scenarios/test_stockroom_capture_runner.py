@@ -7,6 +7,7 @@ from collections.abc import Coroutine
 from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event
 from typing import Any
 from uuid import uuid4
 
@@ -38,6 +39,7 @@ from aiscc.providers.local_deterministic import (
 from aiscc.providers.models import canonical_sha256
 from aiscc.providers.service import AgentExecutionService
 from aiscc.providers.stockroom_tool import StockroomSummaryDispatcher
+from aiscc.runtime.docker import StockroomCancellation, StockroomDockerRunner
 from aiscc.runtime.stockroom_materializer import StockroomMaterializer
 from aiscc.scenarios.capture_runner import StockroomCaptureRunner
 from aiscc.scenarios.driver import StockroomMaterializedResultBinding
@@ -67,6 +69,7 @@ from aiscc.workflow.models import (
     RequesterType,
     TransitionRequest,
 )
+from tests.unit.runtime.test_stockroom_image import synthetic_image
 
 
 def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
@@ -209,6 +212,14 @@ def test_production_owner_graph_and_bounded_running_prefix(
         "execution": 0,
     }
     bounded_returns: dict[tuple[str, str], MaterializedStockroom] = {}
+    _, image_ref, _, _, _ = synthetic_image(tmp_path, monkeypatch)
+    docker_executable = tmp_path / "test-only-docker.exe"
+    docker_executable.write_bytes(b"fake executable; subprocess forbidden")
+    private_runtime_root = tmp_path / "private-runtime"
+    private_runtime_root.mkdir()
+    assert tuple(private_runtime_root.iterdir()) == ()
+    run_id = f"stockroom-production-{uuid4()}"
+    attempt_id = f"stockroom-attempt-{uuid4()}"
 
     def fail_sync(name: str):
         def fail(*args: object, **kwargs: object) -> Any:
@@ -250,6 +261,8 @@ def test_production_owner_graph_and_bounded_running_prefix(
         del args, kwargs
         counters["docker"] += 1
         raise AssertionError("forbidden runtime edge called: docker")
+
+    monkeypatch.setattr(StockroomDockerRunner, "_process", docker_runner)
 
     async def scenario() -> None:
         engine = create_engine(database_url)
@@ -302,10 +315,12 @@ def test_production_owner_graph_and_bounded_running_prefix(
             application = await build_stockroom_production(
                 session_factory=sessions,
                 repository_root=repository_root,
-                private_runtime_root=tmp_path,
+                private_runtime_root=private_runtime_root,
                 downloads_root=Path.home() / "Downloads",
                 trusted_git_executable=tmp_path / "git.exe",
-                docker_process_runner=docker_runner,
+                image_provenance_ref=image_ref,
+                trusted_docker_executable=docker_executable,
+                cancellation=StockroomCancellation(run_id, attempt_id, Event()),
                 project_id="aiscc-stockroom-integration",
                 requester_identity="aiscc-stockroom-integration",
                 human_selector_fingerprint="a" * 64,
@@ -471,8 +486,6 @@ def test_production_owner_graph_and_bounded_running_prefix(
                     )
                 )
 
-            run_id = f"stockroom-production-{uuid4()}"
-            attempt_id = f"stockroom-attempt-{uuid4()}"
             capture = application.prepare_capture(
                 scenario_id=SCENARIO_IDS[0], run_id=run_id, attempt_id=attempt_id
             )
@@ -586,7 +599,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
             assert counters["materialize"] == 0
 
             resource = application.composition.catalog.resource
-            materialized_destination = tmp_path
+            materialized_destination = private_runtime_root
             bounded_owner_return = MaterializedStockroom(
                 resource_ref=resource.resource_ref,
                 source_commit=resource.source_commit,
@@ -601,7 +614,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
                     lease_id="bounded-owner-return",
                     run_id=run_id,
                     attempt_id=attempt_id,
-                    runtime_root=tmp_path,
+                    runtime_root=private_runtime_root,
                     destination=materialized_destination,
                 ),
                 run_id=run_id,
@@ -893,7 +906,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 "dispatcher": 0,
                 "execution": 0,
             }
-            assert tuple(tmp_path.iterdir()) == ()
+            assert tuple(private_runtime_root.iterdir()) == ()
         finally:
             await engine.dispose()
 

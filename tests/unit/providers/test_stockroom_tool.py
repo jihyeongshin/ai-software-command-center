@@ -44,6 +44,26 @@ POLICY_CONFIG = Path("config/security/stockroom-owner.v1.toml")
 CANDIDATE = ToolCallCandidate("stockroom_summary", "{}", "call-stockroom")
 
 
+def test_v2_policy_has_no_runtime_image_and_rejects_mixed_schema(tmp_path):
+    path = Path("config/providers/stockroom-tools.v2.toml")
+    text = path.read_text(encoding="utf-8")
+    config = load_stockroom_tool_config(path)
+    assert config.registry_version == "2" and config.image is None
+    assert load_stockroom_tool_config(TOOL_CONFIG).registry_version == "1"
+    variants = [text.replace('[tool]', '[tool]\nimage = "python:latest"'),
+                text.replace("TOOLS-V2", "TOOLS-V1"),
+                text.replace('registry_version = "2"', 'registry_version = "1"'),
+                text.replace('provenance_fingerprint_required = true',
+                             'provenance_fingerprint_required = 1')]
+    for altered in variants:
+        temporary = tmp_path / "mixed.toml"
+        temporary.write_text(altered, encoding="utf-8")
+        with pytest.raises(ValueError):
+            load_stockroom_tool_config(temporary)
+    with pytest.raises(ValueError, match="ADMITTED_IMAGE"):
+        build_stockroom_spec(config, name="test", run_id="run", workspace=tmp_path)
+
+
 def _composition(tmp_path: Path, runner):
     config = load_stockroom_tool_config(TOOL_CONFIG)
     spec = build_stockroom_spec(

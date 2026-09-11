@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import socket
 import subprocess
 from dataclasses import FrozenInstanceError, dataclass, replace
+from pathlib import Path
+from threading import Event
 from types import MappingProxyType
 
 import pytest
@@ -18,7 +22,7 @@ from aiscc.providers.local_deterministic import LocalDeterministicProvider
 from aiscc.providers.openai_responses import OpenAIResponsesAdapter
 from aiscc.providers.service import AgentExecutionService
 from aiscc.providers.stockroom_tool import StockroomSummaryDispatcher
-from aiscc.runtime.docker import DockerRuntime
+from aiscc.runtime.docker import DockerRuntime, StockroomCancellation
 from aiscc.runtime.stockroom_materializer import StockroomMaterializer
 from aiscc.runtime.stockroom_workspace import StockroomWorkspace
 from aiscc.scenarios.composition import build_stockroom_owner_composition
@@ -27,6 +31,30 @@ from aiscc.scenarios.models import RESOURCE_REF, SCENARIO_IDS
 from aiscc.security.policy import SecurityPolicy, default_profiles
 from aiscc.security.stockroom_policy import StockroomOwnerRestriction
 from aiscc.workflow.kernel import WorkflowKernel
+from tests.unit.runtime.test_stockroom_image import synthetic_image
+
+
+def test_production_missing_provenance_denies_before_process_or_database(tmp_path, monkeypatch):
+    _, ref, _, path, _ = synthetic_image(tmp_path, monkeypatch)
+    path.unlink()
+    signature = inspect.signature(bootstrap.build_stockroom_production)
+    assert "docker_process_runner" not in signature.parameters
+    assert "image_provenance_ref" in signature.parameters
+    assert "cancellation" in signature.parameters
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(bootstrap.build_stockroom_production(
+            session_factory=None, repository_root=Path(__file__).resolve().parents[3],
+            private_runtime_root=tmp_path, downloads_root=tmp_path,
+            trusted_git_executable=tmp_path / "git.exe", image_provenance_ref=ref,
+            trusted_docker_executable=tmp_path / "absent-docker.exe",
+            cancellation=StockroomCancellation("run", "attempt", Event()),
+            project_id="test", requester_identity="test", human_selector_fingerprint="a" * 64,
+            secret_material_by_ref={
+                "secret-ref:stockroom-local-non-secret-compat-v1": (
+                    "aiscc-local-non-secret-sentinel-v1"
+                )
+            },
+        ))
 
 
 @dataclass(frozen=True, slots=True)

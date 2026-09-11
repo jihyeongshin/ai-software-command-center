@@ -111,12 +111,18 @@ from aiscc.providers.stockroom_tool import (
     build_dispatch_context,
     build_stockroom_registry,
     build_stockroom_spec,
+    load_stockroom_tool_config,
 )
 from aiscc.runtime.docker import (
     DockerRunSpec,
     DockerRuntime,
-    StockroomProcessObservation,
+    StockroomCancellation,
+    StockroomDockerRunner,
     stockroom_spec_fingerprint,
+)
+from aiscc.runtime.stockroom_image import (
+    StockroomImageProvenanceRef,
+    resolve_stockroom_image,
 )
 from aiscc.runtime.stockroom_materializer import (
     StockroomMaterializer,
@@ -129,7 +135,7 @@ from aiscc.scenarios.capture_runner import OwnerCallResult, StockroomCaptureRunn
 from aiscc.scenarios.composition import (
     StockroomOwnerComposition,
     bind_stockroom_owner_dependencies,
-    build_stockroom_owner_composition,
+    build_stockroom_production_composition,
 )
 from aiscc.scenarios.driver import (
     PreparedStockroomDriver,
@@ -373,6 +379,7 @@ class StockroomProductionApplication:
     docker_runtime: DockerRuntime
     static_policy_fixture: Mapping[str, object]
     clock: Callable[[], datetime]
+    cancellation: StockroomCancellation
 
     def prepare_capture(
         self,
@@ -749,11 +756,15 @@ class StockroomAgentExecutionServiceFactory:
             result=materialized_result,
         )
         materialized = bound_result.materialized
+        cancellation = self._application.cancellation
+        if (binding.run_id, binding.attempt_id) != (cancellation.run_id, cancellation.attempt_id):
+            raise ValueError("STOCKROOM_CANCELLATION_BINDING_DENIED")
         spec = build_stockroom_spec(
             self._application.composition.tool_config,
             name=f"aiscc-{binding.attempt_id}",
             run_id=binding.run_id,
             workspace=materialized.workspace_lease.destination,
+            image_provenance=self._application.composition.image_provenance,
         )
         registry = build_stockroom_registry(self._application.composition.tool_config, spec)
         dispatcher = StockroomSummaryDispatcher(self._application.docker_runtime, spec)
@@ -2002,7 +2013,9 @@ async def build_stockroom_production_application(
     private_runtime_root: Path,
     downloads_root: Path,
     trusted_git_executable: Path,
-    docker_process_runner: Callable[[Sequence[str], DockerRunSpec], StockroomProcessObservation],
+    image_provenance_ref: StockroomImageProvenanceRef,
+    trusted_docker_executable: Path,
+    cancellation: StockroomCancellation,
     project_id: str,
     requester_identity: str,
     human_selector_fingerprint: str,
@@ -2017,7 +2030,13 @@ async def build_stockroom_production_application(
         raise ValueError("exact local non-secret compatibility material is required")
     now = clock or (lambda: datetime.now(UTC))
     root = repository_root.resolve(strict=True)
-    composition = build_stockroom_owner_composition()
+    fixed_root = Path(__file__).resolve().parents[3]
+    if root != fixed_root:
+        raise ValueError("PRODUCTION_REPOSITORY_ROOT_DENIED")
+    tool = load_stockroom_tool_config(fixed_root / "config/providers/stockroom-tools.v2.toml")
+    image = resolve_stockroom_image(image_provenance_ref, dict(tool.image_binding_policy))
+    runner = StockroomDockerRunner(trusted_docker_executable, image, cancellation)
+    composition = build_stockroom_production_composition(image)
     evidence_raw = load_stockroom_evidence_config(root / _EVIDENCE_CONFIG)
     human_raw = load_stockroom_human_config(root / _HUMAN_CONFIG)
     judgment_raw = load_stockroom_judgment_config(root / _JUDGMENT_CONFIG)
@@ -2199,8 +2218,8 @@ async def build_stockroom_production_application(
     )
     docker = DockerRuntime(
         security_policy,
-        executable="operator-supplied-stockroom-runner",
-        stockroom_runner=docker_process_runner,
+        executable=str(trusted_docker_executable),
+        stockroom_runner=runner,
     )
     fixture = PolicyConflictFixture.model_validate_json(
         (root / _POLICY_CONFLICT_FIXTURE).read_text(encoding="utf-8")
@@ -2249,6 +2268,7 @@ async def build_stockroom_production_application(
         docker,
         MappingProxyType(fixture),
         now,
+        cancellation,
     )
 
 

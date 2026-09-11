@@ -104,8 +104,10 @@ def load_stockroom_owner_profiles(path: Path) -> MappingProxyType[str, LocalStoc
     with path.open("rb") as stream:
         raw = tomllib.load(stream)
     _exact_keys(raw, _ROOT_KEYS, "profile root")
+    version = {"AISCC-STOCKROOM-OWNER-PROFILES-V1": "1",
+               "AISCC-STOCKROOM-OWNER-PROFILES-V2": "2"}.get(raw["schema_version"])
     if (
-        raw["schema_version"] != "AISCC-STOCKROOM-OWNER-PROFILES-V1"
+        version is None
         or raw["default_effect"] != "DENY"
     ):
         raise ValueError("STOCKROOM_PROFILE_SCHEMA_DENIED")
@@ -137,7 +139,7 @@ def load_stockroom_owner_profiles(path: Path) -> MappingProxyType[str, LocalStoc
             or _string(data, "base_url") != "http://127.0.0.1:1/v1"
             or _string(data, "secret_ref") != LOCAL_COMPATIBILITY_SECRET_REF
             or _string(data, "tool_registry_id") != "aiscc-stockroom-tools"
-            or _string(data, "tool_registry_version") != "1"
+            or _string(data, "tool_registry_version") != version
             or tools != expected_tools
             or tool_allowed != (index != 2)
             or maxima["provider_call_maximum"] != (1 if index == 2 else 2)
@@ -168,7 +170,7 @@ def load_stockroom_owner_profiles(path: Path) -> MappingProxyType[str, LocalStoc
             public_scenario_identity=scenario_id,
             public_scenario_version="1.0.0",
             tool_registry_id="aiscc-stockroom-tools",
-            tool_registry_version="1",
+            tool_registry_version=version,
             tool_allowlist=frozenset(tools),
             provider_call_maximum=maxima["provider_call_maximum"],
             agent_round_trip_maximum=maxima["agent_round_trip_maximum"],

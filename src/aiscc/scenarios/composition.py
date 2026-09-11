@@ -14,6 +14,11 @@ from aiscc.providers.local_deterministic import (
 )
 from aiscc.providers.models import canonical_sha256
 from aiscc.providers.stockroom_tool import StockroomToolConfig, load_stockroom_tool_config
+from aiscc.runtime.stockroom_image import (
+    AdmittedStockroomImage,
+    require_admitted_image,
+    require_image_policy,
+)
 from aiscc.scenarios.catalog import ScenarioCatalog, load_catalog
 from aiscc.scenarios.driver import (
     PreparedStockroomDriver,
@@ -73,6 +78,7 @@ class StockroomOwnerComposition:
     tool_config: StockroomToolConfig
     security_config: StockroomOwnerPolicyConfig
     fingerprints: StockroomConfigurationFingerprints
+    image_provenance: AdmittedStockroomImage | None = None
 
     def enroll(self, scenario_id: str) -> StockroomEnrollment:
         return compile_stockroom_selection(
@@ -172,7 +178,12 @@ def _cross_bind(
     profiles: MappingProxyType[str, LocalStockroomProfile],
     tool: StockroomToolConfig,
     security: StockroomOwnerPolicyConfig,
+    image_provenance: AdmittedStockroomImage | None = None,
 ) -> StockroomOwnerComposition:
+    version = "1" if image_provenance is None else "2"
+    if image_provenance is not None:
+        require_admitted_image(image_provenance)
+        require_image_policy(dict(tool.image_binding_policy))
     catalog_ids = tuple(item.scenario_id for item in catalog.scenarios)
     document_ids = tuple(item.scenario_id for item in catalog.document.scenarios)
     if (
@@ -214,6 +225,7 @@ def _cross_bind(
             or local.tool_dispatch_allowed is not expected_tool
             or profile.profile_id != _PROFILE_IDS[index]
             or profile.version != "1"
+            or profile.tool_registry_version != version
             or profile.provider_id != "aiscc-local-deterministic"
             or profile.adapter_protocol_version != "stockroom-local-responses-v1"
             or profile.allowed_runtime_modes != frozenset({RuntimeMode.OWNER_SELF_DOGFOOD})
@@ -235,13 +247,13 @@ def _cross_bind(
 
     if (
         tool.registry_id != "aiscc-stockroom-tools"
-        or tool.registry_version != "1"
+        or tool.registry_version != version
         or tool.tool_id != "stockroom_summary"
         or tool.schema_version != "1"
         or tool.action != "fixed-stockroom-summary"
         or tool.dispatcher_version != "stockroom-summary-v1"
         or tool.process_resource_id != "process:stockroom-summary-v1"
-        or tool.image != _TOOL_IMAGE
+        or tool.image != (_TOOL_IMAGE if version == "1" else None)
         or tool.network != "none"
         or tool.argv != ("python", "-B", "-m", "stockroom", "summary")
         or tool.workdir != "/workspace"
@@ -268,7 +280,7 @@ def _cross_bind(
     ):
         raise StockroomCompositionError()
 
-    fingerprints = _fingerprints(catalog, profiles, tool, security)
+    fingerprints = _fingerprints(catalog, profiles, tool, security, image_provenance)
     return StockroomOwnerComposition(
         catalog=catalog,
         owner_context=context,
@@ -276,6 +288,7 @@ def _cross_bind(
         tool_config=tool,
         security_config=security,
         fingerprints=fingerprints,
+        image_provenance=image_provenance,
     )
 
 
@@ -284,6 +297,7 @@ def _fingerprints(
     profiles: MappingProxyType[str, LocalStockroomProfile],
     tool: StockroomToolConfig,
     security: StockroomOwnerPolicyConfig,
+    image_provenance: AdmittedStockroomImage | None = None,
 ) -> StockroomConfigurationFingerprints:
     catalog_hash = canonical_sha256(
         {
@@ -350,6 +364,11 @@ def _fingerprints(
             "model_visible_arguments": {},
         }
     )
+    if image_provenance is not None:
+        admitted = require_admitted_image(image_provenance)
+        tool_hash = canonical_sha256({"static_tool": tool_hash,
+            "image_policy": dict(tool.image_binding_policy),
+            "provenance": admitted.ref.model_dump(mode="json")})
     security_hash = canonical_sha256(
         {
             "schema_version": "stockroom-owner-v1",
@@ -398,3 +417,18 @@ def _canonical_profile_timeout_seconds(value: float | int) -> int:
     ):
         raise StockroomCompositionError()
     return int(value)
+
+
+def build_stockroom_production_composition(
+    image: AdmittedStockroomImage
+) -> StockroomOwnerComposition:
+    """Explicit V2 path; historical V1 preparation remains inert."""
+    require_admitted_image(image)
+    catalog = load_catalog(_SERVER_CATALOG)
+    profiles = load_stockroom_owner_profiles(
+        _PROJECT_ROOT / "config/providers/stockroom-owner-profiles.v2.toml"
+    )
+    tool = load_stockroom_tool_config(_PROJECT_ROOT / "config/providers/stockroom-tools.v2.toml")
+    security = load_stockroom_owner_policy(_SERVER_SECURITY_CONFIG)
+    return _cross_bind(catalog, build_stockroom_owner_context(catalog.scenarios),
+                       profiles, tool, security, image)

@@ -23,6 +23,21 @@ INITIAL = ({"type": "message", "role": "user", "content": "fixed server task"},)
 TOOLS = ({"name": "stockroom_summary"},)
 
 
+def test_v2_profiles_preserve_limits_and_deny_mixed_registry(tmp_path):
+    v1 = load_stockroom_owner_profiles(CONFIG)
+    path = Path("config/providers/stockroom-owner-profiles.v2.toml")
+    v2 = load_stockroom_owner_profiles(path)
+    for key in v1:
+        assert replace(v1[key].profile, tool_registry_version="2") == v2[key].profile
+        assert v1[key].scenario_id == v2[key].scenario_id
+        assert v1[key].tool_dispatch_allowed is v2[key].tool_dispatch_allowed
+    temporary = tmp_path / "mixed.toml"
+    temporary.write_text(path.read_text(encoding="utf-8").replace(
+        'tool_registry_version = "2"', 'tool_registry_version = "1"', 1), encoding="utf-8")
+    with pytest.raises(ValueError):
+        load_stockroom_owner_profiles(temporary)
+
+
 def _call(local_profile, *, items=INITIAL, tools=TOOLS, ordinal=1) -> ProviderCall:
     profile = local_profile.profile
     return ProviderCall(

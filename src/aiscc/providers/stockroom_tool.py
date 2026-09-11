@@ -24,6 +24,12 @@ from aiscc.providers.models import (
 )
 from aiscc.providers.tools import KnownToolFailure, ToolDispatchContext, UnknownToolOutcome
 from aiscc.runtime.docker import DockerRunSpec, DockerRuntime, stockroom_spec_fingerprint
+from aiscc.runtime.stockroom_image import (
+    AdmittedStockroomImage,
+    image_policy,
+    require_admitted_image,
+    require_image_policy,
+)
 from aiscc.scenarios.models import RESOURCE_REF
 from aiscc.security.capability import CapabilityConsumeRequest, CapabilityConsumptionReceipt
 
@@ -81,7 +87,7 @@ class StockroomToolConfig:
     action: str
     dispatcher_version: str
     process_resource_id: str
-    image: str
+    image: str | None
     argv: tuple[str, ...]
     workdir: str
     network: str
@@ -92,6 +98,7 @@ class StockroomToolConfig:
     attempt_timeout_seconds: int
     retry_maximum: int
     output_byte_bound: int
+    image_binding_policy: tuple[tuple[str, str | bool], ...] = ()
 
 
 def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
@@ -101,7 +108,15 @@ def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
     data = raw["tool"]
     if type(data) is not dict:
         raise ValueError("STOCKROOM_TOOL_TABLE_REQUIRED")
-    _exact_keys(data, _TOOL_KEYS, "stockroom tool")
+    version = {
+        "AISCC-STOCKROOM-TOOLS-V1": "1", "AISCC-STOCKROOM-TOOLS-V2": "2"
+    }.get(raw["schema_version"])
+    if version is None:
+        raise ValueError("STOCKROOM_TOOL_CONFIG_DENIED")
+    keys = _TOOL_KEYS if version == "1" else (_TOOL_KEYS - {"image"}) | {"image_binding_policy"}
+    _exact_keys(data, keys, "stockroom tool")
+    if version == "2":
+        require_image_policy(data["image_binding_policy"])
     integers = {
         key: _positive_int(data, key)
         for key in (
@@ -115,10 +130,10 @@ def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
         )
     }
     if (
-        raw["schema_version"] != "AISCC-STOCKROOM-TOOLS-V1"
+        raw["schema_version"] != "AISCC-STOCKROOM-TOOLS-V" + version
         or raw["default_effect"] != "DENY"
         or raw["registry_id"] != "aiscc-stockroom-tools"
-        or raw["registry_version"] != "1"
+        or raw["registry_version"] != version
         or data["tool_id"] != "stockroom_summary"
         or data["schema_version"] != "1"
         or data["action"] != "fixed-stockroom-summary"
@@ -127,7 +142,7 @@ def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
         or tuple(data["allowed_scenarios"]) != _SCENARIOS
         or tuple(data["allowed_profiles"]) != _PROFILES
         or data["process_resource_id"] != "process:stockroom-summary-v1"
-        or data["image"] != _IMAGE
+        or (version == "1" and data["image"] != _IMAGE)
         or data["argv"] != ["python", "-B", "-m", "stockroom", "summary"]
         or data["workdir"] != "/workspace"
         or data["network"] != "none"
@@ -151,7 +166,7 @@ def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
         str(data["action"]),
         str(data["dispatcher_version"]),
         str(data["process_resource_id"]),
-        str(data["image"]),
+        str(data["image"]) if version == "1" else None,
         tuple(str(item) for item in data["argv"]),
         str(data["workdir"]),
         str(data["network"]),
@@ -162,6 +177,7 @@ def load_stockroom_tool_config(path: Path) -> StockroomToolConfig:
         integers["attempt_timeout_seconds"],
         integers["retry_maximum"],
         integers["output_byte_bound"],
+        tuple(sorted(image_policy().items())) if version == "2" else (),
     )
 
 
@@ -171,12 +187,20 @@ def build_stockroom_spec(
     name: str,
     run_id: str,
     workspace: Path,
+    image_provenance: AdmittedStockroomImage | None = None,
 ) -> DockerRunSpec:
+    image = config.image
+    if config.registry_version == "2":
+        require_image_policy(dict(config.image_binding_policy))
+        image = require_admitted_image(image_provenance).provenance.image.image_id
+    elif image_provenance is not None:
+        raise ValueError("V1_PROVENANCE_MIXED_SCHEMA_DENIED")
     return DockerRunSpec(
         name=name,
         run_id=run_id,
         resource_id=config.process_resource_id,
-        image=config.image,
+        image=image,
+        image_provenance=image_provenance,
         command=config.argv,
         workspace=workspace,
         network=config.network,

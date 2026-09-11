@@ -19,6 +19,7 @@ from aiscc.scenarios.composition import (
     StockroomCompositionError,
     bind_stockroom_owner_dependencies,
     build_stockroom_owner_composition,
+    build_stockroom_production_composition,
 )
 from aiscc.scenarios.driver import (
     PreparedStockroomDriver,
@@ -29,6 +30,7 @@ from aiscc.scenarios.models import RESOURCE_REF, SCENARIO_IDS
 from aiscc.security.policy import SecurityPolicy, default_profiles
 from aiscc.security.stockroom_policy import StockroomOwnerRestriction
 from aiscc.workflow.kernel import WorkflowKernel
+from tests.unit.runtime.test_stockroom_image import synthetic_image
 
 ROOT = Path(__file__).resolve().parents[3]
 PROFILE_IDS = (
@@ -37,6 +39,21 @@ PROFILE_IDS = (
     "stockroom-owner-s3-v1",
     "stockroom-owner-s4-v1",
 )
+
+
+def test_v2_composition_fingerprint_binds_admitted_image(tmp_path, monkeypatch):
+    first, *_ = synthetic_image(tmp_path, monkeypatch)
+    composed = build_stockroom_production_composition(first)
+    second, *_ = synthetic_image(tmp_path, monkeypatch, "b" * 64)
+    other = build_stockroom_production_composition(second)
+    assert composed.fingerprints.composition_sha256 != other.fingerprints.composition_sha256
+    assert composed.fingerprints.tool_config_sha256 != other.fingerprints.tool_config_sha256
+    assert composed.fingerprints.catalog_sha256 == other.fingerprints.catalog_sha256
+    assert composed.fingerprints.security_config_sha256 == other.fingerprints.security_config_sha256
+    assert composed.tool_config.registry_version == "2"
+    assert build_stockroom_owner_composition().tool_config.registry_version == "1"
+    with pytest.raises(ValueError):
+        build_stockroom_production_composition(second.provenance)
 
 
 @dataclass(frozen=True, slots=True)
