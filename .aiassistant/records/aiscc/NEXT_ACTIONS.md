@@ -46,10 +46,13 @@ P2-3 A2 production owner/bootstrap + prepared-owner/materialized-output + S2 Jud
 The accepted preconditions include both the P1-6 durable-content design and runtime as
 `HUMAN_PROVIDED / ACCEPTED / CLOSED`.
 
+Cut A source implementation is `ACCEPTED / PERSISTED` at `750c37aecb4c264f66aabf12dedb8d54e20a7f95`.
+Cut A executable proof is `REUSED_ACCEPTED`; Cut B is `NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE`.
+
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 implementation is accepted and persisted. Actual capture runtime prerequisite verification is next after Browser terminal persistence judgment:
+accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning awaits an exact Browser Task:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -85,9 +88,9 @@ A1 source commit -> 6385ab41a92e43e438e8992bacf929e7daf5130d
 A1 post-commit reconciliation -> PASS / 21 of 21 RAW_EXACT / amend not required
 P2-3 A2 production owner/bootstrap integration -> IMPLEMENTATION ACCEPTED / PERSISTED
 A2 COMMIT_A -> d98f9ad108e95ba659b9c6a10770119af22175a1
-A2 terminal persistence -> BROWSER_JUDGMENT_REQUIRED
-next critical action -> P2-3 actual capture runtime prerequisite verification
-runtime prerequisites -> NOT_VERIFIED
+A2 terminal persistence -> ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
+next critical action -> P2-3 private S1 Cut B environment provisioning
+runtime prerequisites -> NOT_READY / PROVISIONING_REQUIRED
 actual S1-S4 scenario execution -> NOT_STARTED
 capture/export corpus -> NOT_STARTED
 P2-3 Replay -> NOT_STARTED
@@ -275,10 +278,10 @@ A2 actual/public runtime:
 NOT_EXECUTED
 
 A2 terminal persistence:
-BROWSER_JUDGMENT_REQUIRED
+ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
 
 runtime prerequisites:
-NOT_VERIFIED
+NOT_READY / PROVISIONING_REQUIRED
 
 actual S1-S4 scenario execution:
 NOT_STARTED
@@ -300,7 +303,7 @@ HUMAN_PENDING
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 implementation is accepted and persisted. Runtime prerequisite verification is next after Browser terminal persistence judgment; actual captures, corpus/export, Replay, and release verification have not started.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning awaits an exact Browser Task; actual captures, corpus/export, Replay, and release verification have not started.
 
 ## current next action
 
@@ -308,39 +311,33 @@ P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3d
 phase:
 P2-3
 
+work_type:
+ENVIRONMENT_PROVISIONING
+
 title:
-P2-3 actual capture runtime prerequisite verification
+P2-3 private S1 Cut B environment provisioning
 
 status:
-NEXT / NOT_VERIFIED / AFTER_BROWSER_TERMINAL_PERSISTENCE_JUDGMENT
+NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE
 
-purpose:
-verify local/canonical runtime prerequisites before actual S1
-PostgreSQL identity/readiness
-Docker/image availability under accepted policy
-source repository/materializer prerequisites
-provider/runtime configuration availability
-security/network/secret restrictions
-capture output/provenance destination readiness
+reason:
+Cut A source authority is accepted/persisted; actual image/provenance/DB/runtime-root
+environment is still absent.
 
-actual S1:
-NOT AUTHORIZED BY THIS PERSISTENCE TASK
-NOT AUTHORIZED BY THIS PREREQUISITE NEXT ACTION
+blocker:
+Cut B exact Browser Task required before provisioning.
 
-actual S2-S4:
-NOT AUTHORIZED
+forbidden:
+actual private S1 until final readiness judgment.
 
-Replay:
-NOT AUTHORIZED
+actual S1-S4:
+NOT_STARTED / NOT_AUTHORIZED
 
-actual S1-S4 scenario execution:
+capture/export corpus:
 NOT_STARTED
 
-durable capture corpus/sanitization/export:
-NOT_STARTED / SEQUENCED_BEHIND_PRIVATE_CAPTURES
-
 Recorded Replay:
-NOT_STARTED / NOT_ADMITTED / SEQUENCED_BEHIND_CORPUS_EXPORT
+NOT_STARTED / NOT_ADMITTED
 
 P2-4:
 NOT_STARTED
@@ -349,9 +346,13 @@ P3:
 NOT_STARTED
 ```
 
-The runtime-prerequisite Task is not issued or executed here. Browser must first judge A2 terminal persistence. A later separately issued prerequisite Task may verify readiness; it does not authorize actual S1. Actual captures, corpus/export, and Replay require their own explicit authorization. `PUBLIC_BOUNDED_LIVE` remains `NOT_RELEASED`; `PUBLIC_RECORDED_REPLAY` remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.
+Cut B is not executed by this persistence Task. Actual captures, corpus/export, and
+Recorded Replay require separate authorization. Public live/replay remain unreleased.
 
 Current authority:
+
+- `.aiassistant/reports/aiscc/20260912_0245_aiscc-p2-3-cut-a-source-implementation-final-acceptance-judgment-1.md`
+- `.aiassistant/records/aiscc/cycles/20260912_0245_aiscc-p2-3-cut-a-executable-proof-final-acceptance-persistence-entry-1.cycle.md`
 
 - `.aiassistant/reports/aiscc/20260911_1815_aiscc-p2-3-a2-implementation-final-acceptance-judgment-1.md`
 - `.aiassistant/records/aiscc/cycles/20260911_1930_aiscc-p2-3-a2-persistence-blocked-active-task-ignore-contract-retry-entry-1.cycle.md`
@@ -456,4 +457,4 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
 P1 is `ACCEPTED / CLOSED`; P2-1, P2-2 and P2-3 Phase 1A are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
-`IN_PROGRESS` with Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration is `IMPLEMENTATION ACCEPTED / PERSISTED`. Runtime prerequisite verification is `NEXT / NOT_VERIFIED` after Browser terminal persistence judgment; actual S1-S4 scenario execution, capture/export corpus, and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.
+`IN_PROGRESS` with Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration is `IMPLEMENTATION ACCEPTED / PERSISTED`. Runtime prerequisite verification is accepted as `NOT_READY / PROVISIONING_REQUIRED`; Cut B requires an exact Browser Task; actual S1-S4 scenario execution, capture/export corpus, and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.

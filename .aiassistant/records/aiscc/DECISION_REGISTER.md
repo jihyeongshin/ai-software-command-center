@@ -896,3 +896,21 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - phase boundary: P2 and P2-3 remain `IN_PROGRESS`; P2-4 remains `NOT_STARTED`; public distribution/license remains `HUMAN_PENDING`.
 - historical boundary: earlier decisions retain their original acceptance and verification-time meaning; this entry records the later accepted A2 implementation.
 - supersession_rule: changing accepted owner authority, evidence/currentness binding, Judgment compatibility, independent P1-4 guards, or runtime authorization requires a separately accepted Task and judgment.
+
+## AISCC-P2-3-PRIVATE-S1-CUT-A-IMAGE-PROVENANCE-DOCKER-RUNNER-V1
+
+- decision_id: `AISCC-P2-3-PRIVATE-S1-CUT-A-IMAGE-PROVENANCE-DOCKER-RUNNER-V1`
+- decision: Accept and persist the 19-path Cut A source/config/test implementation.
+- status: `HUMAN_PROVIDED / ACCEPTED / PERSISTED`
+- implementation commit: `750c37aecb4c264f66aabf12dedb8d54e20a7f95`
+- base: `21bb0769c5db126c1989d9e0eb8e9f4c5ceade91`
+- decision source: Browser 0245 final-acceptance Judgment and Cycle; no new executor-issued acceptance.
+- accepted source contract: typed provenance authority; V2 static policy/provenance ref; source-owned Docker settlement runner; production provenance binding; historical Git-object build-context contract.
+- proof (`REUSED_ACCEPTED`): compile 14/14; Ruff 0; loaders 4/4; negative loader 9/9; unit 246; focused integration 1; full integration 9; regression 110; contract 32/32.
+- non-claim: no actual image build/runtime; no canonical provenance issuance; no persistent capture DB; no actual S1.
+- next action: `ENVIRONMENT_PROVISIONING / P2-3 private S1 Cut B environment provisioning`; exact Browser Task required before provisioning; actual private S1 forbidden until final readiness judgment.
+- phase: `P2-3 IN_PROGRESS`; Cut B `NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE`; public replay/live `NOT_RELEASED`.
+- provenance:
+  - `.aiassistant/reports/aiscc/20260912_0245_aiscc-p2-3-cut-a-source-implementation-final-acceptance-judgment-1.md`
+  - `.aiassistant/records/aiscc/cycles/20260912_0245_aiscc-p2-3-cut-a-executable-proof-final-acceptance-persistence-entry-1.cycle.md`
+- historical boundary: all previous decisions retain their original verification-time meaning. The A2 terminal-persistence and prerequisite-next-action wording above is historical; the 1935 and 2140 Judgments settled those steps, and this entry sets the current Cut A/Cut B boundary.

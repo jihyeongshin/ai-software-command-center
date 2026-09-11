@@ -45,7 +45,9 @@
 | P2-3 Stockroom process settlement fix | `ACCEPTED / CLOSED / PERSISTED` |
 | P2-3 A1 capture-runner core | `ACCEPTED / CLOSED / PERSISTED` |
 | P2-3 A2 production owner/bootstrap integration | `IMPLEMENTATION ACCEPTED / PERSISTED` |
-| P2-3 runtime prerequisites | `NOT_VERIFIED / NEXT` |
+| P2-3 Cut A source implementation | `ACCEPTED / PERSISTED` |
+| P2-3 Cut B environment provisioning | `NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE` |
+| P2-3 runtime prerequisites | `NOT_READY / PROVISIONING_REQUIRED` |
 | P2-3 actual S1-S4 scenario execution | `NOT_STARTED` |
 | P2-3 capture/export corpus | `NOT_STARTED` |
 | P2-3 Replay | `NOT_STARTED / NOT_ADMITTED` |
@@ -147,7 +149,7 @@ P2-3 A2 production owner/bootstrap integration:
 IMPLEMENTATION ACCEPTED / PERSISTED
 
 runtime prerequisites:
-NOT_VERIFIED
+NOT_READY / PROVISIONING_REQUIRED
 
 actual S1-S4 scenario execution:
 NOT_STARTED
@@ -168,6 +170,49 @@ public distribution/license:
 HUMAN_PENDING
 ```
 
+## P2-3 Cut A accepted source persistence and Cut B boundary
+
+```text
+P2-3:
+IN_PROGRESS
+
+Cut A image provenance / Docker settlement source implementation:
+ACCEPTED / PERSISTED
+
+Cut A Commit A:
+750c37aecb4c264f66aabf12dedb8d54e20a7f95
+
+Cut A executable proof (REUSED_ACCEPTED):
+static PASS
+unit 246 PASS
+focused integration 1 PASS
+full integration 9 PASS
+regression 110 PASS
+contract 32/32 PASS
+
+Cut B environment provisioning:
+NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE
+
+canonical image provenance:
+NOT_ISSUED
+
+persistent capture DB:
+NOT_PROVISIONED
+
+private S1:
+NOT_EXECUTED
+
+public replay/live:
+NOT_RELEASED
+```
+
+Acceptance is Browser/Human-provided in the 0245 final-acceptance Judgment and Cycle.
+Persistence is executor-verified. Executable proof is reused, not rerun by this Task.
+Cut B needs an exact Browser Task; private S1 remains forbidden until final readiness judgment.
+
+- `.aiassistant/reports/aiscc/20260912_0245_aiscc-p2-3-cut-a-source-implementation-final-acceptance-judgment-1.md`
+- `.aiassistant/records/aiscc/cycles/20260912_0245_aiscc-p2-3-cut-a-executable-proof-final-acceptance-persistence-entry-1.cycle.md`
+
 ## P2-3 A2 accepted implementation and persistence
 
 ```text
@@ -186,10 +231,10 @@ A2 actual/public runtime:
 NOT_EXECUTED
 
 A2 terminal persistence:
-BROWSER_JUDGMENT_REQUIRED
+ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
 
 runtime prerequisite verification:
-NEXT / NOT_VERIFIED
+ACCEPTED / NOT_READY / PROVISIONING_REQUIRED
 
 actual S1-S4:
 NOT_STARTED
@@ -207,7 +252,7 @@ distribution/license:
 HUMAN_PENDING
 ```
 
-Implementation acceptance authority is the 1815 final-acceptance Judgment, preserved by the 1930 retry Judgment. Commit A records local persistence of the accepted implementation and provenance; Browser terminal persistence judgment remains required before runtime-prerequisite verification begins. P2 and P2-3 remain `IN_PROGRESS`.
+Implementation acceptance authority is the 1815 final-acceptance Judgment, preserved by the 1930 retry Judgment. The 1935 Browser Judgment accepted A2 terminal persistence. The 2140 Judgment accepted prerequisite verification as NOT_READY / PROVISIONING_REQUIRED; the 0245 Judgment subsequently accepted Cut A source and executable proof. P2 and P2-3 remain `IN_PROGRESS`.
 
 - `.aiassistant/reports/aiscc/20260911_1815_aiscc-p2-3-a2-implementation-final-acceptance-judgment-1.md`
 - `.aiassistant/records/aiscc/cycles/20260911_1930_aiscc-p2-3-a2-persistence-blocked-active-task-ignore-contract-retry-entry-1.cycle.md`
@@ -255,32 +300,48 @@ The initial 0102 ZIP export failure is historical process provenance. Command Ce
 Current next action:
 
 ```text
-P2-3 actual capture runtime prerequisite verification:
-NEXT / NOT_VERIFIED / AFTER_BROWSER_TERMINAL_PERSISTENCE_JUDGMENT
+phase:
+P2-3
 
-purpose:
-verify local/canonical runtime prerequisites
-verify PostgreSQL identity/readiness
-verify Docker/image availability under accepted policy
-verify source repository/materializer prerequisites
-verify provider/runtime configuration availability
-verify security/network/secret restrictions
-verify capture output/provenance destination readiness
+work_type:
+ENVIRONMENT_PROVISIONING
 
-actual S1:
-NOT AUTHORIZED BY THIS PERSISTENCE TASK
-NOT AUTHORIZED BY THIS PREREQUISITE NEXT ACTION
+title:
+P2-3 private S1 Cut B environment provisioning
 
-actual S2-S4:
-NOT AUTHORIZED
+status:
+NOT_STARTED / AUTHORIZATION_PENDING_BROWSER_AFTER_PERSISTENCE
 
-Replay:
-NOT AUTHORIZED
+reason:
+Cut A source authority is accepted/persisted; actual image/provenance/DB/runtime-root
+environment is still absent.
+
+blocker:
+Cut B exact Browser Task required before provisioning.
+
+forbidden:
+actual private S1 until final readiness judgment.
+
+actual S1-S4:
+NOT_STARTED / NOT_AUTHORIZED
+
+capture/export corpus:
+NOT_STARTED
+
+Recorded Replay:
+NOT_STARTED / NOT_ADMITTED
+
+P2-4:
+NOT_STARTED
+
+P3:
+NOT_STARTED
 ```
 
-The runtime-prerequisite Task is neither issued nor executed by this persistence task. Actual captures, corpus/export, and Recorded Replay remain later separately authorized work.
+Cut B is not executed by this persistence Task. Actual captures, corpus/export, and
+Recorded Replay require separate authorization. Public live/replay remain unreleased.
 
-Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. B3 and Phase 1B are `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`, the Stockroom process settlement fix and A1 capture-runner core are `ACCEPTED / CLOSED / PERSISTED`, and A2 implementation is accepted and persisted. Runtime prerequisite verification is next after Browser terminal persistence judgment; private S1-S4 captures, durable capture corpus/sanitization/export, and Recorded Replay remain later separately authorized work. No public runtime mode is authorized. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
+Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. B3 and Phase 1B are `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`, the Stockroom process settlement fix and A1 capture-runner core are `ACCEPTED / CLOSED / PERSISTED`, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning awaits an exact Browser Task; private S1-S4 captures, durable capture corpus/sanitization/export, and Recorded Replay remain later separately authorized work. No public runtime mode is authorized. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -1152,11 +1213,11 @@ Terminal Cycle:
 - P2-3 A1 capture-runner core: `ACCEPTED / CLOSED / PERSISTED`
 - A1 source commit: `6385ab41a92e43e438e8992bacf929e7daf5130d`
 - A1 post-commit reconciliation: `PASS / 21 of 21 RAW_EXACT / amend not required`
-- next subtask: `P2-3 actual capture runtime prerequisite verification`
+- next subtask: `P2-3 private S1 Cut B environment provisioning`
 - P2-3 A2 production owner/bootstrap integration: `IMPLEMENTATION ACCEPTED / PERSISTED`
 - A2 COMMIT_A: `d98f9ad108e95ba659b9c6a10770119af22175a1`
-- A2 terminal persistence: `BROWSER_JUDGMENT_REQUIRED`
-- runtime prerequisites: `NOT_VERIFIED / NEXT`
+- A2 terminal persistence: `ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE`
+- runtime prerequisites: `NOT_READY / PROVISIONING_REQUIRED`
 - actual S1-S4 scenario execution: `NOT_STARTED`
 - capture/export corpus: `NOT_STARTED`
 - P2-3 Replay: `NOT_STARTED`
