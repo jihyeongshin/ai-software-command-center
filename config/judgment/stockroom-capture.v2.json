@@ -1,0 +1,42 @@
+{
+  "schema_id": "AISCC-STOCKROOM-CAPTURE-JUDGMENT-V2",
+  "schema_version": "2",
+  "authority_version": "p1-7-judgment-policy-v1",
+  "issued_at": "2026-09-11T09:20:00+09:00",
+  "policies": [
+    {
+      "scenario_id": "stockroom-s1-normal",
+      "scenario_version": "1.0.0",
+      "policy_id": "stockroom-s1-accepted",
+      "policy_version": "stockroom-judgment-v2",
+      "task_contract_id": "stockroom-s1-normal",
+      "task_contract_version": "1.0.0",
+      "source_state": "ADMISSION_PENDING",
+      "target_state": "ACCEPTED",
+      "owner_policy": "SYSTEM_DETERMINISTIC",
+      "deterministic_kind": "ACCEPTED",
+      "requires_human_result": false,
+      "requires_post_human_evidence": true,
+      "evidence_basis_kind": "SATISFIED_ATTESTATION",
+      "evidence_checkpoint_ref": "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v1",
+      "evidence_requirement_set_ref": "stockroom-s1-normal:evidence-set@v1"
+    },
+    {
+      "scenario_id": "stockroom-s2-missing-evidence",
+      "scenario_version": "1.0.0",
+      "policy_id": "stockroom-s2-rework",
+      "policy_version": "stockroom-judgment-v2",
+      "task_contract_id": "stockroom-s2-missing-evidence",
+      "task_contract_version": "1.0.0",
+      "source_state": "ADMISSION_PENDING",
+      "target_state": "REWORK_REQUIRED",
+      "owner_policy": "SYSTEM_DETERMINISTIC",
+      "deterministic_kind": "HOLD_REWORK_REQUIRED",
+      "requires_human_result": false,
+      "requires_post_human_evidence": false,
+      "evidence_basis_kind": "UNSATISFIED_SET_EVALUATION",
+      "evidence_checkpoint_ref": "stockroom-s2-missing-evidence:PRE_HUMAN_EVIDENCE@v1",
+      "evidence_requirement_set_ref": "stockroom-s2-missing-evidence:evidence-set@v1"
+    }
+  ]
+}

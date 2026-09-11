@@ -20,6 +20,7 @@ from aiscc.scenarios.driver import (
     StockroomConfigurationFingerprints,
     StockroomDriverRequest,
     StockroomOwnerDependencies,
+    build_prepared_attempt_binding,
     build_stockroom_driver_request,
     prepare_stockroom_driver,
 )
@@ -131,7 +132,12 @@ class StockroomOwnerPreparation:
             attempt_id=attempt_id,
             expected_initial_state_version=expected_initial_state_version,
         )
-        return prepare_stockroom_driver(request, self.owners)
+        attempt_binding = build_prepared_attempt_binding(request)
+        return prepare_stockroom_driver(
+            request,
+            self.owners,
+            attempt_binding=attempt_binding,
+        )
 
 
 def build_stockroom_owner_composition() -> StockroomOwnerComposition:
@@ -256,9 +262,7 @@ def _cross_bind(
         )
         != _TOOL_SCENARIOS
         or tuple(
-            profile_id
-            for profile_id in _PROFILE_IDS
-            if profiles[profile_id].tool_dispatch_allowed
+            profile_id for profile_id in _PROFILE_IDS if profiles[profile_id].tool_dispatch_allowed
         )
         != _TOOL_PROFILES
     ):
@@ -286,9 +290,7 @@ def _fingerprints(
             "schema": [catalog.document.schema_id, catalog.document.schema_version],
             "resource_ref": catalog.resource.resource_ref,
             "resource_manifest": catalog.resource.aggregate_sha256,
-            "scenarios": [
-                [item.scenario_id, item.scenario_version] for item in catalog.scenarios
-            ],
+            "scenarios": [[item.scenario_id, item.scenario_version] for item in catalog.scenarios],
         }
     )
     provider_hash = canonical_sha256(

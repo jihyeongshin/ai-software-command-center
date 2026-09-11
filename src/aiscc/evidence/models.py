@@ -9,6 +9,8 @@ from typing import Any
 
 from aiscc.contracts.workflow import WorkflowState
 
+EVIDENCE_SET_EVALUATION_VERSION = "p1-6-set-evaluation-v1"
+
 
 class EvidenceAdmissionOutcome(StrEnum):
     ADMITTED = "ADMITTED"
@@ -575,6 +577,40 @@ class AdmittedEvidenceRef:
 
 
 @dataclass(frozen=True, slots=True)
+class EvidenceSetEvaluationRef:
+    evaluation_version: str
+    evaluation_id: str
+
+    def __post_init__(self) -> None:
+        prefix = "evidence-set-evaluation-"
+        digest = self.evaluation_id.removeprefix(prefix)
+        if self.evaluation_version != EVIDENCE_SET_EVALUATION_VERSION:
+            raise ValueError("unsupported evidence set evaluation version")
+        if (
+            not self.evaluation_id.startswith(prefix)
+            or len(digest) != 64
+            or digest != digest.lower()
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError("malformed evidence set evaluation id")
+
+    def serialized(self) -> str:
+        return f"p1-6-set-evaluation:{self.evaluation_version}:{self.evaluation_id}"
+
+    @classmethod
+    def parse(cls, value: str) -> EvidenceSetEvaluationRef:
+        if not isinstance(value, str):
+            raise ValueError("evidence set evaluation ref must be text")
+        parts = value.split(":")
+        if len(parts) != 3 or parts[0] != "p1-6-set-evaluation":
+            raise ValueError("malformed evidence set evaluation ref")
+        parsed = cls(parts[1], parts[2])
+        if parsed.serialized() != value:
+            raise ValueError("non-canonical evidence set evaluation ref")
+        return parsed
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceRequirementSatisfaction:
     requirement_ref: str
     outcome: RequirementSatisfaction
@@ -602,6 +638,12 @@ class EvidenceSetEvaluation:
     evidence_authority_revision: int
     outcome: EvidenceSetOutcome
     evaluated_at: datetime
+
+    @property
+    def serialized_ref(self) -> str:
+        return EvidenceSetEvaluationRef(
+            self.evaluation_version, self.evaluation_id
+        ).serialized()
 
 
 @dataclass(frozen=True, slots=True)

@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import shutil
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -14,15 +14,17 @@ from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 from aiscc.evidence.service import EvidenceAdmissionService
 from aiscc.human.repository import PostgresHumanAuthorityRepository
 from aiscc.judgment.authority import PostgresJudgmentAuthority
-from aiscc.providers.service import AgentExecutionService
-from aiscc.runtime.stockroom_materializer import StockroomMaterializer
 from aiscc.runtime.stockroom_workspace import StockroomWorkspace
 from aiscc.scenarios.composition import (
     StockroomCompositionError,
     bind_stockroom_owner_dependencies,
     build_stockroom_owner_composition,
 )
-from aiscc.scenarios.driver import StockroomOwnerDependencies
+from aiscc.scenarios.driver import (
+    PreparedStockroomDriver,
+    StockroomOwnerDependencies,
+    build_prepared_attempt_binding,
+)
 from aiscc.scenarios.models import RESOURCE_REF, SCENARIO_IDS
 from aiscc.security.policy import SecurityPolicy, default_profiles
 from aiscc.security.stockroom_policy import StockroomOwnerRestriction
@@ -37,27 +39,46 @@ PROFILE_IDS = (
 )
 
 
+@dataclass(frozen=True, slots=True)
+class _FactoryAuthority:
+    semantic_role: str
+    factory_ref: str
+    factory_fingerprint: str
+
+
+def _factories() -> tuple[_FactoryAuthority, _FactoryAuthority]:
+    return (
+        _FactoryAuthority(
+            "STOCKROOM_MATERIALIZER_FACTORY",
+            "unit-materializer-factory",
+            "1" * 64,
+        ),
+        _FactoryAuthority(
+            "STOCKROOM_AGENT_EXECUTION_SERVICE_FACTORY",
+            "unit-execution-factory",
+            "2" * 64,
+        ),
+    )
+
+
 def _owners(composition: object) -> StockroomOwnerDependencies:
     security_config = composition.security_config  # type: ignore[attr-defined]
     restriction = StockroomOwnerRestriction(security_config)
+    materializer_factory, execution_factory = _factories()
     return StockroomOwnerDependencies(
         workflow_kernel=object.__new__(WorkflowKernel),
-        agent_execution_service=object.__new__(AgentExecutionService),
+        agent_execution_service_factory=execution_factory,
         evidence_admission_service=object.__new__(EvidenceAdmissionService),
         human_gate_owner=object.__new__(PostgresHumanAuthorityRepository),
         judgment_owner=object.__new__(PostgresJudgmentAuthority),
         workspace_owner=object.__new__(StockroomWorkspace),
-        materializer=object.__new__(StockroomMaterializer),
-        security_policy=SecurityPolicy(
-            default_profiles(), stockroom_policy=restriction
-        ),
+        materializer_factory=materializer_factory,
+        security_policy=SecurityPolicy(default_profiles(), stockroom_policy=restriction),
         stockroom_owner_restriction=restriction,
     )
 
 
-def _temporary_configs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> dict[str, Path]:
+def _temporary_configs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     scenario_root = tmp_path / "stockroom"
     shutil.copytree(ROOT / "config/scenarios/stockroom/v1", scenario_root)
     paths = {
@@ -91,9 +112,7 @@ def test_canonical_owner_configuration_cross_binds_exactly() -> None:
         assert local.scenario_id == scenario_id
         assert local.profile.profile_id == PROFILE_IDS[index]
         assert local.profile.version == policy.profile_version == "1"
-        assert local.profile.allowed_runtime_modes == frozenset(
-            {RuntimeMode.OWNER_SELF_DOGFOOD}
-        )
+        assert local.profile.allowed_runtime_modes == frozenset({RuntimeMode.OWNER_SELF_DOGFOOD})
         assert local.tool_dispatch_allowed is policy.tool_allowed is (index != 2)
         assert local.profile.provider_call_maximum == policy.provider_call_limit
 
@@ -193,9 +212,7 @@ def test_altered_or_public_configuration_fails_closed(
             if mutation == "mismatch"
             else 'provider_id = "aiscc-local-deterministic"'
         )
-        paths["profiles"].write_text(
-            current.replace(target, replacement, 1), encoding="utf-8"
-        )
+        paths["profiles"].write_text(current.replace(target, replacement, 1), encoding="utf-8")
 
     with pytest.raises(StockroomCompositionError) as caught:
         build_stockroom_owner_composition()
@@ -209,15 +226,46 @@ def test_missing_or_duck_typed_owner_dependency_fails_closed(replacement: object
     with pytest.raises(ValueError, match="STOCKROOM_REAL_OWNER_DEPENDENCY_REQUIRED"):
         StockroomOwnerDependencies(
             workflow_kernel=replacement,  # type: ignore[arg-type]
-            agent_execution_service=values.agent_execution_service,
+            agent_execution_service_factory=values.agent_execution_service_factory,
             evidence_admission_service=values.evidence_admission_service,
             human_gate_owner=values.human_gate_owner,
             judgment_owner=values.judgment_owner,
             workspace_owner=values.workspace_owner,
-            materializer=values.materializer,
+            materializer_factory=values.materializer_factory,
             security_policy=values.security_policy,
             stockroom_owner_restriction=values.stockroom_owner_restriction,
         )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "replacement"),
+    [
+        ("materializer_factory", object()),
+        (
+            "materializer_factory",
+            _FactoryAuthority(
+                "STOCKROOM_AGENT_EXECUTION_SERVICE_FACTORY",
+                "wrong-materializer-role",
+                "3" * 64,
+            ),
+        ),
+        ("agent_execution_service_factory", object()),
+        (
+            "agent_execution_service_factory",
+            _FactoryAuthority(
+                "STOCKROOM_MATERIALIZER_FACTORY",
+                "wrong-execution-role",
+                "4" * 64,
+            ),
+        ),
+    ],
+)
+def test_factory_authority_role_and_identity_fail_closed(
+    field_name: str, replacement: object
+) -> None:
+    owners = _owners(build_stockroom_owner_composition())
+    with pytest.raises(ValueError, match="STOCKROOM_REAL_OWNER_DEPENDENCY_REQUIRED"):
+        replace(owners, **{field_name: replacement})
 
 
 def test_default_bootstrap_is_unchanged_and_owner_factory_is_explicitly_inert() -> None:
@@ -234,3 +282,88 @@ def test_default_bootstrap_is_unchanged_and_owner_factory_is_explicitly_inert() 
     assert not hasattr(bootstrap, "build_public_stockroom")
     bound = bind_stockroom_owner_dependencies(composed, owners)
     assert bound.owners is owners
+
+    request = bound.request(
+        scenario_id=SCENARIO_IDS[0],
+        run_id="run-owner-identity",
+        attempt_id="attempt-owner-identity",
+        expected_initial_state_version=1,
+    )
+    prepared_driver = bound.prepare(
+        scenario_id=SCENARIO_IDS[0],
+        run_id="run-owner-identity",
+        attempt_id="attempt-owner-identity",
+        expected_initial_state_version=1,
+    )
+    assert prepared_driver.owners is owners
+    assert prepared_driver.request == request
+    assert prepared_driver.owners.workflow_kernel is owners.workflow_kernel
+    assert prepared_driver.owners.evidence_admission_service is owners.evidence_admission_service
+    assert prepared_driver.owners.human_gate_owner is owners.human_gate_owner
+    assert prepared_driver.owners.judgment_owner is owners.judgment_owner
+    assert prepared_driver.owners.workspace_owner is owners.workspace_owner
+    assert prepared_driver.owners.security_policy is owners.security_policy
+    assert prepared_driver.owners.stockroom_owner_restriction is owners.stockroom_owner_restriction
+    assert prepared_driver.owners.materializer_factory is owners.materializer_factory
+    assert (
+        prepared_driver.owners.agent_execution_service_factory
+        is owners.agent_execution_service_factory
+    )
+    assert prepared_driver.attempt_binding.run_id == "run-owner-identity"
+    assert prepared_driver.attempt_binding.attempt_id == "attempt-owner-identity"
+    assert prepared_driver.attempt_binding.scenario_id == SCENARIO_IDS[0]
+    assert prepared_driver.attempt_binding.request_fingerprint == request.request_fingerprint
+    assert (
+        prepared_driver.attempt_binding.run_binding_fingerprint
+        == request.run_binding.binding_fingerprint
+    )
+    assert (
+        prepared_driver.attempt_binding.configuration_fingerprint
+        == request.configuration_fingerprints.composition_sha256
+    )
+    with pytest.raises(FrozenInstanceError):
+        prepared_driver.attempt_binding.run_id = "foreign-run"  # type: ignore[misc]
+    with pytest.raises(ValueError, match="STOCKROOM_PREPARED_ATTEMPT_BINDING_DENIED"):
+        replace(
+            prepared_driver,
+            attempt_binding=replace(
+                prepared_driver.attempt_binding,
+                request_fingerprint="f" * 64,
+                binding_fingerprint="e" * 64,
+            ),
+        )
+
+
+def test_prepared_attempt_binding_rejects_foreign_request_context() -> None:
+    composed = build_stockroom_owner_composition()
+    owners = _owners(composed)
+    local_request = composed.request(
+        scenario_id=SCENARIO_IDS[0],
+        run_id="run-local",
+        attempt_id="attempt-local",
+        expected_initial_state_version=1,
+    )
+    foreign_request = composed.request(
+        scenario_id=SCENARIO_IDS[1],
+        run_id="run-foreign",
+        attempt_id="attempt-foreign",
+        expected_initial_state_version=1,
+    )
+    foreign_binding = build_prepared_attempt_binding(foreign_request)
+    with pytest.raises(ValueError, match="STOCKROOM_PREPARED_DRIVER_BINDING_DENIED"):
+        PreparedStockroomDriver(local_request, owners, foreign_binding)
+
+    altered_composition = replace(composed.fingerprints, composition_sha256="a" * 64)
+    altered_request = composition_module.build_stockroom_driver_request(
+        composed.enroll(SCENARIO_IDS[0]),
+        run_id="run-local",
+        attempt_id="attempt-local",
+        expected_initial_state_version=1,
+        configuration_fingerprints=altered_composition,
+    )
+    with pytest.raises(ValueError, match="STOCKROOM_PREPARED_DRIVER_BINDING_DENIED"):
+        PreparedStockroomDriver(
+            altered_request,
+            owners,
+            build_prepared_attempt_binding(local_request),
+        )

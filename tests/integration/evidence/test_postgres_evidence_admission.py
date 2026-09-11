@@ -72,6 +72,7 @@ from aiscc.evidence.models import (
     EvidenceRequirementSet,
     EvidenceSemanticOwner,
     EvidenceSensitivity,
+    EvidenceSetEvaluationRef,
     EvidenceSetOutcome,
     FreshnessPolicy,
     FreshnessPolicyKind,
@@ -85,6 +86,7 @@ from aiscc.evidence.repository import (
     HistoricalEvidenceProvenanceError,
     PostgresEvidenceRepository,
     verify_historical_set_attestation_provenance,
+    verify_historical_set_evaluation_provenance,
 )
 from aiscc.evidence.requirements import TaskContractEvidenceAuthority
 from aiscc.evidence.service import EvidenceAdmissionService
@@ -681,6 +683,139 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
         )
         assert wrong_evaluation.outcome is EvidenceSetOutcome.UNSATISFIED
         assert wrong_attestation is None
+        assert (
+            EvidenceSetEvaluationRef.parse(wrong_evaluation.serialized_ref).serialized()
+            == wrong_evaluation.serialized_ref
+        )
+        async with sessions() as session:
+            assert (
+                await verify_historical_set_evaluation_provenance(
+                    session, wrong_evaluation.serialized_ref
+                )
+                == wrong_evaluation
+            )
+        assert (
+            await repository.load_current_set_evaluation(
+                wrong_evaluation.serialized_ref,
+                work_run_id=run_id,
+                source_state=WorkflowState.ADMISSION_PENDING,
+                state_version=3,
+                checkpoint_ref=same_state_other_use.ref.serialized(),
+                requirement_set_ref=(
+                    f"{requirement_set.requirement_set_id}"
+                    f"@{requirement_set.requirement_set_version}"
+                ),
+                expected_outcome=EvidenceSetOutcome.UNSATISFIED,
+                now=NOW,
+            )
+            == wrong_evaluation
+        )
+        requirement_set_ref = (
+            f"{requirement_set.requirement_set_id}@{requirement_set.requirement_set_version}"
+        )
+        mismatched_inputs = (
+            (
+                "wrong-run",
+                WorkflowState.ADMISSION_PENDING,
+                3,
+                same_state_other_use.ref.serialized(),
+                requirement_set_ref,
+                EvidenceSetOutcome.UNSATISFIED,
+            ),
+            (
+                run_id,
+                WorkflowState.RUNNING,
+                3,
+                same_state_other_use.ref.serialized(),
+                requirement_set_ref,
+                EvidenceSetOutcome.UNSATISFIED,
+            ),
+            (
+                run_id,
+                WorkflowState.ADMISSION_PENDING,
+                4,
+                same_state_other_use.ref.serialized(),
+                requirement_set_ref,
+                EvidenceSetOutcome.UNSATISFIED,
+            ),
+            (
+                run_id,
+                WorkflowState.ADMISSION_PENDING,
+                3,
+                pre.ref.serialized(),
+                requirement_set_ref,
+                EvidenceSetOutcome.UNSATISFIED,
+            ),
+            (
+                run_id,
+                WorkflowState.ADMISSION_PENDING,
+                3,
+                same_state_other_use.ref.serialized(),
+                "wrong-set@v1",
+                EvidenceSetOutcome.UNSATISFIED,
+            ),
+            (
+                run_id,
+                WorkflowState.ADMISSION_PENDING,
+                3,
+                same_state_other_use.ref.serialized(),
+                requirement_set_ref,
+                EvidenceSetOutcome.SATISFIED,
+            ),
+        )
+        for (
+            expected_run,
+            expected_state,
+            expected_version,
+            expected_checkpoint,
+            expected_set,
+            expected_outcome,
+        ) in mismatched_inputs:
+            assert (
+                await repository.load_current_set_evaluation(
+                    wrong_evaluation.serialized_ref,
+                    work_run_id=expected_run,
+                    source_state=expected_state,
+                    state_version=expected_version,
+                    checkpoint_ref=expected_checkpoint,
+                    requirement_set_ref=expected_set,
+                    expected_outcome=expected_outcome,
+                    now=NOW,
+                )
+                is None
+            )
+        for malformed in (
+            wrong_evaluation.serialized_ref.replace("p1-6-set-evaluation", "wrong", 1),
+            wrong_evaluation.serialized_ref.replace(
+                wrong_evaluation.evaluation_version, "unknown-version", 1
+            ),
+            "p1-6-set-evaluation:p1-6-set-evaluation-v1:",
+            wrong_evaluation.serialized_ref + ":extra",
+            "p1-6-attestation:v1:attestation-" + "0" * 64,
+            f"p1-6-evidence-set-evaluation:{wrong_evaluation.evaluation_id}",
+        ):
+            with pytest.raises(ValueError):
+                EvidenceSetEvaluationRef.parse(malformed)
+        fabricated = EvidenceSetEvaluationRef(
+            wrong_evaluation.evaluation_version,
+            "evidence-set-evaluation-" + "0" * 64,
+        ).serialized()
+        assert (
+            await repository.load_current_set_evaluation(
+                fabricated,
+                work_run_id=run_id,
+                source_state=WorkflowState.ADMISSION_PENDING,
+                state_version=3,
+                checkpoint_ref=same_state_other_use.ref.serialized(),
+                requirement_set_ref=(
+                    f"{requirement_set.requirement_set_id}"
+                    f"@{requirement_set.requirement_set_version}"
+                ),
+                expected_outcome=EvidenceSetOutcome.UNSATISFIED,
+                now=NOW,
+            )
+            is None
+        )
         other_use_candidate = system_candidate(
             candidate_id=f"other-use-{uuid4()}",
             run_id=run_id,
@@ -712,6 +847,26 @@ def test_durable_admission_concurrency_checkpoint_revocation_and_p1_4_handoff(
         )
         assert other_evaluation.outcome is EvidenceSetOutcome.SATISFIED
         assert other_attestation is not None
+        assert (
+            await repository.load_current_set_evaluation(
+                wrong_evaluation.serialized_ref,
+                work_run_id=run_id,
+                source_state=WorkflowState.ADMISSION_PENDING,
+                state_version=3,
+                checkpoint_ref=same_state_other_use.ref.serialized(),
+                requirement_set_ref=(
+                    f"{requirement_set.requirement_set_id}"
+                    f"@{requirement_set.requirement_set_version}"
+                ),
+                expected_outcome=EvidenceSetOutcome.UNSATISFIED,
+                now=NOW,
+            )
+            is None
+        )
+        assert (
+            wrong_evaluation.evidence_authority_revision
+            == other_evaluation.evidence_authority_revision
+        )
         wrong_transition_use = transition_request(
             run_id=run_id,
             task_id=task_id,

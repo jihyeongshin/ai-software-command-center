@@ -33,6 +33,7 @@ from aiscc.evidence.content import (
 )
 from aiscc.evidence.issuers import candidate_fingerprint, human_ingress_fingerprint
 from aiscc.evidence.models import (
+    EVIDENCE_SET_EVALUATION_VERSION,
     AdmittedEvidence,
     AdmittedEvidenceRef,
     AuthoritativeWorkRunSnapshot,
@@ -68,6 +69,7 @@ from aiscc.evidence.models import (
     EvidenceSemanticOwner,
     EvidenceSensitivity,
     EvidenceSetEvaluation,
+    EvidenceSetEvaluationRef,
     EvidenceSetOutcome,
     EvidenceSetSatisfactionAttestation,
     FreshnessPolicy,
@@ -923,7 +925,7 @@ class PostgresEvidenceRepository:
             )
             evaluation = EvidenceSetEvaluation(
                 f"evidence-set-evaluation-{identity}",
-                "p1-6-set-evaluation-v1",
+                EVIDENCE_SET_EVALUATION_VERSION,
                 run.task_contract_id,
                 run.task_contract_version,
                 work_run_id,
@@ -989,6 +991,249 @@ class PostgresEvidenceRepository:
             elif existing_attestation.payload != _attestation_payload(attestation):
                 raise EvidenceAuthorityConflictError("attestation identity conflict")
             return evaluation, attestation
+
+    async def load_current_set_evaluation(
+        self,
+        serialized_ref: str,
+        *,
+        work_run_id: str,
+        source_state: WorkflowState,
+        state_version: int,
+        checkpoint_ref: str,
+        requirement_set_ref: str,
+        expected_outcome: EvidenceSetOutcome,
+        now: datetime | None = None,
+    ) -> EvidenceSetEvaluation | None:
+        async with self._session_factory() as session, session.begin():
+            await acquire_work_run_transaction_lock(session, work_run_id)
+            return await self.load_current_set_evaluation_in_session(
+                session,
+                serialized_ref,
+                work_run_id=work_run_id,
+                source_state=source_state,
+                state_version=state_version,
+                checkpoint_ref=checkpoint_ref,
+                requirement_set_ref=requirement_set_ref,
+                expected_outcome=expected_outcome,
+                now=now,
+            )
+
+    async def load_current_set_evaluation_in_session(
+        self,
+        session: AsyncSession,
+        serialized_ref: str,
+        *,
+        work_run_id: str,
+        source_state: WorkflowState,
+        state_version: int,
+        checkpoint_ref: str,
+        requirement_set_ref: str,
+        expected_outcome: EvidenceSetOutcome,
+        now: datetime | None = None,
+    ) -> EvidenceSetEvaluation | None:
+        """Resolve one exact immutable evaluation and recompute its current P1-6 truth."""
+        parsed_ref = EvidenceSetEvaluationRef.parse(serialized_ref)
+        row = await session.get(EvidenceSetEvaluationRow, parsed_ref.evaluation_id)
+        if row is None:
+            return None
+        value = _set_evaluation_from_row(row)
+        if (
+            value.serialized_ref != serialized_ref
+            or value.evaluation_version != parsed_ref.evaluation_version
+            or value.work_run_id != work_run_id
+            or value.source_state is not source_state
+            or value.state_version != state_version
+            or value.checkpoint_ref.serialized() != checkpoint_ref
+            or _set_ref(value.requirement_set_id, value.requirement_set_version)
+            != requirement_set_ref
+            or value.outcome is not expected_outcome
+        ):
+            return None
+
+        current_time = (now or datetime.now(UTC)).astimezone(UTC)
+        run = await session.get(WorkRunRow, work_run_id)
+        if (
+            run is None
+            or run.workflow_state != source_state.value
+            or run.state_version != state_version
+            or run.task_contract_id != value.task_contract_id
+            or run.task_contract_version != value.task_contract_version
+        ):
+            return None
+        await _lock(
+            session,
+            f"evidence-task:{run.task_contract_id}:{run.task_contract_version}",
+        )
+        checkpoint_row = await session.get(EvidenceCheckpointRow, checkpoint_ref)
+        if checkpoint_row is None:
+            raise EvidenceAuthorityConflictError("evaluation checkpoint authority is missing")
+        if (
+            checkpoint_row.task_contract_id != run.task_contract_id
+            or checkpoint_row.task_contract_version != run.task_contract_version
+            or checkpoint_row.source_state != source_state.value
+            or checkpoint_row.requirement_set_ref != requirement_set_ref
+            or checkpoint_row.payload.get("revoked_at") is not None
+            or await _has_invalidating_event(session, checkpoint_ref)
+        ):
+            return None
+
+        set_row = await session.get(EvidenceRequirementSetRow, requirement_set_ref)
+        if set_row is None:
+            raise EvidenceAuthorityConflictError("evaluation RequirementSet authority is missing")
+        if (
+            set_row.task_contract_id != run.task_contract_id
+            or set_row.task_contract_version != run.task_contract_version
+            or set_row.payload.get("revoked_at") is not None
+            or await _has_invalidating_event(session, set_row.requirement_set_ref)
+        ):
+            return None
+        requirement_set = _set_from_row(set_row)
+        requirement_rows = {
+            item.requirement_ref: item
+            for item in await session.scalars(
+                select(EvidenceRequirementRow).where(
+                    EvidenceRequirementRow.requirement_set_ref == requirement_set_ref
+                )
+            )
+        }
+        if set(requirement_rows) != set(requirement_set.ordered_requirement_refs):
+            raise EvidenceAuthorityConflictError(
+                "evaluation RequirementSet definition/projection is incomplete"
+            )
+        requirements = tuple(
+            _requirement_from_row(requirement_rows[ref])
+            for ref in requirement_set.ordered_requirement_refs
+        )
+        for requirement in requirements:
+            requirement_row = requirement_rows[requirement.ref.serialized()]
+            if requirement_row.payload.get(
+                "revoked_at"
+            ) is not None or await _has_invalidating_event(
+                session, requirement.ref.serialized()
+            ):
+                return None
+        expected_full_root = canonical_hash(
+            [(item.ref.serialized(), item.fingerprint) for item in requirements]
+        )
+        if requirement_set.requirement_root_hash != expected_full_root:
+            raise EvidenceAuthorityConflictError("evaluation RequirementSet root mismatch")
+        applicable = tuple(
+            item for item in requirements if checkpoint_ref in item.applicable_checkpoint_refs
+        )
+        subset_root = canonical_hash(
+            [(item.ref.serialized(), item.fingerprint) for item in applicable]
+        )
+        admitted_rows = tuple(
+            await session.scalars(
+                select(AdmittedEvidenceRow).where(
+                    AdmittedEvidenceRow.work_run_id == work_run_id,
+                    AdmittedEvidenceRow.checkpoint_ref == checkpoint_ref,
+                )
+            )
+        )
+        effective_rows: list[AdmittedEvidenceRow] = []
+        for admitted_row in admitted_rows:
+            admitted_ref = AdmittedEvidenceRef(
+                admitted_row.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
+            ).serialized()
+            if not await _has_invalidating_event(session, admitted_ref):
+                effective_rows.append(admitted_row)
+
+        results: list[EvidenceRequirementSatisfaction] = []
+        all_satisfied = True
+        for requirement in applicable:
+            matching = [
+                admitted_row
+                for admitted_row in effective_rows
+                if admitted_row.requirement_ref == requirement.ref.serialized()
+                and await _admitted_current_for_set(
+                    session, admitted_row, requirement, run, current_time
+                )
+            ]
+            if requirement.profile is EvidenceRequirementProfile.NOT_REQUIRED:
+                continue
+            if requirement.profile is EvidenceRequirementProfile.FORBIDDEN:
+                satisfied = not matching
+                admitted_refs: tuple[str, ...] = ()
+                coverage: tuple[str, ...] = ()
+            else:
+                coverage_values = {
+                    coverage_item
+                    for admitted_item in matching
+                    for coverage_item in admitted_item.coverage
+                }
+                satisfied = requirement.required_coverage <= coverage_values and bool(matching)
+                admitted_refs = tuple(
+                    AdmittedEvidenceRef(
+                        admitted_item.admitted_evidence_id, EVIDENCE_AUTHORITY_VERSION
+                    ).serialized()
+                    for admitted_item in sorted(
+                        matching, key=lambda item: item.admitted_evidence_id
+                    )
+                )
+                coverage = tuple(sorted(coverage_values))
+            all_satisfied = all_satisfied and satisfied
+            results.append(
+                EvidenceRequirementSatisfaction(
+                    requirement.ref.serialized(),
+                    RequirementSatisfaction.SATISFIED
+                    if satisfied
+                    else RequirementSatisfaction.UNSATISFIED,
+                    admitted_refs,
+                    coverage,
+                )
+            )
+        admitted_root = canonical_hash(
+            [
+                (item.requirement_ref, list(item.admitted_evidence_refs), list(item.coverage))
+                for item in results
+            ]
+        )
+        authority_revision = await _current_authority_revision(
+            session,
+            task_contract_id=run.task_contract_id,
+            task_contract_version=run.task_contract_version,
+            work_run_id=work_run_id,
+        )
+        outcome = EvidenceSetOutcome.SATISFIED if all_satisfied else EvidenceSetOutcome.UNSATISFIED
+        identity = canonical_hash(
+            {
+                "run": work_run_id,
+                "state": [source_state.value, state_version],
+                "checkpoint": checkpoint_ref,
+                "set": requirement_set_ref,
+                "subset_root": subset_root,
+                "admitted_root": admitted_root,
+                "authority_revision": authority_revision,
+                "outcome": outcome.value,
+            }
+        )
+        recomputed = EvidenceSetEvaluation(
+            f"evidence-set-evaluation-{identity}",
+            EVIDENCE_SET_EVALUATION_VERSION,
+            run.task_contract_id,
+            run.task_contract_version,
+            work_run_id,
+            source_state,
+            state_version,
+            value.checkpoint_ref,
+            requirement_set.requirement_set_id,
+            requirement_set.requirement_set_version,
+            requirement_set.requirement_root_hash,
+            tuple(item.ref.serialized() for item in applicable),
+            subset_root,
+            tuple(results),
+            admitted_root,
+            authority_revision,
+            outcome,
+            current_time,
+        )
+        if (
+            recomputed.evaluation_id != value.evaluation_id
+            or _set_evaluation_payload(recomputed) != _set_evaluation_payload(value)
+        ):
+            return None
+        return value
 
     async def load_effective_attestation(
         self, serialized_ref: str, *, now: datetime | None = None
@@ -1111,6 +1356,35 @@ class PostgresEvidenceRepository:
                     "attestation references missing admitted evidence"
                 )
         return value
+
+
+async def verify_historical_set_evaluation_provenance(
+    session: AsyncSession,
+    serialized_ref: str,
+) -> EvidenceSetEvaluation:
+    """Verify immutable P1-6 evaluation issuance without asserting current effectiveness."""
+    try:
+        parsed_ref = EvidenceSetEvaluationRef.parse(serialized_ref)
+    except ValueError as exc:
+        raise HistoricalEvidenceProvenanceError(
+            "evidence set evaluation ref is malformed"
+        ) from exc
+    row = await session.get(EvidenceSetEvaluationRow, parsed_ref.evaluation_id)
+    if row is None:
+        raise HistoricalEvidenceProvenanceError(
+            "evidence set evaluation provenance is missing", incomplete=True
+        )
+    try:
+        value = _set_evaluation_from_row(row)
+    except EvidenceAuthorityConflictError as exc:
+        raise HistoricalEvidenceProvenanceError(
+            "evidence set evaluation provenance is inconsistent"
+        ) from exc
+    if value.serialized_ref != serialized_ref:
+        raise HistoricalEvidenceProvenanceError(
+            "evidence set evaluation ref disagrees with immutable value"
+        )
+    return value
 
 
 async def verify_historical_set_attestation_provenance(
@@ -4053,6 +4327,122 @@ def _set_evaluation_row(value: EvidenceSetEvaluation) -> EvidenceSetEvaluationRo
         payload=_set_evaluation_payload(value),
         evaluated_at=value.evaluated_at,
     )
+
+
+def _set_evaluation_from_row(row: EvidenceSetEvaluationRow) -> EvidenceSetEvaluation:
+    payload = row.payload
+    exact_keys = {
+        "evaluation_version",
+        "task_contract_id",
+        "task_contract_version",
+        "work_run_id",
+        "source_state",
+        "state_version",
+        "checkpoint_ref",
+        "requirement_set_id",
+        "requirement_set_version",
+        "full_requirement_root_hash",
+        "ordered_applicable_requirement_refs",
+        "checkpoint_subset_root_hash",
+        "requirement_results",
+        "admitted_ref_root_hash",
+        "evidence_authority_revision",
+        "outcome",
+    }
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != exact_keys
+        or type(payload.get("state_version")) is not int
+        or type(payload.get("evidence_authority_revision")) is not int
+        or not isinstance(payload.get("ordered_applicable_requirement_refs"), list)
+        or not isinstance(payload.get("requirement_results"), list)
+    ):
+        raise EvidenceAuthorityConflictError("evidence set evaluation payload is non-canonical")
+    raw_results = _items(payload["requirement_results"])
+    if any(
+        not isinstance(item, dict)
+        or set(item) != {"requirement_ref", "outcome", "admitted_evidence_refs", "coverage"}
+        or not isinstance(item.get("requirement_ref"), str)
+        or not isinstance(item.get("admitted_evidence_refs"), list)
+        or not all(isinstance(ref, str) for ref in item["admitted_evidence_refs"])
+        or not isinstance(item.get("coverage"), list)
+        or not all(isinstance(coverage, str) for coverage in item["coverage"])
+        for item in raw_results
+    ):
+        raise EvidenceAuthorityConflictError(
+            "evidence set evaluation requirement results are non-canonical"
+        )
+    try:
+        checkpoint_id, checkpoint_version = str(payload["checkpoint_ref"]).rsplit("@", 1)
+        if not checkpoint_id or not checkpoint_version:
+            raise ValueError("empty checkpoint identity")
+        results = tuple(
+            EvidenceRequirementSatisfaction(
+                str(item["requirement_ref"]),
+                RequirementSatisfaction(str(item["outcome"])),
+                tuple(str(ref) for ref in _items(item["admitted_evidence_refs"])),
+                tuple(str(coverage) for coverage in _items(item["coverage"])),
+            )
+            for item in raw_results
+        )
+        value = EvidenceSetEvaluation(
+            row.evaluation_id,
+            row.evaluation_version,
+            str(payload["task_contract_id"]),
+            str(payload["task_contract_version"]),
+            row.work_run_id,
+            WorkflowState(row.source_state),
+            row.state_version,
+            EvidenceCheckpointRef(checkpoint_id, checkpoint_version),
+            str(payload["requirement_set_id"]),
+            str(payload["requirement_set_version"]),
+            row.full_requirement_root_hash,
+            tuple(
+                str(item) for item in _items(payload["ordered_applicable_requirement_refs"])
+            ),
+            row.checkpoint_subset_root_hash,
+            results,
+            row.admitted_ref_root_hash,
+            row.evidence_authority_revision,
+            EvidenceSetOutcome(row.outcome),
+            _aware(row.evaluated_at),
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise EvidenceAuthorityConflictError(
+            "evidence set evaluation contains malformed immutable values"
+        ) from exc
+    identity = canonical_hash(
+        {
+            "run": value.work_run_id,
+            "state": [value.source_state.value, value.state_version],
+            "checkpoint": value.checkpoint_ref.serialized(),
+            "set": _set_ref(value.requirement_set_id, value.requirement_set_version),
+            "subset_root": value.checkpoint_subset_root_hash,
+            "admitted_root": value.admitted_ref_root_hash,
+            "authority_revision": value.evidence_authority_revision,
+            "outcome": value.outcome.value,
+        }
+    )
+    if (
+        row.evaluation_version != EVIDENCE_SET_EVALUATION_VERSION
+        or row.work_run_id != value.work_run_id
+        or row.source_state != value.source_state.value
+        or row.state_version != value.state_version
+        or row.checkpoint_ref != value.checkpoint_ref.serialized()
+        or row.requirement_set_ref
+        != _set_ref(value.requirement_set_id, value.requirement_set_version)
+        or row.outcome != value.outcome.value
+        or row.full_requirement_root_hash != value.full_requirement_root_hash
+        or row.checkpoint_subset_root_hash != value.checkpoint_subset_root_hash
+        or row.admitted_ref_root_hash != value.admitted_ref_root_hash
+        or row.evidence_authority_revision != value.evidence_authority_revision
+        or payload != _set_evaluation_payload(value)
+        or row.evaluation_id != f"evidence-set-evaluation-{identity}"
+    ):
+        raise EvidenceAuthorityConflictError(
+            "evidence set evaluation row and immutable payload disagree"
+        )
+    return value
 
 
 def _attestation_payload(

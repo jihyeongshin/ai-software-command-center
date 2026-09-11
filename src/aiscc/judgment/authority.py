@@ -9,11 +9,16 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from aiscc.contracts.workflow import WorkflowState
-from aiscc.evidence.models import canonical_hash
+from aiscc.evidence.models import (
+    EvidenceAuthorityConflictError,
+    EvidenceSetOutcome,
+    canonical_hash,
+)
 from aiscc.evidence.repository import (
     HistoricalEvidenceProvenanceError,
     PostgresEvidenceRepository,
     verify_historical_set_attestation_provenance,
+    verify_historical_set_evaluation_provenance,
 )
 from aiscc.human.models import (
     HumanAuthorityError,
@@ -31,6 +36,7 @@ from aiscc.judgment.models import (
     CommandCenterPrincipal,
     Judgment,
     JudgmentAuthorityError,
+    JudgmentEvidenceBasisKind,
     JudgmentGuardAttestation,
     JudgmentIdentityConflictError,
     JudgmentKind,
@@ -96,6 +102,9 @@ class JudgmentPolicyAuthority:
         requires_human_result: bool,
         requires_post_human_evidence: bool,
         deterministic_kind: JudgmentKind | None = None,
+        evidence_basis_kind: JudgmentEvidenceBasisKind | None = None,
+        evidence_checkpoint_ref: str | None = None,
+        evidence_requirement_set_ref: str | None = None,
     ) -> JudgmentPolicy:
         if (owner_policy is JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC) != (
             deterministic_kind is not None
@@ -107,6 +116,24 @@ class JudgmentPolicyAuthority:
             raise ValueError("Human Judgment policy requires HumanResult")
         if owner_policy is JudgmentOwnerPolicy.COMMAND_CENTER and requires_human_result:
             raise ValueError("Command Center policy cannot substitute HumanResult")
+        if evidence_basis_kind is None:
+            if evidence_checkpoint_ref is not None or evidence_requirement_set_ref is not None:
+                raise ValueError("legacy Judgment policy cannot enroll partial evidence basis")
+        else:
+            if not evidence_checkpoint_ref or not evidence_requirement_set_ref:
+                raise ValueError("typed Judgment policy requires checkpoint and requirement set")
+            if (
+                evidence_basis_kind is JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION
+                and not requires_post_human_evidence
+            ):
+                raise ValueError("positive evidence basis requires admitted evidence")
+            if evidence_basis_kind is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION and (
+                owner_policy is not JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC
+                or deterministic_kind is not JudgmentKind.HOLD_REWORK_REQUIRED
+                or target_state is not WorkflowState.REWORK_REQUIRED
+                or requires_post_human_evidence
+            ):
+                raise ValueError("negative evidence basis requires deterministic rework policy")
         now = self._clock().astimezone(UTC)
         scope_key = _policy_scope_key(
             task_contract_id, task_contract_version, source_state, target_state
@@ -148,6 +175,9 @@ class JudgmentPolicyAuthority:
                 revision,
                 now,
                 self._token,
+                evidence_basis_kind,
+                evidence_checkpoint_ref,
+                evidence_requirement_set_ref,
             )
             value = replace(provisional, fingerprint=_policy_fingerprint(provisional))
             if existing is not None:
@@ -380,7 +410,13 @@ class PostgresJudgmentAuthority:
         reason_code: str,
         reason_vocabulary_version: str,
         supersedes_judgment_ref: str | None = None,
+        evidence_basis_kind: JudgmentEvidenceBasisKind | None = None,
+        evidence_evaluation_ref: str | None = None,
     ) -> Judgment:
+        if evidence_basis_kind is not None and not isinstance(
+            evidence_basis_kind, JudgmentEvidenceBasisKind
+        ):
+            raise JudgmentAuthorityError("JUDGMENT_INPUT_INCOMPLETE")
         proposal_fingerprint = _judgment_proposal_fingerprint(
             judgment_version=judgment_version,
             request=request,
@@ -391,6 +427,8 @@ class PostgresJudgmentAuthority:
             reason_code=reason_code,
             reason_vocabulary_version=reason_vocabulary_version,
             supersedes_judgment_ref=supersedes_judgment_ref,
+            evidence_basis_kind=evidence_basis_kind,
+            evidence_evaluation_ref=evidence_evaluation_ref,
         )
         async with self._session_factory() as session, session.begin():
             await acquire_work_run_transaction_lock(session, request.work_run_id)
@@ -478,6 +516,30 @@ class PostgresJudgmentAuthority:
                 raise JudgmentAuthorityError("JUDGMENT_INPUT_INCOMPLETE")
             if policy.owner_policy is not JudgmentOwnerPolicy.HUMAN and result_row is not None:
                 raise JudgmentAuthorityError("JUDGMENT_POLICY_MISMATCH")
+            if evidence_basis_kind is not policy.evidence_basis_kind:
+                raise JudgmentAuthorityError("JUDGMENT_POLICY_MISMATCH")
+            if policy.evidence_basis_kind is None and evidence_evaluation_ref is not None:
+                raise JudgmentAuthorityError("JUDGMENT_POLICY_MISMATCH")
+            if (
+                policy.evidence_basis_kind
+                is JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION
+                and (
+                    evidence_attestation_ref is None
+                    or evidence_evaluation_ref is not None
+                    or request.evidence_refs != (evidence_attestation_ref,)
+                )
+            ):
+                raise JudgmentAuthorityError("JUDGMENT_INPUT_INCOMPLETE")
+            if (
+                policy.evidence_basis_kind
+                is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                and (
+                    evidence_evaluation_ref is None
+                    or evidence_attestation_ref is not None
+                    or request.evidence_refs != (evidence_evaluation_ref,)
+                )
+            ):
+                raise JudgmentAuthorityError("JUDGMENT_INPUT_INCOMPLETE")
             evidence = (
                 await self._evidence_repository.load_effective_attestation_in_session(
                     session, evidence_attestation_ref
@@ -496,6 +558,40 @@ class PostgresJudgmentAuthority:
                 and evidence.target_state is request.target_state
             ):
                 raise JudgmentAuthorityError("JUDGMENT_STALE")
+            if evidence is not None and policy.evidence_basis_kind is not None and (
+                evidence.checkpoint_ref.serialized() != policy.evidence_checkpoint_ref
+                or f"{evidence.requirement_set_id}@{evidence.requirement_set_version}"
+                != policy.evidence_requirement_set_ref
+            ):
+                raise JudgmentAuthorityError("JUDGMENT_POLICY_MISMATCH")
+            negative_evaluation = None
+            if (
+                policy.evidence_basis_kind
+                is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+            ):
+                assert evidence_evaluation_ref is not None
+                assert policy.evidence_checkpoint_ref is not None
+                assert policy.evidence_requirement_set_ref is not None
+                try:
+                    negative_evaluation = (
+                        await self._evidence_repository.load_current_set_evaluation_in_session(
+                            session,
+                            evidence_evaluation_ref,
+                            work_run_id=request.work_run_id,
+                            source_state=cast(WorkflowState, request.observed_state),
+                            state_version=request.observed_state_version,
+                            checkpoint_ref=policy.evidence_checkpoint_ref,
+                            requirement_set_ref=policy.evidence_requirement_set_ref,
+                            expected_outcome=EvidenceSetOutcome.UNSATISFIED,
+                            now=issued_at,
+                        )
+                    )
+                except ValueError as exc:
+                    raise JudgmentAuthorityError("JUDGMENT_INPUT_INCOMPLETE") from exc
+                except EvidenceAuthorityConflictError as exc:
+                    raise JudgmentAuthorityError("AUTHORITY_CONFLICT") from exc
+                if negative_evaluation is None:
+                    raise JudgmentAuthorityError("JUDGMENT_STALE")
             command_center = (
                 await self._command_center_authority.current_in_session(
                     session, command_center_action_ref, request, policy, issued_at
@@ -522,19 +618,22 @@ class PostgresJudgmentAuthority:
                 current_projection.authority_revision + 1 if current_projection is not None else 1
             )
             target_fingerprint = _target_fingerprint(request)
-            evaluation_id = "judgment-evaluation-" + canonical_hash(
-                [
-                    judgment_id,
-                    target_fingerprint,
-                    human_result_ref,
-                    evidence_attestation_ref,
-                    command_center_action_ref,
-                    policy.fingerprint,
-                    reason_code,
-                    reason_vocabulary_version,
-                    supersedes_judgment_ref,
-                ]
-            )
+            evaluation_identity: list[object] = [
+                judgment_id,
+                target_fingerprint,
+                human_result_ref,
+                evidence_attestation_ref,
+                command_center_action_ref,
+                policy.fingerprint,
+                reason_code,
+                reason_vocabulary_version,
+                supersedes_judgment_ref,
+            ]
+            if evidence_basis_kind is not None:
+                evaluation_identity.append(
+                    [evidence_basis_kind.value, evidence_evaluation_ref]
+                )
+            evaluation_id = "judgment-evaluation-" + canonical_hash(evaluation_identity)
             provisional = Judgment(
                 judgment_id,
                 judgment_version,
@@ -569,6 +668,15 @@ class PostgresJudgmentAuthority:
                 evaluation_id,
                 issued_at,
                 supersedes_judgment_ref,
+                evidence_basis_kind,
+                negative_evaluation.serialized_ref if negative_evaluation else None,
+                (
+                    negative_evaluation.evidence_authority_revision
+                    if negative_evaluation
+                    else None
+                ),
+                policy.evidence_checkpoint_ref,
+                policy.evidence_requirement_set_ref,
             )
             value = replace(provisional, fingerprint=_judgment_fingerprint(provisional))
             session.add(
@@ -587,7 +695,15 @@ class PostgresJudgmentAuthority:
                         "evidence_attestation_ref": evidence_attestation_ref,
                         "command_center_action_ref": command_center_action_ref,
                         "outcome": "COMPLETE",
-                    },
+                    }
+                    | (
+                        {
+                            "evidence_basis_kind": evidence_basis_kind.value,
+                            "evidence_evaluation_ref": evidence_evaluation_ref,
+                        }
+                        if evidence_basis_kind is not None
+                        else {}
+                    ),
                     evaluated_at=issued_at,
                 )
             )
@@ -805,6 +921,32 @@ class JudgmentTransitionParticipant:
             and policy.policy_authority_version == self._judgment.policy_authority_version
             and policy.policy_authority_revision == self._judgment.policy_authority_revision
         )
+        negative_evaluation = None
+        if (
+            policy is not None
+            and self._judgment.evidence_basis_kind
+            is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+            and self._judgment.evidence_evaluation_ref is not None
+            and policy.evidence_checkpoint_ref is not None
+            and policy.evidence_requirement_set_ref is not None
+        ):
+            try:
+                negative_evaluation = (
+                    await self._authority._evidence_repository
+                    .load_current_set_evaluation_in_session(
+                        session,
+                        self._judgment.evidence_evaluation_ref,
+                        work_run_id=request.work_run_id,
+                        source_state=cast(WorkflowState, request.observed_state),
+                        state_version=request.observed_state_version,
+                        checkpoint_ref=policy.evidence_checkpoint_ref,
+                        requirement_set_ref=policy.evidence_requirement_set_ref,
+                        expected_outcome=EvidenceSetOutcome.UNSATISFIED,
+                        now=now,
+                    )
+                )
+            except ValueError:
+                negative_evaluation = None
         command_center = (
             await self._authority._command_center_authority.current_in_session(
                 session,
@@ -862,6 +1004,19 @@ class JudgmentTransitionParticipant:
             and self._judgment.target_state is request.target_state
             and request.judgment_refs == (self._judgment.serialized_ref,)
             and policy_current
+            and policy is not None
+            and policy.evidence_basis_kind is self._judgment.evidence_basis_kind
+            and policy.evidence_checkpoint_ref == self._judgment.evidence_checkpoint_ref
+            and policy.evidence_requirement_set_ref
+            == self._judgment.evidence_requirement_set_ref
+            and (
+                self._judgment.evidence_basis_kind is None
+                or request.evidence_refs
+                == (
+                    self._judgment.evidence_attestation_ref
+                    or self._judgment.evidence_evaluation_ref,
+                )
+            )
             and human_current
             and (
                 self._judgment.owner_policy is not JudgmentOwnerPolicy.COMMAND_CENTER
@@ -879,6 +1034,29 @@ class JudgmentTransitionParticipant:
                     and evidence.source_state is request.observed_state
                     and evidence.state_version == request.observed_state_version
                     and evidence.target_state is request.target_state
+                )
+            )
+            and (
+                self._judgment.evidence_basis_kind
+                is not JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION
+                or (
+                    evidence is not None
+                    and evidence.checkpoint_ref.serialized()
+                    == self._judgment.evidence_checkpoint_ref
+                    and f"{evidence.requirement_set_id}@{evidence.requirement_set_version}"
+                    == self._judgment.evidence_requirement_set_ref
+                )
+            )
+            and (
+                self._judgment.evidence_basis_kind
+                is not JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                or (
+                    negative_evaluation is not None
+                    and negative_evaluation.serialized_ref
+                    == self._judgment.evidence_evaluation_ref
+                    and negative_evaluation.evidence_authority_revision
+                    == self._judgment.evidence_evaluation_authority_revision
+                    and negative_evaluation.outcome is EvidenceSetOutcome.UNSATISFIED
                 )
             )
             and self._attestation.policy_authority_id == self._judgment.policy_authority_id
@@ -985,36 +1163,42 @@ def _judgment_proposal_fingerprint(
     reason_code: str,
     reason_vocabulary_version: str,
     supersedes_judgment_ref: str | None,
+    evidence_basis_kind: JudgmentEvidenceBasisKind | None = None,
+    evidence_evaluation_ref: str | None = None,
 ) -> str:
-    return canonical_hash(
-        {
-            "judgment_version": judgment_version,
-            "request": [
-                request.task_contract_id,
-                request.task_contract_version,
-                request.work_run_id,
-                request.observed_state.value if request.observed_state else None,
-                request.observed_state_version,
-                request.target_state.value,
-                _target_fingerprint(request),
-            ],
-            "policy": [
-                policy.policy_id,
-                policy.policy_version,
-                policy.fingerprint,
-                policy.policy_authority_id,
-                policy.policy_authority_version,
-                policy.policy_authority_revision,
-            ],
-            "inputs": [
-                human_result_ref,
-                evidence_attestation_ref,
-                command_center_action_ref,
-            ],
-            "reason": [reason_code, reason_vocabulary_version],
-            "supersedes": supersedes_judgment_ref,
-        }
-    )
+    payload: dict[str, object] = {
+        "judgment_version": judgment_version,
+        "request": [
+            request.task_contract_id,
+            request.task_contract_version,
+            request.work_run_id,
+            request.observed_state.value if request.observed_state else None,
+            request.observed_state_version,
+            request.target_state.value,
+            _target_fingerprint(request),
+        ],
+        "policy": [
+            policy.policy_id,
+            policy.policy_version,
+            policy.fingerprint,
+            policy.policy_authority_id,
+            policy.policy_authority_version,
+            policy.policy_authority_revision,
+        ],
+        "inputs": [
+            human_result_ref,
+            evidence_attestation_ref,
+            command_center_action_ref,
+        ],
+        "reason": [reason_code, reason_vocabulary_version],
+        "supersedes": supersedes_judgment_ref,
+    }
+    if evidence_basis_kind is not None:
+        payload["evidence_basis"] = [
+            evidence_basis_kind.value,
+            evidence_evaluation_ref,
+        ]
+    return canonical_hash(payload)
 
 
 def _judgment_fingerprint(value: Judgment) -> str:
@@ -1025,6 +1209,14 @@ def _judgment_fingerprint(value: Judgment) -> str:
     payload["target_state"] = value.target_state.value
     payload["owner_policy"] = value.owner_policy.value
     payload["judgment_kind"] = value.judgment_kind.value
+    if value.evidence_basis_kind is None:
+        payload.pop("evidence_basis_kind")
+        payload.pop("evidence_evaluation_ref")
+        payload.pop("evidence_evaluation_authority_revision")
+        payload.pop("evidence_checkpoint_ref")
+        payload.pop("evidence_requirement_set_ref")
+    else:
+        payload["evidence_basis_kind"] = value.evidence_basis_kind.value
     return canonical_hash(payload)
 
 
@@ -1034,6 +1226,14 @@ def _judgment_row(value: Judgment, proposal_fingerprint: str) -> JudgmentRow:
     payload["target_state"] = value.target_state.value
     payload["owner_policy"] = value.owner_policy.value
     payload["judgment_kind"] = value.judgment_kind.value
+    if value.evidence_basis_kind is None:
+        payload.pop("evidence_basis_kind")
+        payload.pop("evidence_evaluation_ref")
+        payload.pop("evidence_evaluation_authority_revision")
+        payload.pop("evidence_checkpoint_ref")
+        payload.pop("evidence_requirement_set_ref")
+    else:
+        payload["evidence_basis_kind"] = value.evidence_basis_kind.value
     payload["issued_at"] = value.issued_at.isoformat()
     payload["proposal_fingerprint"] = proposal_fingerprint
     return JudgmentRow(
@@ -1086,6 +1286,15 @@ def _judgment_from_row(row: JudgmentRow) -> Judgment:
         row.evaluation_id,
         row.issued_at.astimezone(UTC),
         cast(str | None, p.get("supersedes_judgment_ref")),
+        (
+            JudgmentEvidenceBasisKind(str(p["evidence_basis_kind"]))
+            if p.get("evidence_basis_kind") is not None
+            else None
+        ),
+        cast(str | None, p.get("evidence_evaluation_ref")),
+        cast(int | None, p.get("evidence_evaluation_authority_revision")),
+        cast(str | None, p.get("evidence_checkpoint_ref")),
+        cast(str | None, p.get("evidence_requirement_set_ref")),
     )
 
 
@@ -1164,6 +1373,14 @@ async def _verify_judgment_base_issuance_provenance_in_session(
         or evaluation.payload.get("human_result_ref") != value.human_result_ref
         or evaluation.payload.get("evidence_attestation_ref") != value.evidence_attestation_ref
         or evaluation.payload.get("command_center_action_ref") != value.command_center_action_ref
+        or evaluation.payload.get("evidence_basis_kind")
+        != (
+            value.evidence_basis_kind.value
+            if value.evidence_basis_kind is not None
+            else None
+        )
+        or evaluation.payload.get("evidence_evaluation_ref")
+        != value.evidence_evaluation_ref
         or evaluation.payload.get("outcome") != "COMPLETE"
         or evaluation.evaluated_at.astimezone(UTC) != value.issued_at
     ):
@@ -1230,35 +1447,86 @@ async def _verify_judgment_base_issuance_provenance_in_session(
             value.target_state,
         )
         or policy.owner_policy is not value.owner_policy
+        or policy.evidence_basis_kind is not value.evidence_basis_kind
+        or policy.evidence_checkpoint_ref != value.evidence_checkpoint_ref
+        or policy.evidence_requirement_set_ref != value.evidence_requirement_set_ref
     ):
         raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
-    if value.evidence_attestation_ref is None:
-        if value.evidence_authority_revision is not None or value.evidence_root is not None:
-            raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
-        if policy.requires_post_human_evidence:
-            raise JudgmentAuthorityError("PROVENANCE_INCOMPLETE")
-    else:
-        if value.evidence_authority_revision is None or value.evidence_root is None:
+    if value.evidence_basis_kind is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION:
+        if (
+            value.evidence_evaluation_ref is None
+            or value.evidence_evaluation_authority_revision is None
+            or value.evidence_attestation_ref is not None
+            or value.evidence_authority_revision is not None
+            or value.evidence_root is not None
+        ):
             raise JudgmentAuthorityError("PROVENANCE_INCOMPLETE")
         try:
-            evidence = await verify_historical_set_attestation_provenance(
-                session, value.evidence_attestation_ref
+            evaluation_value = await verify_historical_set_evaluation_provenance(
+                session, value.evidence_evaluation_ref
             )
+        except ValueError as exc:
+            raise JudgmentAuthorityError("AUTHORITY_CONFLICT") from exc
         except HistoricalEvidenceProvenanceError as exc:
             reason = "PROVENANCE_INCOMPLETE" if exc.incomplete else "AUTHORITY_CONFLICT"
             raise JudgmentAuthorityError(reason) from exc
         if (
-            evidence.serialized_ref != value.evidence_attestation_ref
-            or evidence.task_contract_id != value.task_contract_id
-            or evidence.task_contract_version != value.task_contract_version
-            or evidence.work_run_id != value.work_run_id
-            or evidence.source_state is not value.source_state
-            or evidence.state_version != value.state_version
-            or evidence.target_state is not value.target_state
-            or evidence.evidence_authority_revision != value.evidence_authority_revision
-            or evidence.admitted_ref_root_hash != value.evidence_root
+            evaluation_value.serialized_ref != value.evidence_evaluation_ref
+            or evaluation_value.task_contract_id != value.task_contract_id
+            or evaluation_value.task_contract_version != value.task_contract_version
+            or evaluation_value.work_run_id != value.work_run_id
+            or evaluation_value.source_state is not value.source_state
+            or evaluation_value.state_version != value.state_version
+            or evaluation_value.checkpoint_ref.serialized() != value.evidence_checkpoint_ref
+            or f"{evaluation_value.requirement_set_id}@{evaluation_value.requirement_set_version}"
+            != value.evidence_requirement_set_ref
+            or evaluation_value.outcome is not EvidenceSetOutcome.UNSATISFIED
+            or evaluation_value.evidence_authority_revision
+            != value.evidence_evaluation_authority_revision
         ):
             raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
+    else:
+        if value.evidence_evaluation_ref is not None or (
+            value.evidence_evaluation_authority_revision is not None
+        ):
+            raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
+        if value.evidence_attestation_ref is None:
+            if value.evidence_authority_revision is not None or value.evidence_root is not None:
+                raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
+            if policy.requires_post_human_evidence:
+                raise JudgmentAuthorityError("PROVENANCE_INCOMPLETE")
+        else:
+            if value.evidence_authority_revision is None or value.evidence_root is None:
+                raise JudgmentAuthorityError("PROVENANCE_INCOMPLETE")
+            try:
+                evidence = await verify_historical_set_attestation_provenance(
+                    session, value.evidence_attestation_ref
+                )
+            except HistoricalEvidenceProvenanceError as exc:
+                reason = "PROVENANCE_INCOMPLETE" if exc.incomplete else "AUTHORITY_CONFLICT"
+                raise JudgmentAuthorityError(reason) from exc
+            if (
+                evidence.serialized_ref != value.evidence_attestation_ref
+                or evidence.task_contract_id != value.task_contract_id
+                or evidence.task_contract_version != value.task_contract_version
+                or evidence.work_run_id != value.work_run_id
+                or evidence.source_state is not value.source_state
+                or evidence.state_version != value.state_version
+                or evidence.target_state is not value.target_state
+                or evidence.evidence_authority_revision != value.evidence_authority_revision
+                or evidence.admitted_ref_root_hash != value.evidence_root
+                or (
+                    value.evidence_basis_kind
+                    is JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION
+                    and (
+                        evidence.checkpoint_ref.serialized()
+                        != value.evidence_checkpoint_ref
+                        or f"{evidence.requirement_set_id}@{evidence.requirement_set_version}"
+                        != value.evidence_requirement_set_ref
+                    )
+                )
+            ):
+                raise JudgmentAuthorityError("AUTHORITY_CONFLICT")
     if value.owner_policy is JudgmentOwnerPolicy.HUMAN:
         if (
             not policy.requires_human_result
@@ -1529,28 +1797,33 @@ def _policy_use_for_request(request: TransitionRequest) -> str:
 
 
 def _policy_fingerprint(value: JudgmentPolicy) -> str:
-    return canonical_hash(
-        {
-            "policy": [value.policy_id, value.policy_version],
-            "task": [value.task_contract_id, value.task_contract_version],
-            "use": [
-                value.source_state.value,
-                value.target_state.value,
-                value.target_use_fingerprint,
-            ],
-            "owner": value.owner_policy.value,
-            "human": value.requires_human_result,
-            "evidence": value.requires_post_human_evidence,
-            "deterministic_kind": (
-                value.deterministic_kind.value if value.deterministic_kind is not None else None
-            ),
-            "authority": [
-                value.policy_authority_id,
-                value.policy_authority_version,
-                value.policy_authority_revision,
-            ],
-        }
-    )
+    payload: dict[str, object] = {
+        "policy": [value.policy_id, value.policy_version],
+        "task": [value.task_contract_id, value.task_contract_version],
+        "use": [
+            value.source_state.value,
+            value.target_state.value,
+            value.target_use_fingerprint,
+        ],
+        "owner": value.owner_policy.value,
+        "human": value.requires_human_result,
+        "evidence": value.requires_post_human_evidence,
+        "deterministic_kind": (
+            value.deterministic_kind.value if value.deterministic_kind is not None else None
+        ),
+        "authority": [
+            value.policy_authority_id,
+            value.policy_authority_version,
+            value.policy_authority_revision,
+        ],
+    }
+    if value.evidence_basis_kind is not None:
+        payload["evidence_basis"] = [
+            value.evidence_basis_kind.value,
+            value.evidence_checkpoint_ref,
+            value.evidence_requirement_set_ref,
+        ]
+    return canonical_hash(payload)
 
 
 def _policy_row(value: JudgmentPolicy, scope_key: str) -> JudgmentPolicyRow:
@@ -1562,6 +1835,12 @@ def _policy_row(value: JudgmentPolicy, scope_key: str) -> JudgmentPolicyRow:
     payload["deterministic_kind"] = (
         value.deterministic_kind.value if value.deterministic_kind is not None else None
     )
+    if value.evidence_basis_kind is None:
+        payload.pop("evidence_basis_kind")
+        payload.pop("evidence_checkpoint_ref")
+        payload.pop("evidence_requirement_set_ref")
+    else:
+        payload["evidence_basis_kind"] = value.evidence_basis_kind.value
     payload["issued_at"] = value.issued_at.isoformat()
     return JudgmentPolicyRow(
         serialized_ref=value.serialized_ref,
@@ -1576,6 +1855,7 @@ def _policy_row(value: JudgmentPolicy, scope_key: str) -> JudgmentPolicyRow:
 def _policy_from_row(row: JudgmentPolicyRow, token: object) -> JudgmentPolicy:
     p = row.payload
     deterministic = p.get("deterministic_kind")
+    evidence_basis = p.get("evidence_basis_kind")
     return JudgmentPolicy(
         str(p["policy_id"]),
         str(p["policy_version"]),
@@ -1594,6 +1874,13 @@ def _policy_from_row(row: JudgmentPolicyRow, token: object) -> JudgmentPolicy:
         row.authority_revision,
         row.issued_at.astimezone(UTC),
         token,
+        (
+            JudgmentEvidenceBasisKind(str(evidence_basis))
+            if evidence_basis is not None
+            else None
+        ),
+        cast(str | None, p.get("evidence_checkpoint_ref")),
+        cast(str | None, p.get("evidence_requirement_set_ref")),
     )
 
 

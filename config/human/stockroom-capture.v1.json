@@ -1,0 +1,21 @@
+{
+  "schema_id": "AISCC-STOCKROOM-CAPTURE-HUMAN-V1",
+  "schema_version": "1",
+  "policy": {
+    "authority_policy_ref": "AISCC_STOCKROOM_HUMAN_GATE_POLICY_V1",
+    "authority_policy_version": "v1",
+    "purpose_id": "P1_7_WORK_RESULT_REVIEW",
+    "purpose_version": "v1",
+    "selector_slot": "OPERATOR_SUPPLIED_HUMAN_SELECTOR_FINGERPRINT"
+  },
+  "required_uses": [
+    {
+      "scenario_id": "stockroom-s4-human-owned-claim",
+      "scenario_version": "1.0.0",
+      "task_contract_id": "stockroom-s4-human-owned-claim",
+      "task_contract_version": "1.0.0",
+      "source_state": "ADMISSION_PENDING",
+      "target_state": "HUMAN_REQUIRED"
+    }
+  ]
+}

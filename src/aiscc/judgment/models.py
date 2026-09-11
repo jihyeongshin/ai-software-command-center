@@ -20,6 +20,11 @@ class JudgmentOwnerPolicy(StrEnum):
     COMMAND_CENTER = "COMMAND_CENTER"
 
 
+class JudgmentEvidenceBasisKind(StrEnum):
+    SATISFIED_ATTESTATION = "SATISFIED_ATTESTATION"
+    UNSATISFIED_SET_EVALUATION = "UNSATISFIED_SET_EVALUATION"
+
+
 class JudgmentAuthorityError(RuntimeError):
     pass
 
@@ -47,6 +52,33 @@ class JudgmentPolicy:
     policy_authority_revision: int
     issued_at: datetime
     _issuer_token: object = field(default=None, repr=False, compare=False)
+    evidence_basis_kind: JudgmentEvidenceBasisKind | None = None
+    evidence_checkpoint_ref: str | None = None
+    evidence_requirement_set_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.evidence_basis_kind is None:
+            if self.evidence_checkpoint_ref is not None or (
+                self.evidence_requirement_set_ref is not None
+            ):
+                raise ValueError("legacy Judgment policy cannot carry partial evidence basis")
+            return
+        if not isinstance(self.evidence_basis_kind, JudgmentEvidenceBasisKind):
+            raise ValueError("unknown Judgment evidence basis kind")
+        if not self.evidence_checkpoint_ref or not self.evidence_requirement_set_ref:
+            raise ValueError("typed Judgment policy requires checkpoint and requirement set")
+        if (
+            self.evidence_basis_kind is JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION
+            and not self.requires_post_human_evidence
+        ):
+            raise ValueError("positive Judgment policy requires admitted evidence")
+        if self.evidence_basis_kind is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION and (
+            self.owner_policy is not JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC
+            or self.deterministic_kind is not JudgmentKind.HOLD_REWORK_REQUIRED
+            or self.target_state is not WorkflowState.REWORK_REQUIRED
+            or self.requires_post_human_evidence
+        ):
+            raise ValueError("negative Judgment basis requires deterministic rework policy")
 
     @property
     def serialized_ref(self) -> str:
@@ -126,6 +158,59 @@ class Judgment:
     evaluation_ref: str
     issued_at: datetime
     supersedes_judgment_ref: str | None = None
+    evidence_basis_kind: JudgmentEvidenceBasisKind | None = None
+    evidence_evaluation_ref: str | None = None
+    evidence_evaluation_authority_revision: int | None = None
+    evidence_checkpoint_ref: str | None = None
+    evidence_requirement_set_ref: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.evidence_basis_kind is None:
+            if any(
+                value is not None
+                for value in (
+                    self.evidence_evaluation_ref,
+                    self.evidence_evaluation_authority_revision,
+                    self.evidence_checkpoint_ref,
+                    self.evidence_requirement_set_ref,
+                )
+            ):
+                raise ValueError("legacy Judgment cannot carry typed evidence basis metadata")
+            return
+        if not isinstance(self.evidence_basis_kind, JudgmentEvidenceBasisKind):
+            raise ValueError("unknown Judgment evidence basis kind")
+        if not self.evidence_checkpoint_ref or not self.evidence_requirement_set_ref:
+            raise ValueError(
+                "typed Judgment evidence basis requires checkpoint and requirement set"
+            )
+        if self.evidence_basis_kind is JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION:
+            if (
+                self.evidence_attestation_ref is None
+                or self.evidence_authority_revision is None
+                or self.evidence_root is None
+                or any(
+                    value is not None
+                    for value in (
+                        self.evidence_evaluation_ref,
+                        self.evidence_evaluation_authority_revision,
+                    )
+                )
+            ):
+                raise ValueError("positive Judgment basis requires only an attestation ref")
+        elif (
+            self.evidence_basis_kind
+            is JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+            and (
+                self.evidence_evaluation_ref is None
+                or self.evidence_evaluation_authority_revision is None
+                or self.evidence_attestation_ref is not None
+                or self.evidence_authority_revision is not None
+                or self.evidence_root is not None
+                or self.target_state is not WorkflowState.REWORK_REQUIRED
+                or self.judgment_kind is not JudgmentKind.HOLD_REWORK_REQUIRED
+            )
+        ):
+            raise ValueError("negative Judgment basis requires only an evaluation ref")
 
     @property
     def serialized_ref(self) -> str:

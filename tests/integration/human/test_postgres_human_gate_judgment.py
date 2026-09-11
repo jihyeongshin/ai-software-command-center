@@ -48,6 +48,8 @@ from aiscc.evidence.models import (
     EvidenceRequirementSet,
     EvidenceSemanticOwner,
     EvidenceSensitivity,
+    EvidenceSetEvaluationRef,
+    EvidenceSetOutcome,
     FreshnessPolicy,
     FreshnessPolicyKind,
     HumanEvidenceProducerCategory,
@@ -84,17 +86,22 @@ from aiscc.judgment.authority import (
     JudgmentPolicyAuthority,
     PostgresJudgmentAuthority,
     _judgment_fingerprint,
+    _judgment_from_row,
     _judgment_proposal_fingerprint,
     _judgment_row,
     _policy_fingerprint,
+    _policy_use_fingerprint,
     _verify_judgment_historical_provenance_in_session,
 )
 from aiscc.judgment.models import (
     CommandCenterPrincipal,
+    Judgment,
     JudgmentAuthorityError,
+    JudgmentEvidenceBasisKind,
     JudgmentIdentityConflictError,
     JudgmentKind,
     JudgmentOwnerPolicy,
+    JudgmentPolicy,
 )
 from aiscc.memory.models import (
     MemoryAuthorityMode,
@@ -147,6 +154,7 @@ from aiscc.workflow.models import (
     BlockerKindV1,
     BlockerReasonCodeV1,
     DecisionOutcome,
+    DecisionReason,
     GuardId,
     GuardSemanticOwner,
     P1_4BlockerClaimV1,
@@ -157,6 +165,75 @@ from aiscc.workflow.models import (
 from aiscc.workflow.participants import CompositeTransitionParticipant
 
 NOW = datetime(2026, 8, 30, 1, 30, tzinfo=UTC)
+
+
+def test_legacy_judgment_identity_remains_byte_compatible() -> None:
+    use_fingerprint = _policy_use_fingerprint(
+        "legacy-task",
+        "v1",
+        WorkflowState.ADMISSION_PENDING,
+        WorkflowState.REJECTED,
+    )
+    assert use_fingerprint == "8c1b08dde646d91b7fee433d647b6c7439d1dd0b68df7d37af068ec8dcb37040"
+    policy = JudgmentPolicy(
+        "legacy-policy",
+        "v1",
+        "",
+        "legacy-task",
+        "v1",
+        WorkflowState.ADMISSION_PENDING,
+        WorkflowState.REJECTED,
+        use_fingerprint,
+        JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC,
+        False,
+        False,
+        JudgmentKind.REJECTED,
+        "AISCC_P1_7_JUDGMENT_POLICY_AUTHORITY_V1",
+        "p1-7-judgment-policy-v1",
+        1,
+        NOW,
+    )
+    policy_fingerprint = _policy_fingerprint(policy)
+    assert policy_fingerprint == "64478c83bfed1ca5c7050b238faf2489975aa5b7ef6918d09d2b0b1a1b98eb6f"
+    assert policy.serialized_ref == "p1-7-judgment-policy:v1:legacy-policy"
+    judgment = Judgment(
+        "legacy-judgment",
+        "v1",
+        "",
+        "AISCC_P1_7_JUDGMENT_AUTHORITY_V1",
+        "AISCC-P1-7-JUDGMENT-AUTHORITY-V1",
+        1,
+        "legacy-task",
+        "v1",
+        "legacy-run",
+        WorkflowState.ADMISSION_PENDING,
+        3,
+        WorkflowState.REJECTED,
+        use_fingerprint,
+        JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC,
+        "legacy-policy",
+        "v1",
+        policy_fingerprint,
+        "AISCC_P1_7_JUDGMENT_POLICY_AUTHORITY_V1",
+        "p1-7-judgment-policy-v1",
+        1,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        JudgmentKind.REJECTED,
+        "LEGACY_REJECTED",
+        "v1",
+        "legacy-evaluation",
+        NOW,
+    )
+    assert _judgment_fingerprint(judgment) == (
+        "99aa9b1d1f3850a024b7449bb942a748c9dfb75161c0eedeb53f892aa07f511f"
+    )
+    assert judgment.serialized_ref == "p1-7-judgment:v1:legacy-judgment"
 
 
 class TestBlockerSourceVerifier:
@@ -313,6 +390,22 @@ def evidence_authority_snapshot(
             NOW,
         )
     )
+    negative = owner.seal_checkpoint(
+        EvidenceCheckpoint(
+            EvidenceCheckpointRef(f"negative-{task_id}", "v1"),
+            task_id,
+            "v1",
+            WorkflowState.ADMISSION_PENDING,
+            WorkflowState.REWORK_REQUIRED,
+            None,
+            None,
+            set_id,
+            "v1",
+            owner.authority_id,
+            owner.authority_version,
+            NOW,
+        )
+    )
     human = owner.seal_requirement(
         EvidenceRequirement(
             EvidenceRequirementRef(f"human-result-{task_id}", "v1"),
@@ -345,24 +438,56 @@ def evidence_authority_snapshot(
             "",
         )
     )
+    missing = owner.seal_requirement(
+        EvidenceRequirement(
+            EvidenceRequirementRef(f"negative-proof-{task_id}", "v1"),
+            task_id,
+            "v1",
+            set_id,
+            "v1",
+            EvidenceSemanticOwner.P1_6_EVIDENCE,
+            EvidenceRequirementProfile.EXECUTOR_REQUIRED,
+            RequirementObligation.REQUIRED,
+            (negative.ref.serialized(),),
+            "AISCC_NEGATIVE_PROOF",
+            "v1",
+            frozenset({EvidenceIssuerType.SYSTEM_STATIC_PROOF}),
+            frozenset({"AISCC_TEST_NEGATIVE_ISSUER_V1"}),
+            frozenset(),
+            frozenset({EvidenceContentKind.INLINE_CANONICAL_STRUCTURED_BODY}),
+            "AISCC-NEGATIVE-PROOF",
+            "v1",
+            "negative-proof",
+            "judgment",
+            None,
+            FreshnessPolicy(FreshnessPolicyKind.WORKRUN_STATE_VERSION_SCOPED),
+            frozenset({"proof"}),
+            0,
+            frozenset(),
+            EvidenceSensitivity.INTERNAL,
+            False,
+            NOW,
+            "",
+        )
+    )
     requirement_set = owner.seal_set(
         EvidenceRequirementSet(
             set_id,
             "v1",
             task_id,
             "v1",
-            (human.ref.serialized(),),
+            (human.ref.serialized(), missing.ref.serialized()),
             "",
-            (pre.ref.serialized(), post.ref.serialized()),
+            (pre.ref.serialized(), post.ref.serialized(), negative.ref.serialized()),
             EvidenceSemanticOwner.P1_6_EVIDENCE,
             "p1-6-authority-v1",
             NOW,
             "",
         ),
-        (human,),
-        (pre, post),
+        (human, missing),
+        (pre, post, negative),
     )
-    return owner, requirement_set, (human,), (pre, post)
+    return owner, requirement_set, (human, missing), (pre, post, negative)
 
 
 @pytest.mark.postgres
@@ -402,7 +527,7 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
         evidence_owner, requirement_set, requirements, checkpoints = evidence_authority_snapshot(
             task_id
         )
-        pre, post = checkpoints
+        pre, post, negative_checkpoint = checkpoints
         await evidence_repository.register_authority(
             requirement_set=requirement_set,
             requirements=requirements,
@@ -1760,6 +1885,381 @@ def test_p1_7_postgres_runtime_proof(database_url: str) -> None:
                 transaction_participant=no_pending_guard,
             )
         ).outcome is DecisionOutcome.ADMITTED
+
+        negative_run_id = f"run-p1-7-negative-{uuid4()}"
+        for source, version, target in (
+            (None, 0, WorkflowState.READY),
+            (WorkflowState.READY, 1, WorkflowState.RUNNING),
+            (WorkflowState.RUNNING, 2, WorkflowState.ADMISSION_PENDING),
+        ):
+            step = request(task_id, negative_run_id, source, version, target)
+            assert (
+                await kernel.request_transition(step, system_facts(system, step))
+            ).outcome is DecisionOutcome.ADMITTED
+        negative_evaluation, negative_attestation = await evidence_repository.evaluate_set(
+            work_run_id=negative_run_id,
+            checkpoint_ref=negative_checkpoint.ref,
+            observed_state=WorkflowState.ADMISSION_PENDING,
+            observed_state_version=3,
+            authority_id="AISCC_P1_6_EVIDENCE_AUTHORITY_V1",
+            authority_version="AISCC-P1-6-EVIDENCE-AUTHORITY-V1",
+            now=NOW,
+        )
+        assert negative_evaluation.outcome is EvidenceSetOutcome.UNSATISFIED
+        assert negative_attestation is None
+        negative_request = request(
+            task_id,
+            negative_run_id,
+            WorkflowState.ADMISSION_PENDING,
+            3,
+            WorkflowState.REWORK_REQUIRED,
+            evidence_refs=(negative_evaluation.serialized_ref,),
+        )
+        with pytest.raises(
+            ValueError, match="negative .*basis requires deterministic rework policy"
+        ):
+            await judgment_policy_authority.register(
+                policy_id=f"INVALID_NEGATIVE_POLICY-{label}",
+                policy_version="v2",
+                task_contract_id=task_id,
+                task_contract_version="v1",
+                source_state=WorkflowState.ADMISSION_PENDING,
+                target_state=WorkflowState.ACCEPTED,
+                owner_policy=JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC,
+                requires_human_result=False,
+                requires_post_human_evidence=False,
+                deterministic_kind=JudgmentKind.HOLD_REWORK_REQUIRED,
+                evidence_basis_kind=(
+                    JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                ),
+                evidence_checkpoint_ref=negative_checkpoint.ref.serialized(),
+                evidence_requirement_set_ref=(
+                    f"{requirement_set.requirement_set_id}"
+                    f"@{requirement_set.requirement_set_version}"
+                ),
+            )
+        async def register_negative_policy(
+            suffix: str, checkpoint_ref: str, requirement_set_ref: str
+        ) -> JudgmentPolicy:
+            return await judgment_policy_authority.register(
+                policy_id=f"SYSTEM_REWORK_POLICY-{suffix}-{label}",
+                policy_version="v2",
+                task_contract_id=task_id,
+                task_contract_version="v1",
+                source_state=WorkflowState.ADMISSION_PENDING,
+                target_state=WorkflowState.REWORK_REQUIRED,
+                owner_policy=JudgmentOwnerPolicy.SYSTEM_DETERMINISTIC,
+                requires_human_result=False,
+                requires_post_human_evidence=False,
+                deterministic_kind=JudgmentKind.HOLD_REWORK_REQUIRED,
+                evidence_basis_kind=(
+                    JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                ),
+                evidence_checkpoint_ref=checkpoint_ref,
+                evidence_requirement_set_ref=requirement_set_ref,
+            )
+
+        requirement_set_ref = (
+            f"{requirement_set.requirement_set_id}@{requirement_set.requirement_set_version}"
+        )
+        wrong_checkpoint_policy = await register_negative_policy(
+            "wrong-checkpoint", "wrong-checkpoint@v1", requirement_set_ref
+        )
+        with pytest.raises(JudgmentAuthorityError):
+            await judgment_authority.issue(
+                judgment_id=f"negative-wrong-checkpoint-{label}",
+                judgment_version="v2",
+                request=negative_request,
+                policy=wrong_checkpoint_policy,
+                human_result_ref=None,
+                evidence_attestation_ref=None,
+                reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+                reason_vocabulary_version="v2",
+                evidence_basis_kind=(
+                    JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                ),
+                evidence_evaluation_ref=negative_evaluation.serialized_ref,
+            )
+        wrong_set_policy = await register_negative_policy(
+            "wrong-set", negative_checkpoint.ref.serialized(), "wrong-set@v1"
+        )
+        with pytest.raises(JudgmentAuthorityError):
+            await judgment_authority.issue(
+                judgment_id=f"negative-wrong-set-{label}",
+                judgment_version="v2",
+                request=negative_request,
+                policy=wrong_set_policy,
+                human_result_ref=None,
+                evidence_attestation_ref=None,
+                reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+                reason_vocabulary_version="v2",
+                evidence_basis_kind=(
+                    JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                ),
+                evidence_evaluation_ref=negative_evaluation.serialized_ref,
+            )
+        negative_policy = await register_negative_policy(
+            "current", negative_checkpoint.ref.serialized(), requirement_set_ref
+        )
+
+        async def denied_negative(
+            suffix: str,
+            *,
+            evaluation_ref: str | None,
+            attestation_ref: str | None = None,
+            candidate_request: TransitionRequest = negative_request,
+        ) -> None:
+            with pytest.raises(JudgmentAuthorityError):
+                await judgment_authority.issue(
+                    judgment_id=f"negative-denied-{suffix}-{label}",
+                    judgment_version="v2",
+                    request=candidate_request,
+                    policy=negative_policy,
+                    human_result_ref=None,
+                    evidence_attestation_ref=attestation_ref,
+                    reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+                    reason_vocabulary_version="v2",
+                    evidence_basis_kind=(
+                        JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                    ),
+                    evidence_evaluation_ref=evaluation_ref,
+                )
+
+        await denied_negative("missing", evaluation_ref=None)
+        await denied_negative(
+            "positive-in-negative-slot",
+            evaluation_ref=post_attestation.serialized_ref,
+        )
+        await denied_negative(
+            "both",
+            evaluation_ref=negative_evaluation.serialized_ref,
+            attestation_ref=post_attestation.serialized_ref,
+        )
+        fabricated_ref = EvidenceSetEvaluationRef(
+            negative_evaluation.evaluation_version,
+            "evidence-set-evaluation-" + "0" * 64,
+        ).serialized()
+        await denied_negative("fabricated", evaluation_ref=fabricated_ref)
+        await denied_negative(
+            "wrong-run",
+            evaluation_ref=negative_evaluation.serialized_ref,
+            candidate_request=replace(negative_request, work_run_id="wrong-run"),
+        )
+        await denied_negative(
+            "wrong-state",
+            evaluation_ref=negative_evaluation.serialized_ref,
+            candidate_request=replace(negative_request, observed_state=WorkflowState.RUNNING),
+        )
+        await denied_negative(
+            "wrong-version",
+            evaluation_ref=negative_evaluation.serialized_ref,
+            candidate_request=replace(negative_request, observed_state_version=4),
+        )
+
+        stale_run_id = f"run-p1-7-negative-stale-{uuid4()}"
+        for source, version, target in (
+            (None, 0, WorkflowState.READY),
+            (WorkflowState.READY, 1, WorkflowState.RUNNING),
+            (WorkflowState.RUNNING, 2, WorkflowState.ADMISSION_PENDING),
+        ):
+            step = request(task_id, stale_run_id, source, version, target)
+            assert (
+                await kernel.request_transition(step, system_facts(system, step))
+            ).outcome is DecisionOutcome.ADMITTED
+        stale_evaluation, stale_attestation = await evidence_repository.evaluate_set(
+            work_run_id=stale_run_id,
+            checkpoint_ref=negative_checkpoint.ref,
+            observed_state=WorkflowState.ADMISSION_PENDING,
+            observed_state_version=3,
+            authority_id="AISCC_P1_6_EVIDENCE_AUTHORITY_V1",
+            authority_version="AISCC-P1-6-EVIDENCE-AUTHORITY-V1",
+            now=NOW,
+        )
+        assert stale_evaluation.outcome is EvidenceSetOutcome.UNSATISFIED
+        assert stale_attestation is None
+        stale_request = request(
+            task_id,
+            stale_run_id,
+            WorkflowState.ADMISSION_PENDING,
+            3,
+            WorkflowState.REWORK_REQUIRED,
+            evidence_refs=(stale_evaluation.serialized_ref,),
+        )
+        stale_judgment = await judgment_authority.issue(
+            judgment_id=f"negative-stale-judgment-{label}",
+            judgment_version="v2",
+            request=stale_request,
+            policy=negative_policy,
+            human_result_ref=None,
+            evidence_attestation_ref=None,
+            reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+            reason_vocabulary_version="v2",
+            evidence_basis_kind=JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION,
+            evidence_evaluation_ref=stale_evaluation.serialized_ref,
+        )
+        stale_request = replace(
+            stale_request, judgment_refs=(stale_judgment.serialized_ref,)
+        )
+        stale_human = await human_guard.policy_guard_participant(
+            stale_request, GuardId.G_HUMAN_NOT_REQUIRED
+        )
+        stale_participant = await judgment_authority.participant(
+            stale_request, stale_judgment.serialized_ref
+        )
+        block_stale = request(
+            task_id,
+            stale_run_id,
+            WorkflowState.ADMISSION_PENDING,
+            3,
+            WorkflowState.BLOCKED,
+        )
+        assert (
+            await kernel.request_transition(
+                block_stale, system_facts(system, block_stale)
+            )
+        ).outcome is DecisionOutcome.ADMITTED
+        stale_decision = await kernel.request_transition(
+            stale_request,
+            (),
+            transaction_participant=CompositeTransitionParticipant(
+                (stale_human, stale_participant)
+            ),
+        )
+        assert stale_decision.outcome is DecisionOutcome.DENIED
+        assert stale_decision.reason is DecisionReason.STALE_REQUEST
+        assert not stale_participant._prepared
+        with pytest.raises(JudgmentAuthorityError, match="JUDGMENT_STALE"):
+            await judgment_authority.issue(
+                judgment_id=f"negative-stale-reissue-{label}",
+                judgment_version="v2",
+                request=replace(stale_request, judgment_refs=()),
+                policy=negative_policy,
+                human_result_ref=None,
+                evidence_attestation_ref=None,
+                reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+                reason_vocabulary_version="v2",
+                evidence_basis_kind=(
+                    JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION
+                ),
+                evidence_evaluation_ref=stale_evaluation.serialized_ref,
+            )
+
+        negative_judgment = await judgment_authority.issue(
+            judgment_id=f"negative-judgment-{label}",
+            judgment_version="v2",
+            request=negative_request,
+            policy=negative_policy,
+            human_result_ref=None,
+            evidence_attestation_ref=None,
+            reason_code="REQUIRED_EVIDENCE_UNSATISFIED",
+            reason_vocabulary_version="v2",
+            evidence_basis_kind=JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION,
+            evidence_evaluation_ref=negative_evaluation.serialized_ref,
+        )
+        assert negative_judgment.evidence_attestation_ref is None
+        assert negative_judgment.evidence_evaluation_ref == negative_evaluation.serialized_ref
+        assert (
+            negative_judgment.evidence_evaluation_authority_revision
+            == negative_evaluation.evidence_authority_revision
+        )
+        async with sessions() as session:
+            negative_row = await session.get(JudgmentRow, negative_judgment.judgment_id)
+            assert negative_row is not None
+            assert _judgment_from_row(negative_row) == negative_judgment
+            assert (
+                await _verify_judgment_historical_provenance_in_session(
+                    session, negative_row
+                )
+                == negative_judgment
+            )
+        negative_request = replace(
+            negative_request, judgment_refs=(negative_judgment.serialized_ref,)
+        )
+        negative_human = await human_guard.policy_guard_participant(
+            negative_request, GuardId.G_HUMAN_NOT_REQUIRED
+        )
+        negative_judgment_participant = await judgment_authority.participant(
+            negative_request, negative_judgment.serialized_ref
+        )
+        denied_negative_decision = await kernel.request_transition(
+            negative_request,
+            (),
+            transaction_participant=CompositeTransitionParticipant(
+                (negative_human, negative_judgment_participant)
+            ),
+        )
+        assert denied_negative_decision.outcome is DecisionOutcome.DENIED
+        assert denied_negative_decision.reason is DecisionReason.MISSING_GUARD
+        assert denied_negative_decision.resulting_state is WorkflowState.ADMISSION_PENDING
+        assert denied_negative_decision.resulting_state_version == 3
+        async with sessions() as session:
+            denied_negative_evaluation = await session.scalar(
+                select(TransitionEvaluationRow).where(
+                    TransitionEvaluationRow.transition_request_id
+                    == negative_request.transition_request_id
+                )
+            )
+            assert denied_negative_evaluation is not None
+            assert denied_negative_evaluation.missing_guards == [
+                GuardId.G_REWORK_SPEC.value
+            ]
+            denied_guards = {
+                GuardId(str(item["guard_id"])): item
+                for item in denied_negative_evaluation.guards
+            }
+            assert denied_guards[GuardId.G_CURRENT]["satisfied"] is True
+            assert denied_guards[GuardId.G_HUMAN_NOT_REQUIRED]["satisfied"] is True
+            assert denied_guards[GuardId.G_JUDGMENT_REWORK]["satisfied"] is True
+            assert denied_guards[GuardId.G_REWORK_SPEC]["satisfied"] is False
+
+        negative_run_after_denial = await kernel.load(negative_run_id)
+        assert negative_run_after_denial is not None
+        assert negative_run_after_denial.state is WorkflowState.ADMISSION_PENDING
+        assert negative_run_after_denial.state_version == 3
+
+        corrected_negative_request = replace(
+            negative_request, transition_request_id=str(uuid4())
+        )
+        assert (
+            corrected_negative_request.transition_request_id
+            != negative_request.transition_request_id
+        )
+        corrected_negative_human = await human_guard.policy_guard_participant(
+            corrected_negative_request, GuardId.G_HUMAN_NOT_REQUIRED
+        )
+        corrected_negative_judgment_participant = await judgment_authority.participant(
+            corrected_negative_request, negative_judgment.serialized_ref
+        )
+        corrected_negative_decision = await kernel.request_transition(
+            corrected_negative_request,
+            system_facts(system, corrected_negative_request),
+            transaction_participant=CompositeTransitionParticipant(
+                (corrected_negative_human, corrected_negative_judgment_participant)
+            ),
+        )
+        assert corrected_negative_decision.outcome is DecisionOutcome.ADMITTED
+        assert corrected_negative_decision.resulting_state is WorkflowState.REWORK_REQUIRED
+        assert corrected_negative_decision.resulting_state_version == 4
+        async with sessions() as session:
+            corrected_negative_evaluation = await session.scalar(
+                select(TransitionEvaluationRow).where(
+                    TransitionEvaluationRow.transition_request_id
+                    == corrected_negative_request.transition_request_id
+                )
+            )
+            assert corrected_negative_evaluation is not None
+            assert corrected_negative_evaluation.missing_guards == []
+            corrected_guards = {
+                GuardId(str(item["guard_id"])): item
+                for item in corrected_negative_evaluation.guards
+            }
+            for guard_id in (
+                GuardId.G_CURRENT,
+                GuardId.G_HUMAN_NOT_REQUIRED,
+                GuardId.G_JUDGMENT_REWORK,
+                GuardId.G_REWORK_SPEC,
+            ):
+                assert corrected_guards[guard_id]["satisfied"] is True
 
         no_human_run_id = f"run-p1-7-not-required-{uuid4()}"
         for source, version, target in (
