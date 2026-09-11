@@ -866,3 +866,33 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - canonical owners: `.aiassistant/records/command-center/COMMAND_CENTER_WORKFLOW.md`, `.aiassistant/records/command-center/TASK_FILE_TEMPLATE.md`, `.aiassistant/records/command-center/SHORT_EXECUTOR_PROMPT_TEMPLATE.md`, `.aiassistant/rules/IDE_EXECUTOR_REPORT_EXPORT.md`
 - verification boundary: 이 entry는 기존 승인된 delivery authority의 supersession reconciliation이다. 현재 Executor 결과의 Browser Command Center judgment를 대신하지 않으며 P2-3 source/contract audit와 implementation은 시작하지 않는다.
 - supersession_rule: 현재 delivery/bootstrap/cleanup/outbound 계약 변경에는 explicit Human/Command Center workflow decision과 해당 canonical owner의 일치하는 갱신이 필요하다.
+
+## AISCC-P2-3-A2-IMPLEMENTATION-ACCEPTANCE-AND-PERSISTENCE-V1
+
+- decision: Record the final accepted P2-3 A2 production owner/bootstrap, prepared-owner/materialized-output, and S2 Judgment authority implementation as the persisted implementation baseline.
+- decision_status: `IMPLEMENTATION ACCEPTED / PERSISTED`
+- decision_source: Browser Command Center 1815 final implementation acceptance, preserved by the 1930 retry Judgment; this entry does not create new Human acceptance.
+- COMMIT_A: `d98f9ad108e95ba659b9c6a10770119af22175a1`
+- persistence_tree: `b4cc77e02d3fa05855cf985bc6f7f571799ac27e`
+- persistence_scope: `74 exact accepted source/config/test/governance paths`
+- provenance:
+  - `.aiassistant/reports/aiscc/20260911_1815_aiscc-p2-3-a2-implementation-final-acceptance-judgment-1.md`
+  - `.aiassistant/records/aiscc/cycles/20260911_1930_aiscc-p2-3-a2-persistence-blocked-active-task-ignore-contract-retry-entry-1.cycle.md`
+  - `.aiassistant/reports/aiscc/20260911_1930_aiscc-p2-3-a2-persistence-active-task-ignore-contract-mismatch-judgment-1.md`
+- accepted authority:
+  - prepared-owner stable-seven identity and factory-authority reconciliation;
+  - materialized-output factory-issued provenance;
+  - security native TTL clock-domain fix;
+  - `ToolOutputRef` runtime evidence binding;
+  - P1-6 typed durable `UNSATISFIED` evaluation reference and currentness verification;
+  - P1-7 explicit positive versus negative Judgment basis;
+  - Judgment v2 additive policy with v1 compatibility;
+  - `G_REWORK_SPEC` remains independent P1-4 system authority; Judgment does not mint it.
+- migration boundary: no migration beyond `20260901_0008`.
+- verification_status: `155 PASS / 0 skip` bounded executable proof and `35 / 35` contract proof, `REUSED_ACCEPTED`; exact `203` product files and aggregate `3aa781baaf25e09edd15f0713f7d42fc066d51092403cdc473f5030af684b4eb` verified locally and in Commit A.
+- actual/public runtime: `NOT_EXECUTED`; runtime prerequisites `NOT_VERIFIED`; actual S1-S4 and corpus/export `NOT_STARTED`; Recorded Replay `NOT_ADMITTED`.
+- terminal_persistence_status: `BROWSER_JUDGMENT_REQUIRED`; local persistence does not replace Browser terminal judgment.
+- next action: `P2-3 actual capture runtime prerequisite verification`, after Browser terminal persistence judgment; the prerequisite Task is not issued or executed by this persistence Task.
+- phase boundary: P2 and P2-3 remain `IN_PROGRESS`; P2-4 remains `NOT_STARTED`; public distribution/license remains `HUMAN_PENDING`.
+- historical boundary: earlier decisions retain their original acceptance and verification-time meaning; this entry records the later accepted A2 implementation.
+- supersession_rule: changing accepted owner authority, evidence/currentness binding, Judgment compatibility, independent P1-4 guards, or runtime authorization requires a separately accepted Task and judgment.
