@@ -1,10 +1,57 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import re
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Protocol
 
+from aiscc.contracts.workflow import WorkflowState
+from aiscc.providers.models import ExecutionSubmissionRef
 from aiscc.workflow.models import GuardId, GuardSemanticOwner, TransitionRequest
+
+_EXECUTION_BOUND_PREFIXES = (
+    "aiscc-bound-ref:v1:execution-submission:",
+    "aiscc-bound-ref:v1:execution-attempt:",
+)
+
+
+def encode_execution_bound_refs(submission_id: str, execution_attempt_id: str) -> tuple[str, ...]:
+    """Canonical V1 identity encoding; encoding alone confers no authority."""
+    result = []
+    for prefix, identifier in zip(
+        _EXECUTION_BOUND_PREFIXES, (submission_id, execution_attempt_id), strict=True
+    ):
+        if not isinstance(identifier, str) or not identifier:
+            raise ValueError("NON_CANONICAL_BOUND_REF")
+        payload = base64.urlsafe_b64encode(identifier.encode("utf-8", errors="strict"))
+        result.append(prefix + payload.rstrip(b"=").decode("ascii"))
+    return tuple(result)
+
+
+def decode_execution_bound_refs(bound_refs: tuple[str, ...]) -> tuple[str, str]:
+    if not isinstance(bound_refs, tuple) or len(bound_refs) != 2:
+        raise ValueError("NON_CANONICAL_BOUND_REF")
+    identifiers = []
+    for prefix, ref in zip(_EXECUTION_BOUND_PREFIXES, bound_refs, strict=True):
+        if not isinstance(ref, str) or not ref.startswith(prefix):
+            raise ValueError("NON_CANONICAL_BOUND_REF")
+        payload = ref[len(prefix) :]
+        if re.fullmatch(r"[A-Za-z0-9_-]+", payload) is None:
+            raise ValueError("NON_CANONICAL_BOUND_REF")
+        try:
+            raw = base64.b64decode(
+                payload + "=" * (-len(payload) % 4), altchars=b"-_", validate=True
+            )
+            identifier = raw.decode("utf-8", errors="strict")
+        except (binascii.Error, UnicodeError) as exc:
+            raise ValueError("NON_CANONICAL_BOUND_REF") from exc
+        if not identifier or base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii") != payload:
+            raise ValueError("NON_CANONICAL_BOUND_REF")
+        identifiers.append(identifier)
+    return identifiers[0], identifiers[1]
+
 
 GUARD_OWNER_POLICY = MappingProxyType(
     {
@@ -83,6 +130,7 @@ class P1_4GuardAuthority:
             raise ValueError("guard authority ID must be non-empty")
         self.authority_id = authority_id
         self._issuer_token = object()
+        self._execution_facts: dict[int, TrustedGuardFact] = {}
 
     def issue(
         self,
@@ -95,6 +143,8 @@ class P1_4GuardAuthority:
     ) -> TrustedGuardFact:
         if guard_id is GuardId.G_CURRENT:
             raise ValueError("G_CURRENT is produced only by the transition authority")
+        if guard_id is GuardId.G_EXECUTOR_SUBMISSION:
+            raise ValueError("G_EXECUTOR_SUBMISSION requires an issuer-verified execution ref")
         if GUARD_OWNER_POLICY[guard_id] is not self.semantic_owner:
             raise ValueError(f"{guard_id.value} is not owned by P1-4")
         if not reason or not authority_ref:
@@ -114,7 +164,10 @@ class P1_4GuardAuthority:
         )
 
     def recognizes(self, fact: TrustedGuardFact) -> bool:
-        return fact._issuer_token is self._issuer_token
+        return fact._issuer_token is self._issuer_token and (
+            fact.guard_id is not GuardId.G_EXECUTOR_SUBMISSION
+            or self._execution_facts.get(id(fact)) is fact
+        )
 
     def issue_from_execution_ref(
         self,
@@ -128,6 +181,28 @@ class P1_4GuardAuthority:
             raise ValueError("only P1-5 execution refs use this validation path")
         if not verifier.verify(execution_ref, request, guard_id):
             raise ValueError("unrecognized or mismatched P1-5 execution ref")
+        if guard_id is GuardId.G_EXECUTOR_SUBMISSION:
+            if not isinstance(execution_ref, ExecutionSubmissionRef):
+                raise ValueError("G_EXECUTOR_SUBMISSION requires ExecutionSubmissionRef")
+            bound_refs = encode_execution_bound_refs(
+                execution_ref.submission_id, execution_ref.execution_attempt_id
+            )
+            required_bound_refs(guard_id, request, execution_bound_refs=bound_refs)
+            fact = TrustedGuardFact(
+                guard_id=guard_id,
+                semantic_owner=self.semantic_owner,
+                satisfied=True,
+                reason="P1_5_EXECUTION_REF_VERIFIED",
+                authority_ref="p1-5:ExecutionSubmissionRef",
+                bound_refs=bound_refs,
+                task_contract_id=request.task_contract_id,
+                task_contract_version=request.task_contract_version,
+                work_run_id=request.work_run_id,
+                state_version=request.observed_state_version,
+                _issuer_token=self._issuer_token,
+            )
+            self._execution_facts[id(fact)] = fact
+            return fact
         return self.issue(
             guard_id=guard_id,
             satisfied=True,
@@ -137,7 +212,20 @@ class P1_4GuardAuthority:
         )
 
 
-def required_bound_refs(guard_id: GuardId, request: TransitionRequest) -> tuple[str, ...]:
+def required_bound_refs(
+    guard_id: GuardId,
+    request: TransitionRequest,
+    *,
+    execution_bound_refs: tuple[str, ...] = (),
+) -> tuple[str, ...]:
+    if guard_id is GuardId.G_EXECUTOR_SUBMISSION:
+        decode_execution_bound_refs(execution_bound_refs)
+        if (
+            request.observed_state is not WorkflowState.RUNNING
+            or request.target_state is not WorkflowState.ADMISSION_PENDING
+        ):
+            raise ValueError("execution submission binding requires RUNNING to ADMISSION_PENDING")
+        return execution_bound_refs
     if guard_id is GuardId.G_EVIDENCE:
         return request.evidence_refs
     if guard_id in _HUMAN_RESULT_GUARDS:
@@ -153,9 +241,15 @@ def required_bound_refs(guard_id: GuardId, request: TransitionRequest) -> tuple[
 
 
 def fact_matches_request(fact: TrustedGuardFact, request: TransitionRequest) -> bool:
+    try:
+        expected_refs = required_bound_refs(
+            fact.guard_id, request, execution_bound_refs=fact.bound_refs
+        )
+    except ValueError:
+        return False
     return (
         fact.semantic_owner is GUARD_OWNER_POLICY[fact.guard_id]
-        and fact.bound_refs == required_bound_refs(fact.guard_id, request)
+        and fact.bound_refs == expected_refs
         and fact.task_contract_id == request.task_contract_id
         and fact.task_contract_version == request.task_contract_version
         and fact.work_run_id == request.work_run_id

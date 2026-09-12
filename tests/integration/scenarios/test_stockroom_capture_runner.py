@@ -8,6 +8,7 @@ from dataclasses import FrozenInstanceError, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
@@ -70,6 +71,7 @@ from aiscc.workflow.models import (
     TransitionRequest,
 )
 from tests.unit.runtime.test_stockroom_image import synthetic_image
+from tests.unit.scenarios.test_stockroom_capture_runner import RecordingOwners, prepared_driver
 
 
 def run[T](coroutine: Coroutine[Any, Any, T]) -> T:
@@ -289,25 +291,20 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 == (SCENARIO_IDS[:2])
             )
             assert all(
-                item["evidence_basis_kind"] is None
-                for item in legacy_judgment_config["policies"]
+                item["evidence_basis_kind"] is None for item in legacy_judgment_config["policies"]
             )
-            assert tuple(
-                item["evidence_basis_kind"] for item in judgment_config["policies"]
-            ) == (
+            assert tuple(item["evidence_basis_kind"] for item in judgment_config["policies"]) == (
                 JudgmentEvidenceBasisKind.SATISFIED_ATTESTATION,
                 JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION,
             )
             malformed_judgment = json.loads(
-                (
-                    repository_root / "config/judgment/stockroom-capture.v2.json"
-                ).read_text(encoding="utf-8")
+                (repository_root / "config/judgment/stockroom-capture.v2.json").read_text(
+                    encoding="utf-8"
+                )
             )
             malformed_judgment["policies"][1].pop("evidence_checkpoint_ref")
             malformed_path = tmp_path / "malformed-judgment-v2.json"
-            malformed_path.write_text(
-                json.dumps(malformed_judgment), encoding="utf-8"
-            )
+            malformed_path.write_text(json.dumps(malformed_judgment), encoding="utf-8")
             with pytest.raises(ValueError, match="judgment policy has unknown or missing keys"):
                 load_stockroom_judgment_config(malformed_path)
             malformed_path.unlink()
@@ -393,9 +390,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 (WorkflowState.READY, 1, WorkflowState.RUNNING),
                 (WorkflowState.RUNNING, 2, WorkflowState.ADMISSION_PENDING),
             ):
-                request = s2_capture.adapter._request(
-                    s2_capture.prepared, source, version, target
-                )
+                request = s2_capture.adapter._request(s2_capture.prepared, source, version, target)
                 facts = tuple(
                     application.p1_4_guard_authority.issue(
                         guard_id=guard,
@@ -407,13 +402,9 @@ def test_production_owner_graph_and_bounded_running_prefix(
                     for guard in TRANSITION_MATRIX[(source, target)]
                     if GUARD_OWNER_POLICY[guard] is GuardSemanticOwner.P1_4_SYSTEM
                 )
-                decision = await application.workflow_kernel.request_transition(
-                    request, facts
-                )
+                decision = await application.workflow_kernel.request_transition(request, facts)
                 assert decision.outcome is DecisionOutcome.ADMITTED
-            s2_evaluation = await s2_capture.adapter.evaluate_evidence(
-                s2_capture.prepared, None
-            )
+            s2_evaluation = await s2_capture.adapter.evaluate_evidence(s2_capture.prepared, None)
             assert s2_evaluation.status == "UNSATISFIED"
             assert (
                 EvidenceSetEvaluationRef.parse(s2_evaluation.owner_ref).serialized()
@@ -442,18 +433,12 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 assert s2_judgment_row.payload["evidence_basis_kind"] == (
                     JudgmentEvidenceBasisKind.UNSATISFIED_SET_EVALUATION.value
                 )
-                assert (
-                    s2_judgment_row.payload["evidence_evaluation_ref"]
-                    == s2_evaluation.owner_ref
-                )
+                assert s2_judgment_row.payload["evidence_evaluation_ref"] == s2_evaluation.owner_ref
                 assert s2_judgment_row.payload["evidence_attestation_ref"] is None
                 assert s2_judgment_row.payload["reason_code"] == (
                     "STOCKROOM_REQUIRED_EVIDENCE_UNSATISFIED"
                 )
-                assert (
-                    s2_evaluation.owner_ref
-                    not in str(s2_judgment_row.payload["reason_code"])
-                )
+                assert s2_evaluation.owner_ref not in str(s2_judgment_row.payload["reason_code"])
             s2_transition = await s2_capture.adapter.request_transition(
                 s2_capture.prepared,
                 target=WorkflowState.REWORK_REQUIRED,
@@ -480,9 +465,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
             async with sessions() as session:
                 assert not tuple(
                     await session.scalars(
-                        select(JudgmentRow).where(
-                            JudgmentRow.work_run_id.in_(no_judgment_runs)
-                        )
+                        select(JudgmentRow).where(JudgmentRow.work_run_id.in_(no_judgment_runs))
                     )
                 )
 
@@ -911,3 +894,523 @@ def test_production_owner_graph_and_bounded_running_prefix(
             await engine.dispose()
 
     run(scenario())
+
+
+@pytest.mark.parametrize("identifiers", [("s", "a"), ("??:??", "attempt/?"), ("e\u0301", "?")])
+def test_execution_bound_ref_canonical_roundtrip(identifiers) -> None:
+    from aiscc.workflow.guards import decode_execution_bound_refs, encode_execution_bound_refs
+
+    refs = encode_execution_bound_refs(*identifiers)
+    assert decode_execution_bound_refs(refs) == identifiers
+    assert "=" not in "".join(refs)
+    assert encode_execution_bound_refs(*decode_execution_bound_refs(refs)) == refs
+
+
+@pytest.mark.parametrize("identifiers", [("", "a"), ("s", ""), (None, "a"), ("\ud800", "a")])
+def test_execution_bound_ref_empty_or_invalid_identifier_denied(identifiers) -> None:
+    from aiscc.workflow.guards import encode_execution_bound_refs
+
+    with pytest.raises(ValueError):
+        encode_execution_bound_refs(*identifiers)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "empty",
+        "one",
+        "extra",
+        "order",
+        "duplicate",
+        "prefix",
+        "version",
+        "type",
+        "padding",
+        "alphabet",
+        "length",
+        "noncanonical",
+        "utf8",
+        "empty_payload",
+    ],
+)
+def test_execution_bound_ref_decoder_denies_noncanonical(mutation) -> None:
+    from aiscc.workflow.guards import decode_execution_bound_refs, encode_execution_bound_refs
+
+    refs = encode_execution_bound_refs("s", "a")
+    prefix = "aiscc-bound-ref:v1:execution-submission:"
+    cases = {
+        "empty": (),
+        "one": refs[:1],
+        "extra": (*refs, refs[0]),
+        "order": refs[::-1],
+        "duplicate": (refs[0], refs[0]),
+        "prefix": (refs[0].replace("aiscc-", "other-"), refs[1]),
+        "version": (refs[0].replace(":v1:", ":v2:"), refs[1]),
+        "type": (refs[0].replace("execution-submission", "evidence"), refs[1]),
+        "padding": (prefix + "cw==", refs[1]),
+        "alphabet": (prefix + "+w", refs[1]),
+        "length": (prefix + "c", refs[1]),
+        "noncanonical": (prefix + "cx", refs[1]),
+        "utf8": (prefix + "_w", refs[1]),
+        "empty_payload": (prefix, refs[1]),
+    }
+    with pytest.raises(ValueError, match="NON_CANONICAL_BOUND_REF"):
+        decode_execution_bound_refs(cases[mutation])
+
+
+def _execution_link_fixture():
+    """Synthetic rows only: exercise real issuers/evaluator/history code without a database."""
+    from aiscc.persistence import repository
+    from aiscc.persistence.models import (
+        TransitionDecisionRow,
+        TransitionEvaluationRow,
+        TransitionRequestRow,
+        WorkRunRow,
+    )
+    from aiscc.providers.models import ExecutionStatus, ExecutionSubmissionRef
+    from aiscc.workflow.evaluator import TransitionEvaluator
+    from aiscc.workflow.guards import P1_4GuardAuthority
+    from aiscc.workflow.models import GuardId, WorkRun
+
+    authority = P1_4GuardAuthority()
+    producer = ExecutionReferenceAuthority()
+    now = datetime(2026, 9, 12, 12, 58, tzinfo=UTC)
+    submission = producer.register_submission(
+        ExecutionSubmissionRef(
+            "submission-1",
+            "attempt-1",
+            "run-1",
+            "task-1",
+            "1",
+            WorkflowState.RUNNING,
+            2,
+            ExecutionStatus.EXECUTOR_COMPLETED,
+            "a" * 64,
+            producer.issuer_ref,
+        )
+    )
+    current = None
+    steps = []
+    for version, target in enumerate(
+        (WorkflowState.READY, WorkflowState.RUNNING, WorkflowState.ADMISSION_PENDING)
+    ):
+        request = TransitionRequest(
+            f"request-{version}",
+            "project-1",
+            "task-1",
+            "1",
+            "run-1",
+            current.state if current else None,
+            version,
+            target,
+            "system",
+            RequesterType.SYSTEM,
+            RuntimeMode.OWNER_SELF_DOGFOOD,
+            created_at=now,
+        )
+        facts = []
+        for guard in sorted(TRANSITION_MATRIX[(request.observed_state, target)], key=str):
+            if guard is GuardId.G_EXECUTOR_SUBMISSION:
+                fact = authority.issue_from_execution_ref(
+                    guard_id=guard, execution_ref=submission, verifier=producer, request=request
+                )
+            else:
+                fact = authority.issue(
+                    guard_id=guard,
+                    satisfied=True,
+                    reason="SYNTHETIC_STATIC_FIXTURE",
+                    authority_ref="test-owner",
+                    request=request,
+                )
+            facts.append(fact)
+        evaluation, decision = TransitionEvaluator(authority).evaluate(
+            request=request, current=current, facts=tuple(facts), now=now
+        )
+        assert decision.outcome is DecisionOutcome.ADMITTED
+        current = WorkRun(
+            "project-1",
+            "task-1",
+            "1",
+            "run-1",
+            target,
+            version + 1,
+            RuntimeMode.OWNER_SELF_DOGFOOD,
+            now,
+            now,
+        )
+        steps.append(
+            (
+                repository._request_row(
+                    request, repository._request_fingerprint(request, tuple(facts))
+                ),
+                repository._evaluation_row(evaluation),
+                repository._decision_row(decision),
+            )
+        )
+    projection = WorkRunRow(
+        project_id=current.project_id,
+        task_contract_id=current.task_contract_id,
+        task_contract_version=current.task_contract_version,
+        work_run_id=current.work_run_id,
+        workflow_state=current.state.value,
+        state_version=current.state_version,
+        runtime_mode=current.runtime_mode.value,
+        created_at=now,
+        updated_at=now,
+    )
+
+    class RowSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        def begin(self):
+            return self
+
+        async def get(self, model, identity):
+            if model is WorkRunRow:
+                return projection if identity == projection.work_run_id else None
+            index, field = {
+                TransitionRequestRow: (0, "transition_request_id"),
+                TransitionEvaluationRow: (1, "transition_evaluation_id"),
+                TransitionDecisionRow: (2, "transition_decision_id"),
+            }[model]
+            return next((s[index] for s in steps if getattr(s[index], field) == identity), None)
+
+        async def scalars(self, query):
+            description = query.column_descriptions[0]
+            if description["name"] == "transition_decision_id":
+                return [s[2].transition_decision_id for s in steps]
+            model = description["entity"]
+            request_id = next(iter(query.compile().params.values()))
+            index = 1 if model is TransitionEvaluationRow else 2
+            return [s[index] for s in steps if s[0].transition_request_id == request_id]
+
+        async def execute(self, query, *args):
+            if str(query).startswith("SELECT pg_advisory_xact_lock"):
+                return None
+            return [(s[2], s[1], s[0]) for s in steps]
+
+    return SimpleNamespace(
+        authority=authority,
+        producer=producer,
+        submission=submission,
+        current=current,
+        steps=steps,
+        projection=projection,
+        session=RowSession(),
+    )
+
+
+def test_verified_execution_guard_and_historical_link_roundtrip() -> None:
+    from aiscc.persistence import repository
+    from aiscc.workflow.guards import decode_execution_bound_refs
+    from aiscc.workflow.models import GuardId
+
+    fixture = _execution_link_fixture()
+    verified = run(
+        repository.verify_historical_transition_provenance(
+            fixture.session, fixture.steps[-1][0].transition_request_id
+        )
+    )
+    guard = next(
+        g for g in verified.evaluation.guards if g.guard_id is GuardId.G_EXECUTOR_SUBMISSION
+    )
+    assert decode_execution_bound_refs(guard.bound_refs) == ("submission-1", "attempt-1")
+    assert verified.request.observed_state is WorkflowState.RUNNING
+    assert verified.request.observed_state_version == 2
+    assert verified.work_run == fixture.current
+    assert verified.decision.resulting_state_version == 3
+
+
+@pytest.mark.parametrize(
+    "mutation", ["missing_submission", "missing_attempt", "bad", "order", "extra"]
+)
+def test_historical_execution_binding_fails_closed(mutation) -> None:
+    from aiscc.persistence import repository
+
+    fixture = _execution_link_fixture()
+    guard = next(g for g in fixture.steps[-1][1].guards if g["guard_id"] == "G_EXECUTOR_SUBMISSION")
+    refs = guard["bound_refs"]
+    guard["bound_refs"] = {
+        "missing_submission": refs[1:],
+        "missing_attempt": refs[:1],
+        "bad": ["wrong-prefix", refs[1]],
+        "order": refs[::-1],
+        "extra": [*refs, refs[0]],
+    }[mutation]
+    with pytest.raises(repository.HistoricalTransitionProvenanceError):
+        run(
+            repository.verify_historical_transition_provenance(
+                fixture.session, fixture.steps[-1][0].transition_request_id
+            )
+        )
+
+
+def test_execution_guard_requires_authentic_ref_and_cannot_substitute_evidence() -> None:
+    from aiscc.persistence import repository
+    from aiscc.workflow.evaluator import TransitionEvaluator
+    from aiscc.workflow.guards import encode_execution_bound_refs
+    from aiscc.workflow.models import GuardId
+
+    fixture = _execution_link_fixture()
+    request = repository._transition_request_from_row(fixture.steps[-1][0])
+    with pytest.raises(ValueError):
+        fixture.authority.issue(
+            guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+            satisfied=True,
+            reason="claim",
+            authority_ref="caller",
+            request=request,
+        )
+    with pytest.raises(ValueError):
+        fixture.authority.issue_from_execution_ref(
+            guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+            execution_ref=replace(fixture.submission),
+            verifier=fixture.producer,
+            request=request,
+        )
+    fact = fixture.authority.issue_from_execution_ref(
+        guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+        execution_ref=fixture.submission,
+        verifier=fixture.producer,
+        request=request,
+    )
+    assert fixture.authority.recognizes(fact)
+    assert not fixture.authority.recognizes(
+        replace(fact, bound_refs=encode_execution_bound_refs("foreign", "attempt-1"))
+    )
+    acceptance = replace(
+        request,
+        observed_state=WorkflowState.ADMISSION_PENDING,
+        observed_state_version=3,
+        target_state=WorkflowState.ACCEPTED,
+        evidence_refs=(fixture.submission.submission_id,),
+    )
+    evaluation, decision = TransitionEvaluator(fixture.authority).evaluate(
+        request=acceptance,
+        current=fixture.current,
+        facts=(fact,),
+    )
+    assert decision.outcome is DecisionOutcome.DENIED
+    assert GuardId.G_EVIDENCE in evaluation.missing_guards
+    assert not any(g.guard_id is GuardId.G_EVIDENCE and g.satisfied for g in evaluation.guards)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "positive",
+        "wrong_submission",
+        "wrong_attempt",
+        "wrong_version",
+        "unrelated",
+        "missing_predecessor",
+        "ref_only",
+        "wrong_current",
+        "unregistered",
+        "stale_current",
+    ],
+)
+def test_runtime_evidence_requires_current_exact_link_and_verified_producer(mutation) -> None:
+    from aiscc.providers.service import DurableExecutionResult
+    from aiscc.scenarios.stockroom_production import StockroomCaptureOwnerAdapter
+
+    fixture = _execution_link_fixture()
+    current = fixture.current
+    if mutation == "wrong_current":
+        current = replace(current, state=WorkflowState.RUNNING)
+    calls = []
+
+    async def load(run_id):
+        assert run_id == "run-1"
+        return current
+
+    async def observe(prepared):
+        nonlocal current
+        if mutation == "stale_current":
+            current = replace(current, state_version=4)
+        return {"tool_output_ref": "verified-tool"}
+
+    async def submit(*args, **kwargs):
+        calls.append(kwargs)
+        return "normal-evidence-admission-path"
+
+    producer_ref = fixture.submission
+    if mutation == "wrong_submission":
+        producer_ref = fixture.producer.register_submission(
+            replace(producer_ref, submission_id="other")
+        )
+    elif mutation == "wrong_attempt":
+        producer_ref = fixture.producer.register_submission(
+            replace(producer_ref, execution_attempt_id="other")
+        )
+    elif mutation == "wrong_version":
+        producer_ref = fixture.producer.register_submission(replace(producer_ref, state_version=1))
+    elif mutation == "unregistered":
+        producer_ref = replace(producer_ref)
+    adapter = object.__new__(StockroomCaptureOwnerAdapter)
+    prepared = prepared_driver("stockroom-s1-normal")
+    requirement = SimpleNamespace(task_contract_id="task-1", task_contract_version="1")
+    adapter._app = SimpleNamespace(
+        session_factory=lambda: fixture.session,
+        workflow_kernel=SimpleNamespace(load=load),
+        execution_reference_authority=fixture.producer,
+        evidence_enrollments={
+            prepared.request.scenario_id: SimpleNamespace(requirement=requirement)
+        },
+        runtime_evidence_issuer=object(),
+    )
+    adapter._handles = {"submission-1": DurableExecutionResult("COMPLETED", producer_ref)}
+    adapter.verify_runtime_summary_source = observe
+    adapter._submit_durable_candidate = submit
+    predecessor_id = fixture.steps[-1][2].transition_decision_id
+    if mutation == "unrelated":
+        predecessor_id = fixture.steps[-2][2].transition_decision_id
+    elif mutation == "missing_predecessor":
+        predecessor_id = "missing"
+    elif mutation == "ref_only":
+        predecessor_id = fixture.submission.submission_id
+    result = run(adapter.submit_runtime_evidence(prepared, predecessor_id))
+    if mutation == "positive":
+        assert result.status == "ADMITTED"
+        assert len(calls) == 1
+        assert calls[0]["value"]["execution_submission_ref"] == fixture.submission.submission_id
+        assert result.workflow_state is WorkflowState.ADMISSION_PENDING
+        assert fixture.submission.state is WorkflowState.RUNNING
+        assert fixture.submission.state_version == 2
+    else:
+        assert result.status == "DENIED"
+        assert calls == []
+
+
+def test_runner_passes_admitted_predecessor_identity_in_existing_order() -> None:
+    class LinkedOwners(RecordingOwners):
+        async def submit_runtime_evidence(self, prepared, predecessor_ref):
+            assert predecessor_ref == "owner:transition:ADMISSION_PENDING"
+            assert [name for name, _ in self.calls][-2:] == [
+                "execute",
+                "transition:ADMISSION_PENDING",
+            ]
+            return await super().submit_runtime_evidence(prepared, predecessor_ref)
+
+    owners = LinkedOwners()
+    run(StockroomCaptureRunner(owners).run(prepared_driver("stockroom-s1-normal")))
+    assert any(name == "submit_runtime" for name, _ in owners.calls)
+
+
+def test_same_shape_admitted_pending_predecessor_denies_cross_producer_substitution() -> None:
+    from aiscc.persistence import repository
+    from aiscc.providers.service import DurableExecutionResult
+    from aiscc.scenarios.stockroom_production import StockroomCaptureOwnerAdapter
+    from aiscc.workflow.evaluator import TransitionEvaluator
+    from aiscc.workflow.guards import decode_execution_bound_refs
+    from aiscc.workflow.models import GuardId
+
+    fixture = _execution_link_fixture()
+    original = fixture.submission
+    linked_producer = fixture.producer.register_submission(
+        replace(original, submission_id="different-authentic-submission")
+    )
+    request = repository._transition_request_from_row(fixture.steps[-1][0])
+    # Both producers are authentic for the same run, attempt and original RUNNING/v2.
+    assert fixture.producer.verify(original, request, GuardId.G_EXECUTOR_SUBMISSION)
+    assert fixture.producer.verify(linked_producer, request, GuardId.G_EXECUTOR_SUBMISSION)
+    execution_fact = fixture.authority.issue_from_execution_ref(
+        guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+        execution_ref=linked_producer,
+        verifier=fixture.producer,
+        request=request,
+    )
+    scope_fact = fixture.authority.issue(
+        guard_id=GuardId.G_SCOPE,
+        satisfied=True,
+        reason="SYNTHETIC_STATIC_FIXTURE",
+        authority_ref="test-owner",
+        request=request,
+    )
+    facts = (execution_fact, scope_fact)
+    running = replace(fixture.current, state=WorkflowState.RUNNING, state_version=2)
+    evaluation, decision = TransitionEvaluator(fixture.authority).evaluate(
+        request=request, current=running, facts=facts, now=fixture.current.updated_at
+    )
+    assert decision.outcome is DecisionOutcome.ADMITTED
+    fixture.steps[-1] = (
+        repository._request_row(request, repository._request_fingerprint(request, facts)),
+        repository._evaluation_row(evaluation),
+        repository._decision_row(decision),
+    )
+    # Verify the complete historical lineage; denial must not come from malformed rows.
+    historical = run(
+        repository.verify_historical_transition_provenance(
+            fixture.session, request.transition_request_id
+        )
+    )
+    assert historical.work_run == fixture.current
+    assert historical.request.work_run_id == original.work_run_id
+    assert historical.request.observed_state is WorkflowState.RUNNING
+    assert historical.request.observed_state_version == original.state_version == 2
+    assert historical.request.target_state is WorkflowState.ADMISSION_PENDING
+    assert historical.decision.resulting_state is fixture.current.state
+    assert historical.decision.resulting_state_version == fixture.current.state_version == 3
+    guard = next(
+        g for g in historical.evaluation.guards if g.guard_id is GuardId.G_EXECUTOR_SUBMISSION
+    )
+    assert decode_execution_bound_refs(guard.bound_refs) == (
+        linked_producer.submission_id,
+        original.execution_attempt_id,
+    )
+    assert linked_producer.submission_id != original.submission_id
+    calls = []
+    resolved = []
+
+    async def load(run_id):
+        assert run_id == fixture.current.work_run_id
+        return fixture.current
+
+    async def observe(prepared):
+        calls.append("observation")
+        return {"tool_output_ref": "verified-tool"}
+
+    async def submit(*args, **kwargs):
+        calls.append("candidate-submission")
+        return "normal-evidence-admission-path"
+
+    adapter = object.__new__(StockroomCaptureOwnerAdapter)
+    prepared = prepared_driver("stockroom-s1-normal")
+    requirement = SimpleNamespace(task_contract_id="task-1", task_contract_version="1")
+    adapter._app = SimpleNamespace(
+        session_factory=lambda: fixture.session,
+        workflow_kernel=SimpleNamespace(load=load),
+        execution_reference_authority=fixture.producer,
+        evidence_enrollments={
+            prepared.request.scenario_id: SimpleNamespace(requirement=requirement)
+        },
+        runtime_evidence_issuer=object(),
+    )
+    # Deliberately substitute the other authentic producer at the linked handle boundary.
+    substituted = DurableExecutionResult("COMPLETED", original)
+    adapter._handles = {linked_producer.submission_id: substituted}
+    original_require_handle = adapter._require_handle
+
+    def record_handle(ref, kind):
+        result = original_require_handle(ref, kind)
+        resolved.append(result)
+        return result
+
+    adapter._require_handle = record_handle
+    adapter.verify_runtime_summary_source = observe
+    adapter._submit_durable_candidate = submit
+    denied = run(adapter.submit_runtime_evidence(prepared, decision.transition_decision_id))
+    assert resolved == [substituted]  # not missing/invalid handle setup
+    assert denied.status == "DENIED"
+    assert calls == []  # before observation and EvidenceCandidate submission
+    # Same history/current state with the exact linked producer reaches normal admission.
+    adapter._handles[linked_producer.submission_id] = DurableExecutionResult(
+        "COMPLETED", linked_producer
+    )
+    admitted = run(adapter.submit_runtime_evidence(prepared, decision.transition_decision_id))
+    assert admitted.status == "ADMITTED"
+    assert calls == ["observation", "candidate-submission"]

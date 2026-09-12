@@ -72,7 +72,7 @@ class StockroomCaptureOwnerPort(Protocol):
     ) -> OwnerCallResult: ...
 
     async def submit_runtime_evidence(
-        self, prepared: PreparedStockroomDriver, execution_ref: str
+        self, prepared: PreparedStockroomDriver, predecessor_ref: str
     ) -> OwnerCallResult: ...
 
     async def submit_static_policy_evidence(
@@ -241,9 +241,7 @@ class StockroomCaptureRunner:
 
         candidate_ref: str | None = None
         if request.scenario_id != S2:
-            candidate = await self._owners.submit_runtime_evidence(
-                prepared, execution.owner_ref
-            )
+            candidate = await self._owners.submit_runtime_evidence(prepared, pending.owner_ref)
             if failure := accept("EVIDENCE", "SUBMIT_RUNTIME", candidate, "ADMITTED"):
                 return await stop(candidate, failure)
             candidate_ref = candidate.owner_ref

@@ -2025,11 +2025,24 @@ def _historical_evaluation_from_row(
             ):
                 raise HistoricalTransitionProvenanceError("G_CURRENT provenance is not canonical")
             continue
-        if semantic_owner is not GUARD_OWNER_POLICY[guard_id] or tuple(
-            bound_refs
-        ) != required_bound_refs(guard_id, request):
+        try:
+            expected_refs = required_bound_refs(
+                guard_id, request, execution_bound_refs=tuple(bound_refs)
+            )
+        except ValueError as exc:
+            raise HistoricalTransitionProvenanceError(
+                "execution submission bound refs are missing or non-canonical"
+            ) from exc
+        if semantic_owner is not GUARD_OWNER_POLICY[guard_id] or tuple(bound_refs) != expected_refs:
             raise HistoricalTransitionProvenanceError(
                 "required guard owner or request binding is not canonical"
+            )
+        if guard_id is GuardId.G_EXECUTOR_SUBMISSION and (
+            authority_ref != "p1-5:ExecutionSubmissionRef"
+            or reason != "P1_5_EXECUTION_REF_VERIFIED"
+        ):
+            raise HistoricalTransitionProvenanceError(
+                "execution submission issuer is not canonical"
             )
         facts.append(
             TrustedGuardFact(

@@ -83,8 +83,13 @@ from aiscc.judgment.models import (
     JudgmentOwnerPolicy,
     JudgmentPolicy,
 )
-from aiscc.persistence.models import ExecutionOutputRefRow
-from aiscc.persistence.repository import PostgresExecutionRepository, PostgresTransitionRepository
+from aiscc.persistence.models import ExecutionOutputRefRow, TransitionDecisionRow
+from aiscc.persistence.repository import (
+    PostgresExecutionRepository,
+    PostgresTransitionRepository,
+    acquire_work_run_transaction_lock,
+    verify_historical_transition_provenance,
+)
 from aiscc.providers.authority import (
     ExecutionReferenceAuthority,
     LeaseBoundSecretResolver,
@@ -165,7 +170,12 @@ from aiscc.security.capability import Capability
 from aiscc.security.policy import SecurityPolicy
 from aiscc.security.stockroom_policy import StockroomOwnerRestriction, StockroomSecurityContext
 from aiscc.workflow.evaluator import TransitionEvaluator
-from aiscc.workflow.guards import GUARD_OWNER_POLICY, P1_4GuardAuthority, TrustedGuardFact
+from aiscc.workflow.guards import (
+    GUARD_OWNER_POLICY,
+    P1_4GuardAuthority,
+    TrustedGuardFact,
+    decode_execution_bound_refs,
+)
 from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
@@ -1293,21 +1303,55 @@ class StockroomCaptureOwnerAdapter:
             return await self._failure(prepared, "UNKNOWN", type(exc).__name__)
 
     async def submit_runtime_evidence(
-        self, prepared: PreparedStockroomDriver, execution_ref: str
+        self, prepared: PreparedStockroomDriver, predecessor_ref: str
     ) -> OwnerCallResult:
         try:
-            execution = self._require_handle(execution_ref, DurableExecutionResult)
-            submission = execution.submission
             enrollment = self._enrollment(prepared)
-            current = await self._current(prepared, WorkflowState.RUNNING)
-            submission_request = self._request(
-                prepared,
-                current.state,
-                current.state_version,
-                WorkflowState.ADMISSION_PENDING,
-            )
+            current = await self._current(prepared, WorkflowState.ADMISSION_PENDING)
+            async with self._app.session_factory() as session, session.begin():
+                await acquire_work_run_transaction_lock(session, current.work_run_id)
+                predecessor = await session.get(TransitionDecisionRow, predecessor_ref)
+                if predecessor is None:
+                    raise AuthorityConflictError("exact admitted predecessor is missing")
+                linked = await verify_historical_transition_provenance(
+                    session, predecessor.transition_request_id
+                )
+                request, decision = linked.request, linked.decision
+                if (
+                    decision.transition_decision_id != predecessor_ref
+                    or decision.outcome is not DecisionOutcome.ADMITTED
+                    or request.observed_state is not WorkflowState.RUNNING
+                    or request.target_state is not WorkflowState.ADMISSION_PENDING
+                    or decision.resulting_state is not current.state
+                    or decision.resulting_state_version != current.state_version
+                    or request.observed_state_version + 1 != current.state_version
+                    or request.work_run_id != prepared.request.run_binding.run_id
+                    or request.work_run_id != current.work_run_id
+                    or request.task_contract_id != enrollment.requirement.task_contract_id
+                    or request.task_contract_version != enrollment.requirement.task_contract_version
+                    or request.task_contract_id != current.task_contract_id
+                    or request.task_contract_version != current.task_contract_version
+                    or request.project_id != current.project_id
+                    or request.runtime_mode is not current.runtime_mode
+                    or linked.work_run != current
+                ):
+                    raise AuthorityConflictError(
+                        "predecessor is not the exact current successor link"
+                    )
+                guards = tuple(
+                    guard
+                    for guard in linked.evaluation.guards
+                    if guard.guard_id is GuardId.G_EXECUTOR_SUBMISSION
+                )
+                if len(guards) != 1 or not guards[0].satisfied:
+                    raise AuthorityConflictError("exact predecessor execution guard is missing")
+                submission_id, attempt_id = decode_execution_bound_refs(guards[0].bound_refs)
+            execution = self._require_handle(submission_id, DurableExecutionResult)
+            submission = execution.submission
             if (
                 submission is None
+                or submission.submission_id != submission_id
+                or submission.execution_attempt_id != attempt_id
                 or submission.execution_attempt_id != prepared.request.run_binding.attempt_id
                 or submission.work_run_id != prepared.request.run_binding.run_id
                 or submission.task_contract_id != enrollment.requirement.task_contract_id
@@ -1315,12 +1359,14 @@ class StockroomCaptureOwnerAdapter:
                 or submission.status is not ExecutionStatus.EXECUTOR_COMPLETED
                 or not self._app.execution_reference_authority.verify(
                     submission,
-                    submission_request,
+                    request,
                     GuardId.G_EXECUTOR_SUBMISSION,
                 )
             ):
                 raise AuthorityConflictError("execution submission is absent or stale")
             observation = await self.verify_runtime_summary_source(prepared)
+            if await self._current(prepared, WorkflowState.ADMISSION_PENDING) != current:
+                raise AuthorityConflictError("current evidence-review authority changed")
             admitted_ref = await self._submit_durable_candidate(
                 prepared,
                 enrollment,

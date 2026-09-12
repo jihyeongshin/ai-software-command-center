@@ -178,7 +178,10 @@ def test_static_module_has_no_execution_or_integration_imports() -> None:
         "jsonschema",
         "aiscc.scenarios",
     }
-    for path in (ROOT / "src/aiscc/scenarios").glob("*.py"):
+    paths = tuple(
+        ROOT / "src/aiscc/scenarios" / name for name in ("__init__.py", "catalog.py", "models.py")
+    )
+    for path in paths:
         tree = ast.parse(path.read_text("utf-8"))
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
@@ -188,3 +191,20 @@ def test_static_module_has_no_execution_or_integration_imports() -> None:
             else:
                 continue
             assert all(any(m == a or m.startswith(a + ".") for a in allowed) for m in modules)
+
+
+def test_static_import_policy_reads_exact_three_members(monkeypatch: pytest.MonkeyPatch) -> None:
+    original_read_text = Path.read_text
+    scanned = []
+
+    def record_read(path, *args, **kwargs):
+        scanned.append(path.relative_to(ROOT).as_posix())
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", record_read)
+    test_static_module_has_no_execution_or_integration_imports()
+    assert tuple(scanned) == (
+        "src/aiscc/scenarios/__init__.py",
+        "src/aiscc/scenarios/catalog.py",
+        "src/aiscc/scenarios/models.py",
+    )
