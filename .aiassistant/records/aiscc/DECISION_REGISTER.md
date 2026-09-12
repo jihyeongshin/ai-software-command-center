@@ -932,11 +932,20 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - DB candidate: `.aiassistant/records/aiscc/runtime/stockroom-private-postgres-provisioning.v1.json`
 - DB candidate SHA-256: `36b9c93515223ade3d74923141fcbe823907b42b81e5d86bf3666a4f02032b54`
 - proof: 0420 provisioning evidence and 1400 cleanup `15 / 15 PASS` are `REUSED_ACCEPTED`; no environment re-proof.
-- residue: `CURRENT_HELPER_1..4 = NON_BLOCKING_LOCAL_RESIDUE / OPERATIONAL_HOUSEKEEPING`; not a Cut B admission blocker and not authorization for broad discovery or cleanup.
-- next action: Cut C final readiness binding, private runtime-root creation/authority, admitted provenance references, and production resolver/readiness verification, only after persistence review and a separate exact Task.
-- authorization boundary: Cut C `NEXT_AFTER_PERSISTENCE / NOT_STARTED / NOT_AUTHORIZED`; private S1 `NOT_AUTHORIZED`; P2-3 `IN_PROGRESS`; no public runtime or Replay authorization.
-- persistence-result Browser review: `HUMAN_PENDING`.
+- residue: `CURRENT_HELPER_1..4 = NON_BLOCKING_LOCAL_RESIDUE / OPERATIONAL_HOUSEKEEPING`; not a Cut B admission blocker and not authorization for discovery or cleanup.
+- current next action: Cut C final readiness binding, private runtime-root creation/authority, admitted provenance references, and production resolver/readiness verification under a separate exact Browser Task.
+- authorization boundary: Cut C `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`; private S1 `NOT_AUTHORIZED`; P2-3 `IN_PROGRESS`; no public runtime or Replay authorization.
+- persistence-result Browser review: `COMPLETED`.
+- persistence mechanics: `ACCEPTED / Commit A and Commit B PRESERVED`.
+- state reconciliation Commit B: `fdd3b9ac2f0d8db447ed0ed055aa4b02eab4b30d`.
+- 1510 state projection retry: `BLOCKED_POLICY_CONFLICT / NO_MUTATION`; no state/Git mutation; issued transport artifacts and blocked-result evidence are preserved.
+- current state projection: `RECONCILED` by the explicit 1533 three-owner correction contract.
+- blocked Task: `.aiassistant/tasks/done/20260912_1510_aiscc-p2-3-cut-b-post-persistence-state-projection-correction-rework-1.md`
+- persistence-result Cycle: `.aiassistant/records/aiscc/cycles/20260912_1510_aiscc-p2-3-cut-b-persistence-state-projection-rework-entry-1.cycle.md`
+- persistence-result Judgment: `.aiassistant/reports/aiscc/20260912_1510_aiscc-p2-3-cut-b-persistence-result-state-projection-hold-judgment-1.md`
+- retry Cycle: `.aiassistant/records/aiscc/cycles/20260912_1533_aiscc-p2-3-cut-b-state-projection-policy-conflict-retry-entry-1.cycle.md`
+- retry Judgment: `.aiassistant/reports/aiscc/20260912_1533_aiscc-p2-3-cut-b-state-projection-policy-conflict-hold-judgment-1.md`
 - Judgment: `.aiassistant/reports/aiscc/20260912_1445_aiscc-p2-3-cut-b-final-admission-judgment-1.md`
 - Cycle: `.aiassistant/records/aiscc/cycles/20260912_1445_aiscc-p2-3-cut-b-final-admission-persistence-entry-1.cycle.md`
-- historical boundary: earlier decisions retain their verification-time meaning. This decision supersedes the earlier Cut B not-started/provisioning-required next-action wording only.
+- historical boundary: earlier decision entries retain their verification-time meaning. The current fields in this latest Cut B entry supersede its former persistence-review blocker and pre-reconciliation next-action wording under the explicit 1533 Task and Browser Judgment.
 - supersession_rule: readiness, private runtime-root authority, scenario execution, or environment changes require a separately authorized Task and judgment.
