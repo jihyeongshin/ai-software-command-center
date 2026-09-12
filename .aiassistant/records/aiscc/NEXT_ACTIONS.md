@@ -89,7 +89,7 @@ A1 post-commit reconciliation -> PASS / 21 of 21 RAW_EXACT / amend not required
 P2-3 A2 production owner/bootstrap integration -> IMPLEMENTATION ACCEPTED / PERSISTED
 A2 COMMIT_A -> d98f9ad108e95ba659b9c6a10770119af22175a1
 A2 terminal persistence -> ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
-next critical action -> P2-3 private S1 normal scenario execution/capture
+next critical action -> P2-3 private S1 normal scenario execution/capture retry after producer-provenance correction
 runtime prerequisites -> ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED
 actual S1-S4 scenario execution -> NOT_STARTED
 capture/export corpus -> NOT_STARTED
@@ -315,14 +315,17 @@ work_type:
 PRIVATE_SCENARIO_EXECUTION
 
 title:
-P2-3 private S1 normal scenario execution/capture
+P2-3 private S1 normal scenario execution/capture retry after producer-provenance correction
 
 status:
 ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
 
 reason:
-Cut C readiness is FINAL_ADMITTED / PERSISTED.
-Cut C Browser review is COMPLETED.
+source correction is FINAL_ADMITTED / PERSISTED
+source correction Browser review is COMPLETED
+
+reuse:
+retained Cut C private environment authority, subject to exact next-Task preflight
 
 required authorization:
 separate exact Browser-issued S1 Task
@@ -335,10 +338,10 @@ ACCEPTED
 
 forbidden before authorization:
 prepare_capture
-WorkRun
+new WorkRun
 provider/tool execution
 scenario Docker dispatch
-evidence admission
+runtime evidence admission
 scenario Judgment
 
 actual S1-S4:
@@ -361,6 +364,11 @@ Cut B provisioning evidence is REUSED_ACCEPTED and persisted. The three-owner co
 Recorded Replay require separate authorization. Public live/replay remain unreleased.
 
 Current authority:
+
+- S1 producer-provenance source correction: `FINAL_ADMITTED / PERSISTED`; Browser review `COMPLETED`.
+- Source correction Commit A: `35cee94a92d1f12801576ef48038196922687f42`.
+- Accepted source result SHA-256: `d856d9238f78facc870d51837a64c7e446ae0c3309c021ac54f11299ea47e0cf`.
+- `.aiassistant/reports/aiscc/20260912_2334_aiscc-p2-3-s1-producer-provenance-source-final-acceptance-judgment-1.md`
 
 - Cut C governance Commit A: `4096913e9a117bd49bfecdb1ce5ca8de2735d661`.
 - `.aiassistant/reports/aiscc/20260912_1707_aiscc-p2-3-cut-c-readiness-final-acceptance-judgment-1.md`

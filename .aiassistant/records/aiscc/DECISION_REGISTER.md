@@ -975,3 +975,49 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - Cycle: `.aiassistant/records/aiscc/cycles/20260912_1707_aiscc-p2-3-cut-c-readiness-final-admission-persistence-entry-1.cycle.md`.
 - historical boundary: earlier entries retain their verification-time meaning; this decision supersedes the Cut B entry's then-current Cut C next-action and authorization wording only.
 - authorization boundary: no prepare_capture, WorkRun, provider/tool execution, scenario Docker dispatch, evidence admission, or scenario Judgment before the separate exact S1 Task. No public runtime, Replay, or deployment authorization.
+
+## AISCC-P2-3-PRIVATE-S1-PRODUCER-PROVENANCE-SOURCE-CORRECTION-V1
+
+```text
+decision_id:
+AISCC-P2-3-PRIVATE-S1-PRODUCER-PROVENANCE-SOURCE-CORRECTION-V1
+
+decision_status:
+FINAL_ADMITTED / PERSISTED
+
+Browser accepted source result SHA-256:
+d856d9238f78facc870d51837a64c7e446ae0c3309c021ac54f11299ea47e0cf
+
+actual Commit A:
+35cee94a92d1f12801576ef48038196922687f42
+
+canonical G_EXECUTOR_SUBMISSION binding:
+submission_id + execution_attempt_id using V1 canonical bound refs
+
+producer-link invariant:
+CURRENT != PRODUCER
+exact historical admitted predecessor links them
+
+producer state:
+RUNNING/original producer version
+
+evidence-review current state:
+ADMISSION_PENDING/current version
+
+cross-producer substitution:
+DENIED / PROVED
+
+static scenario import-policy members:
+__init__.py / catalog.py / models.py exact
+
+accepted source/test path count:
+6
+
+private S1 runtime:
+not executed by source correction
+
+next authority:
+separate exact Browser-issued private S1 execution Task
+```
+
+Authority: `.aiassistant/reports/aiscc/20260912_2334_aiscc-p2-3-s1-producer-provenance-source-final-acceptance-judgment-1.md` and `.aiassistant/records/aiscc/cycles/20260912_2334_aiscc-p2-3-s1-producer-provenance-source-final-acceptance-persistence-entry-1.cycle.md`. Accepted verification is reused, not rerun; runtime admission is not implied.

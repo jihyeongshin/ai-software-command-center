@@ -290,6 +290,57 @@ separate exact Browser-issued S1 Task required
 - Authority envelope: evidence requirement sets/requirements/checkpoints `4/4/4`; judgment policies/projections `2/2`; all other application/domain rows `0`.
 - Runtime root remained empty after the readiness build. S1-S4: `NOT_EXECUTED`.
 
+## P2-3 S1 producer-provenance source correction final admission and persistence
+
+```text
+P2-3:
+IN_PROGRESS
+
+Cut C:
+FINAL_ADMITTED / PERSISTED
+
+private S1 initial execution:
+BLOCKED BEFORE RUNTIME by source-contract defects
+historical lineage preserved
+
+S1 producer-provenance source correction:
+FINAL_ADMITTED / PERSISTED
+
+source correction Browser review:
+COMPLETED
+
+source correction result ZIP SHA-256:
+d856d9238f78facc870d51837a64c7e446ae0c3309c021ac54f11299ea47e0cf
+
+source correction Commit A:
+35cee94a92d1f12801576ef48038196922687f42
+
+canonical bound-ref contract:
+V1 exact execution submission + execution attempt binding
+
+CURRENT / LINK / PRODUCER:
+ADMISSION_PENDING current / exact historical admitted RUNNING -> ADMISSION_PENDING predecessor / RUNNING immutable original producer version
+
+same-shape cross-producer substitution:
+DENIED / PROVED
+
+static scenario import-policy membership:
+__init__.py / catalog.py / models.py exact
+
+private runtime root:
+CREATED / RETAINED
+absolute path not recorded
+
+private DB authority enrollment:
+ESTABLISHED / BOUNDED / RETAINED
+
+private S1:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+separate exact Browser-issued S1 Task required
+```
+
+The current source acceptance is Browser-owned. Runtime facts are REUSED_ACCEPTED from retained Cut C authority, without private resource access or runtime revalidation. The source correction did not execute S1. Cut A/B/C history remains preserved.
+
 ## Historical Cut A persistence boundary before Cut B admission
 
 ```text
@@ -1344,7 +1395,7 @@ Terminal Cycle:
 - P2-3 A1 capture-runner core: `ACCEPTED / CLOSED / PERSISTED`
 - A1 source commit: `6385ab41a92e43e438e8992bacf929e7daf5130d`
 - A1 post-commit reconciliation: `PASS / 21 of 21 RAW_EXACT / amend not required`
-- next subtask: `P2-3 private S1 normal scenario execution/capture`
+- next subtask: `P2-3 private S1 normal scenario execution/capture retry after producer-provenance correction`
 - P2-3 A2 production owner/bootstrap integration: `IMPLEMENTATION ACCEPTED / PERSISTED`
 - A2 COMMIT_A: `d98f9ad108e95ba659b9c6a10770119af22175a1`
 - A2 terminal persistence: `ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE`
