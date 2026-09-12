@@ -47,12 +47,12 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 `HUMAN_PROVIDED / ACCEPTED / CLOSED`.
 
 Cut A source implementation is `ACCEPTED / PERSISTED` at `750c37aecb4c264f66aabf12dedb8d54e20a7f95`.
-Cut A executable proof is `REUSED_ACCEPTED`; Cut B is `FINAL_ADMITTED / PERSISTED` with provenance persisted by Commit A `474826340a89b5c597aa066ff0d414bfc8f43229`. Cut C is `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`; private S1 is `NOT_AUTHORIZED`.
+Cut A executable proof is `REUSED_ACCEPTED`; Cut B is `FINAL_ADMITTED / PERSISTED` with provenance persisted by Commit A `474826340a89b5c597aa066ff0d414bfc8f43229`. Cut C is `FINAL_ADMITTED / PERSISTED`; private S1 is `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`.
 
 ## canonical queue
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
-accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness binding is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser Task:
+accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness is FINAL_ADMITTED / PERSISTED with Browser review COMPLETED; private S1 is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser-issued S1 Task:
 
 ```text
 P1-6 Durable Evidence Content Extension Design -> HUMAN_PROVIDED / ACCEPTED / CLOSED
@@ -89,8 +89,8 @@ A1 post-commit reconciliation -> PASS / 21 of 21 RAW_EXACT / amend not required
 P2-3 A2 production owner/bootstrap integration -> IMPLEMENTATION ACCEPTED / PERSISTED
 A2 COMMIT_A -> d98f9ad108e95ba659b9c6a10770119af22175a1
 A2 terminal persistence -> ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
-next critical action -> P2-3 Cut C final readiness binding
-runtime prerequisites -> ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING
+next critical action -> P2-3 private S1 normal scenario execution/capture
+runtime prerequisites -> ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED
 actual S1-S4 scenario execution -> NOT_STARTED
 capture/export corpus -> NOT_STARTED
 P2-3 Replay -> NOT_STARTED
@@ -281,7 +281,7 @@ A2 terminal persistence:
 ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE
 
 runtime prerequisites:
-ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING
+ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED
 
 actual S1-S4 scenario execution:
 NOT_STARTED
@@ -303,7 +303,7 @@ HUMAN_PENDING
 ```
 
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
-P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness binding is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser Task; actual captures, corpus/export, Replay, and release verification have not started.
+P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness is FINAL_ADMITTED / PERSISTED with Browser review COMPLETED; private S1 is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser-issued S1 Task; actual captures, corpus/export, Replay, and release verification have not started.
 
 ## current next action
 
@@ -312,25 +312,34 @@ phase:
 P2-3
 
 work_type:
-READINESS_BINDING
+PRIVATE_SCENARIO_EXECUTION
 
 title:
-P2-3 Cut C final readiness binding
+P2-3 private S1 normal scenario execution/capture
 
 status:
 ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
 
 reason:
-Cut B is FINAL_ADMITTED / PERSISTED.
-The 1445 persistence result has been Browser-reviewed.
-The 1510 authority conflict is resolved by the explicit three-owner correction contract.
+Cut C readiness is FINAL_ADMITTED / PERSISTED.
+Cut C Browser review is COMPLETED.
 
-blocker:
-separate exact Cut C authorization Task only
+required authorization:
+separate exact Browser-issued S1 Task
 
-forbidden:
-Cut C execution before that Task
-private S1 remains NOT_AUTHORIZED
+scenario:
+S1 normal
+
+expected semantic terminal:
+ACCEPTED
+
+forbidden before authorization:
+prepare_capture
+WorkRun
+provider/tool execution
+scenario Docker dispatch
+evidence admission
+scenario Judgment
 
 actual S1-S4:
 NOT_STARTED / NOT_AUTHORIZED
@@ -348,10 +357,14 @@ P3:
 NOT_STARTED
 ```
 
-Cut B provisioning evidence is REUSED_ACCEPTED and persisted. The three-owner correction resolves state authority; Cut C requires a separate exact Browser Task. Actual captures, corpus/export, and
+Cut B provisioning evidence is REUSED_ACCEPTED and persisted. The three-owner correction resolves state authority; Cut C readiness is FINAL_ADMITTED / PERSISTED; private S1 requires a separate exact Browser-issued S1 Task. Actual captures, corpus/export, and
 Recorded Replay require separate authorization. Public live/replay remain unreleased.
 
 Current authority:
+
+- Cut C governance Commit A: `4096913e9a117bd49bfecdb1ce5ca8de2735d661`.
+- `.aiassistant/reports/aiscc/20260912_1707_aiscc-p2-3-cut-c-readiness-final-acceptance-judgment-1.md`
+- `.aiassistant/records/aiscc/cycles/20260912_1707_aiscc-p2-3-cut-c-readiness-final-admission-persistence-entry-1.cycle.md`
 
 - `.aiassistant/reports/aiscc/20260912_1533_aiscc-p2-3-cut-b-state-projection-policy-conflict-hold-judgment-1.md`
 - `.aiassistant/records/aiscc/cycles/20260912_1533_aiscc-p2-3-cut-b-state-projection-policy-conflict-retry-entry-1.cycle.md`
@@ -468,4 +481,4 @@ The historical `NEXT_ACTION_CONTEXT` source-authority acceptance at SHA
 `G_EVIDENCE`, `G_HUMAN_*`, `G_JUDGMENT_*`, `TransitionDecision`, `WorkflowState`,
 `HumanResult`, `Judgment`, and `SecurityAdmissionDecision` without reinterpretation.
 P1 is `ACCEPTED / CLOSED`; P2-1, P2-2 and P2-3 Phase 1A are `ACCEPTED / CLOSED / PERSISTED`; P2-3 is
-`IN_PROGRESS` with Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration is `IMPLEMENTATION ACCEPTED / PERSISTED`. Historical prerequisite verification was accepted as `NOT_READY / PROVISIONING_REQUIRED`; Cut B environment provisioning is now `FINAL_ADMITTED / PERSISTED` with persistence-result Browser review `COMPLETED`, and Cut C requires a separate exact Browser Task; actual S1-S4 scenario execution, capture/export corpus, and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.
+`IN_PROGRESS` with Phase 1B-B1/B2/B3, Phase 1B, the Stockroom process settlement fix, and A1 `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`; A2 production owner/bootstrap integration is `IMPLEMENTATION ACCEPTED / PERSISTED`. Historical prerequisite verification was accepted as `NOT_READY / PROVISIONING_REQUIRED`; Cut B environment provisioning is now `FINAL_ADMITTED / PERSISTED` with persistence-result Browser review `COMPLETED`, and Cut C readiness is FINAL_ADMITTED / PERSISTED; private S1 requires a separate exact Browser-issued S1 Task; actual S1-S4 scenario execution, capture/export corpus, and Replay remain `NOT_STARTED`. Public Bounded Live remains `NOT_RELEASED`; Public Recorded Replay remains `NOT_ADMITTED`; public distribution/license remains `HUMAN_PENDING`.

@@ -949,3 +949,29 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
 - Cycle: `.aiassistant/records/aiscc/cycles/20260912_1445_aiscc-p2-3-cut-b-final-admission-persistence-entry-1.cycle.md`
 - historical boundary: earlier decision entries retain their verification-time meaning. The current fields in this latest Cut B entry supersede its former persistence-review blocker and pre-reconciliation next-action wording under the explicit 1533 Task and Browser Judgment.
 - supersession_rule: readiness, private runtime-root authority, scenario execution, or environment changes require a separately authorized Task and judgment.
+
+## AISCC-P2-3-PRIVATE-S1-CUT-C-READINESS-V1
+
+- decision_id: `AISCC-P2-3-PRIVATE-S1-CUT-C-READINESS-V1`
+- decision: Record Browser-final-admitted Cut C readiness and its persisted governance lineage.
+- decision_status: `FINAL_ADMITTED / PERSISTED`
+- decision_source: Browser 1707 final-acceptance Judgment and Cycle; runtime facts are `REUSED_ACCEPTED` from the admitted 1654 result.
+- Cut C readiness result: `accepted`; Browser review `COMPLETED`.
+- governance Commit A: `4096913e9a117bd49bfecdb1ce5ca8de2735d661`.
+- 1654 result ZIP SHA-256: `a8664d010036a59ae2c8e462cd2dc8b8c28b76ce941fadf876c6997685e49bba`.
+- production entrypoint: `aiscc.bootstrap.build_stockroom_production`.
+- public build count: `1`.
+- private source representation class: `DOCKER_DESKTOP_RUN_DESKTOP_MNT_HOST`; normalized / private / non-exported.
+- private runtime root: `CREATED / RETAINED / EMPTY`; retained empty after build; absolute path omitted.
+- private DB authority enrollment: `ESTABLISHED / BOUNDED / RETAINED`.
+- PostgreSQL sanitized projection: `867e744367eb804c30db6269d0700d8679c5aeb1a9b6fb78306ce1b87918c8e7`.
+- PostgreSQL exported sanitized inspect: `e50fea1be09dd8e2ea44a217c36c08751c94de0d873bb136ef41b2235f9c4b25`.
+- authority row envelope: evidence_requirement_sets / evidence_requirements / evidence_checkpoints `4/4/4`; judgment_policies / judgment_policy_projections `2/2`; all other application/domain rows `0`.
+- scenario execution: `none`; S1-S4 `NOT_EXECUTED`.
+- next authority: private S1 exact Browser-issued Task only.
+- private S1: `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`; expected S1 normal semantic terminal `ACCEPTED` is a future target, not an executed outcome.
+- P2-3: `IN_PROGRESS`.
+- Judgment: `.aiassistant/reports/aiscc/20260912_1707_aiscc-p2-3-cut-c-readiness-final-acceptance-judgment-1.md`.
+- Cycle: `.aiassistant/records/aiscc/cycles/20260912_1707_aiscc-p2-3-cut-c-readiness-final-admission-persistence-entry-1.cycle.md`.
+- historical boundary: earlier entries retain their verification-time meaning; this decision supersedes the Cut B entry's then-current Cut C next-action and authorization wording only.
+- authorization boundary: no prepare_capture, WorkRun, provider/tool execution, scenario Docker dispatch, evidence admission, or scenario Judgment before the separate exact S1 Task. No public runtime, Replay, or deployment authorization.

@@ -47,8 +47,8 @@
 | P2-3 A2 production owner/bootstrap integration | `IMPLEMENTATION ACCEPTED / PERSISTED` |
 | P2-3 Cut A source implementation | `ACCEPTED / PERSISTED` |
 | P2-3 Cut B environment provisioning | `FINAL_ADMITTED / PERSISTED` |
-| P2-3 runtime prerequisites | `ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING` |
-| P2-3 Cut C final readiness binding | `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED` |
+| P2-3 runtime prerequisites | `ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED` |
+| P2-3 Cut C final readiness binding | `FINAL_ADMITTED / PERSISTED` |
 | P2-3 actual S1-S4 scenario execution | `NOT_STARTED` |
 | P2-3 capture/export corpus | `NOT_STARTED` |
 | P2-3 Replay | `NOT_STARTED / NOT_ADMITTED` |
@@ -150,7 +150,7 @@ P2-3 A2 production owner/bootstrap integration:
 IMPLEMENTATION ACCEPTED / PERSISTED
 
 runtime prerequisites:
-ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING
+ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED
 
 actual S1-S4 scenario execution:
 NOT_STARTED
@@ -217,14 +217,14 @@ no discovery or cleanup authorization
 COMPLETED
 
 Cut C:
-ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
-separate exact Browser Task required
+FINAL_ADMITTED / PERSISTED
 
 private S1:
-NOT_AUTHORIZED
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+separate exact Browser-issued S1 Task required
 
 runtime prerequisites:
-ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING
+ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED
 ```
 
 Commit A persisted the admitted image and DB provenance. Commit B is preserved;
@@ -241,6 +241,54 @@ blocked-result evidence are preserved as governance provenance.
 - Retry Cycle: `.aiassistant/records/aiscc/cycles/20260912_1533_aiscc-p2-3-cut-b-state-projection-policy-conflict-retry-entry-1.cycle.md`
 - Image: `.aiassistant/records/aiscc/runtime/stockroom-image-provenance.v1.json`
 - DB: `.aiassistant/records/aiscc/runtime/stockroom-private-postgres-provisioning.v1.json`
+
+## P2-3 Cut C final admission and persistence
+
+The 1707 Browser Judgment admits the 1654 readiness result. These runtime facts are
+REUSED_ACCEPTED; this governance persistence task does not re-execute runtime proof.
+
+```text
+P2-3:
+IN_PROGRESS
+
+Cut A:
+ACCEPTED / PERSISTED
+
+Cut B:
+FINAL_ADMITTED / PERSISTED
+
+Cut C:
+FINAL_ADMITTED / PERSISTED
+
+Cut C Browser review:
+COMPLETED
+
+Cut C persistence governance Commit A:
+4096913e9a117bd49bfecdb1ce5ca8de2735d661
+
+private runtime root:
+CREATED / RETAINED / EMPTY
+absolute path not recorded
+
+private DB authority enrollment:
+ESTABLISHED / BOUNDED / RETAINED
+
+scenario execution:
+NONE
+
+private S1:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+separate exact Browser-issued S1 Task required
+```
+
+- Judgment: `.aiassistant/reports/aiscc/20260912_1707_aiscc-p2-3-cut-c-readiness-final-acceptance-judgment-1.md`
+- Cycle: `.aiassistant/records/aiscc/cycles/20260912_1707_aiscc-p2-3-cut-c-readiness-final-admission-persistence-entry-1.cycle.md`
+- Private source representation: `DOCKER_DESKTOP_RUN_DESKTOP_MNT_HOST`; normalized, private, non-exported.
+- Public production entrypoint: `aiscc.bootstrap.build_stockroom_production`; build count `1`.
+- PostgreSQL sanitized projection: `867e744367eb804c30db6269d0700d8679c5aeb1a9b6fb78306ce1b87918c8e7`.
+- PostgreSQL exported sanitized inspect: `e50fea1be09dd8e2ea44a217c36c08751c94de0d873bb136ef41b2235f9c4b25`.
+- Authority envelope: evidence requirement sets/requirements/checkpoints `4/4/4`; judgment policies/projections `2/2`; all other application/domain rows `0`.
+- Runtime root remained empty after the readiness build. S1-S4: `NOT_EXECUTED`.
 
 ## Historical Cut A persistence boundary before Cut B admission
 
@@ -280,7 +328,7 @@ NOT_RELEASED
 
 Acceptance is Browser/Human-provided in the 0245 final-acceptance Judgment and Cycle.
 Persistence is executor-verified. Executable proof is reused, not rerun by this Task.
-At the Cut A persistence snapshot, Cut B needed an exact Browser Task. This historical boundary is superseded by the Cut B admission state above; private S1 remains forbidden until final readiness judgment.
+At the Cut A persistence snapshot, Cut B needed an exact Browser Task. This historical boundary is superseded by the Cut B admission state above; private S1 remains forbidden until a separate exact Browser-issued S1 Task.
 
 - `.aiassistant/reports/aiscc/20260912_0245_aiscc-p2-3-cut-a-source-implementation-final-acceptance-judgment-1.md`
 - `.aiassistant/records/aiscc/cycles/20260912_0245_aiscc-p2-3-cut-a-executable-proof-final-acceptance-persistence-entry-1.cycle.md`
@@ -376,25 +424,34 @@ phase:
 P2-3
 
 work_type:
-READINESS_BINDING
+PRIVATE_SCENARIO_EXECUTION
 
 title:
-P2-3 Cut C final readiness binding
+P2-3 private S1 normal scenario execution/capture
 
 status:
 ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
 
 reason:
-Cut B is FINAL_ADMITTED / PERSISTED.
-The 1445 persistence result has been Browser-reviewed.
-The 1510 authority conflict is resolved by the explicit three-owner correction contract.
+Cut C readiness is FINAL_ADMITTED / PERSISTED.
+Cut C Browser review is COMPLETED.
 
-blocker:
-separate exact Cut C authorization Task only
+required authorization:
+separate exact Browser-issued S1 Task
 
-forbidden:
-Cut C execution before that Task
-private S1 remains NOT_AUTHORIZED
+scenario:
+S1 normal
+
+expected semantic terminal:
+ACCEPTED
+
+forbidden before authorization:
+prepare_capture
+WorkRun
+provider/tool execution
+scenario Docker dispatch
+evidence admission
+scenario Judgment
 
 actual S1-S4:
 NOT_STARTED / NOT_AUTHORIZED
@@ -412,10 +469,10 @@ P3:
 NOT_STARTED
 ```
 
-Cut B provisioning evidence is REUSED_ACCEPTED and persisted. The three-owner correction resolves state authority; Cut C requires a separate exact Browser Task. Actual captures, corpus/export, and
+Cut B provisioning evidence is REUSED_ACCEPTED and persisted. The three-owner correction resolves state authority; Cut C readiness is FINAL_ADMITTED / PERSISTED; private S1 requires a separate exact Browser-issued S1 Task. Actual captures, corpus/export, and
 Recorded Replay require separate authorization. Public live/replay remain unreleased.
 
-Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. B3 and Phase 1B are `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`, the Stockroom process settlement fix and A1 capture-runner core are `ACCEPTED / CLOSED / PERSISTED`, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness binding is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser Task; private S1-S4 captures, durable capture corpus/sanitization/export, and Recorded Replay remain later separately authorized work. No public runtime mode is authorized. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
+Historical 20260908_1700 audit: `BLOCKED / CANONICAL_AUTHORITY_CONFLICT / RETRY_REQUIRED`; it was not accepted as a completed source/contract audit. The later 2330 retry is `ACCEPTED_DESIGN / COMPLETE`, Phase 1A is persisted, and B2 is closed and persisted. B3 and Phase 1B are `ACCEPTED / CLOSED / PERSISTED`. The actual-capture runtime-entry audit is `ACCEPTED / COMPLETE`, the Stockroom process settlement fix and A1 capture-runner core are `ACCEPTED / CLOSED / PERSISTED`, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness is FINAL_ADMITTED / PERSISTED with Browser review COMPLETED; private S1 is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser-issued S1 Task; private S1-S4 captures, durable capture corpus/sanitization/export, and Recorded Replay remain later separately authorized work. No public runtime mode is authorized. The current workflow verifies the delivery ZIP in `C:\Users\oracl\Downloads`, places the TASK member directly at its canonical path first, and uses that Task for remaining artifact transport. Inbound cleanup is best effort after canonical placement; a verified outbound result ZIP is required.
 
 The current Browser Project Source mirror is the Human-confirmed v2 complete replacement:
 
@@ -1287,11 +1344,11 @@ Terminal Cycle:
 - P2-3 A1 capture-runner core: `ACCEPTED / CLOSED / PERSISTED`
 - A1 source commit: `6385ab41a92e43e438e8992bacf929e7daf5130d`
 - A1 post-commit reconciliation: `PASS / 21 of 21 RAW_EXACT / amend not required`
-- next subtask: `P2-3 Cut C final readiness binding`
+- next subtask: `P2-3 private S1 normal scenario execution/capture`
 - P2-3 A2 production owner/bootstrap integration: `IMPLEMENTATION ACCEPTED / PERSISTED`
 - A2 COMMIT_A: `d98f9ad108e95ba659b9c6a10770119af22175a1`
 - A2 terminal persistence: `ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE`
-- runtime prerequisites: `ENVIRONMENT_ADMITTED / CUT_C_READINESS_PENDING`
+- runtime prerequisites: `ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED`
 - actual S1-S4 scenario execution: `NOT_STARTED`
 - capture/export corpus: `NOT_STARTED`
 - P2-3 Replay: `NOT_STARTED`
