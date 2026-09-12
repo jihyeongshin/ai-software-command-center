@@ -914,3 +914,29 @@ P1_SECURITY_RUNTIME_SAFEGUARD_IMPLEMENTATION_AND_VERIFICATION_ACCEPTED
   - `.aiassistant/reports/aiscc/20260912_0245_aiscc-p2-3-cut-a-source-implementation-final-acceptance-judgment-1.md`
   - `.aiassistant/records/aiscc/cycles/20260912_0245_aiscc-p2-3-cut-a-executable-proof-final-acceptance-persistence-entry-1.cycle.md`
 - historical boundary: all previous decisions retain their original verification-time meaning. The A2 terminal-persistence and prerequisite-next-action wording above is historical; the 1935 and 2140 Judgments settled those steps, and this entry sets the current Cut A/Cut B boundary.
+
+## AISCC-P2-3-PRIVATE-S1-CUT-B-ENVIRONMENT-PROVISIONING-V1
+
+- decision: Record Browser-final-admitted Cut B private environment provisioning and persist its unchanged sanitized candidate provenance.
+- decision_status: `FINAL_ADMITTED / PROVENANCE_PERSISTED`
+- decision_source: Browser 1445 final-admission Judgment and Cycle; no new Executor-issued acceptance.
+- Commit A: `474826340a89b5c597aa066ff0d414bfc8f43229`
+- image ID: `sha256:c51ad05852b58a3b4fd275ee88d183551e745d79ac8239e3da3b98372fe0bb9e`
+- discovery tag: `aiscc-stockroom-runtime:p2-3-private-v1`
+- PostgreSQL container: `aiscc-p2-3-private-postgres-v1`
+- PostgreSQL volume: `aiscc-p2-3-private-postgres-data-v1`
+- loopback endpoint: `127.0.0.1:55432`
+- migration head: `20260901_0008`
+- image candidate: `.aiassistant/records/aiscc/runtime/stockroom-image-provenance.v1.json`
+- image candidate SHA-256: `e19f2b645aee85878bed7c557064bbbd0be746524f394ad88de1d2509c13b64f`
+- DB candidate: `.aiassistant/records/aiscc/runtime/stockroom-private-postgres-provisioning.v1.json`
+- DB candidate SHA-256: `36b9c93515223ade3d74923141fcbe823907b42b81e5d86bf3666a4f02032b54`
+- proof: 0420 provisioning evidence and 1400 cleanup `15 / 15 PASS` are `REUSED_ACCEPTED`; no environment re-proof.
+- residue: `CURRENT_HELPER_1..4 = NON_BLOCKING_LOCAL_RESIDUE / OPERATIONAL_HOUSEKEEPING`; not a Cut B admission blocker and not authorization for broad discovery or cleanup.
+- next action: Cut C final readiness binding, private runtime-root creation/authority, admitted provenance references, and production resolver/readiness verification, only after persistence review and a separate exact Task.
+- authorization boundary: Cut C `NEXT_AFTER_PERSISTENCE / NOT_STARTED / NOT_AUTHORIZED`; private S1 `NOT_AUTHORIZED`; P2-3 `IN_PROGRESS`; no public runtime or Replay authorization.
+- persistence-result Browser review: `HUMAN_PENDING`.
+- Judgment: `.aiassistant/reports/aiscc/20260912_1445_aiscc-p2-3-cut-b-final-admission-judgment-1.md`
+- Cycle: `.aiassistant/records/aiscc/cycles/20260912_1445_aiscc-p2-3-cut-b-final-admission-persistence-entry-1.cycle.md`
+- historical boundary: earlier decisions retain their verification-time meaning. This decision supersedes the earlier Cut B not-started/provisioning-required next-action wording only.
+- supersession_rule: readiness, private runtime-root authority, scenario execution, or environment changes require a separately authorized Task and judgment.
