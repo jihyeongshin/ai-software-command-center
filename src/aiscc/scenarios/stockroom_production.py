@@ -2490,6 +2490,48 @@ class StockroomCaptureOwnerAdapter:
         return value
 
 
+async def build_stockroom_invalid_history_disposition(
+    *,
+    session_factory: async_sessionmaker[AsyncSession],
+    repository_root: Path,
+    private_runtime_root: Path,
+    downloads_root: Path,
+    requester_identity: str,
+    clock: Callable[[], datetime] | None = None,
+) -> StockroomInvalidHistoryDisposition:
+    """Build only the durable invalid-history disposition source owner."""
+    if not requester_identity:
+        raise ValueError("invalid-history disposition requester is required")
+    now = clock or (lambda: datetime.now(UTC))
+    root = repository_root.resolve(strict=True)
+    fixed_root = Path(__file__).resolve().parents[3]
+    if root != fixed_root:
+        raise ValueError("PRODUCTION_REPOSITORY_ROOT_DENIED")
+
+    p1_4 = P1_4GuardAuthority()
+    transition_repository = PostgresTransitionRepository(
+        session_factory,
+        TransitionEvaluator(p1_4),
+    )
+    workflow_kernel = WorkflowKernel(transition_repository)
+    execution_repository = PostgresExecutionRepository(session_factory)
+    workspace_settlement = StockroomRestartSafetySettlement(
+        private_runtime_root,
+        repository_root=root,
+        source_object_root=root / ".git",
+        downloads_root=downloads_root,
+    )
+    return StockroomInvalidHistoryDisposition(
+        session_factory=session_factory,
+        execution_repository=execution_repository,
+        workflow_kernel=workflow_kernel,
+        guard_authority=p1_4,
+        workspace_settlement=workspace_settlement,
+        requester_identity=requester_identity,
+        clock=now,
+    )
+
+
 async def build_stockroom_production_application(
     *,
     session_factory: async_sessionmaker[AsyncSession],

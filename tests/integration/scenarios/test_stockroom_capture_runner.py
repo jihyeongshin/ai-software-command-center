@@ -15,6 +15,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import func, select
 
+import aiscc.scenarios.stockroom_production as stockroom_production_module
 from aiscc.bootstrap import build_stockroom_production
 from aiscc.contracts.security import ResourceDomain, SecurityAdmissionDecision
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot, WorkflowState
@@ -23,6 +24,8 @@ from aiscc.judgment.models import JudgmentEvidenceBasisKind
 from aiscc.persistence import create_engine, create_session_factory
 from aiscc.persistence.models import (
     AdmittedEvidenceRow,
+    CommandCenterJudgmentActionRow,
+    EvidenceAuthorityEventRow,
     EvidenceCheckpointRow,
     EvidenceRequirementRow,
     EvidenceRequirementSetRow,
@@ -30,6 +33,10 @@ from aiscc.persistence.models import (
     ExecutionEventRow,
     ExecutionOperationRow,
     ExecutionOutputRefRow,
+    HumanGateAuthorityEventRow,
+    HumanResultAuthorityEventRow,
+    JudgmentAuthorityEventRow,
+    JudgmentPolicyProjectionRow,
     JudgmentPolicyRow,
     JudgmentRow,
     WorkRunRow,
@@ -76,6 +83,7 @@ from aiscc.scenarios.stockroom_production import (
     _CurrentAttemptReader,
     _CurrentBinding,
     _derive_runtime_summary_observation,
+    build_stockroom_invalid_history_disposition,
     load_stockroom_evidence_config,
     load_stockroom_human_config,
     load_stockroom_judgment_config,
@@ -107,6 +115,273 @@ def database_url() -> str:
     if not value:
         pytest.skip("AISCC_TEST_DATABASE_URL is required for PostgreSQL evidence")
     return value
+
+
+@pytest.mark.postgres
+def test_disposition_only_builder_handles_nonempty_retained_root_without_composition_effects(
+    database_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = create_engine(database_url)
+    factory = create_session_factory(engine)
+    repository_root = tmp_path / "repository"
+    runtime_root = tmp_path / "runtime"
+    downloads_root = tmp_path / "downloads"
+    for path in (repository_root / ".git", runtime_root, downloads_root):
+        path.mkdir(parents=True)
+    monkeypatch.setattr(
+        stockroom_production_module,
+        "__file__",
+        str(repository_root / "src/aiscc/scenarios/stockroom_production.py"),
+    )
+    now = datetime(2026, 9, 13, 15, 31, tzinfo=UTC)
+    run_id = f"ih-builder-{uuid4().hex[:8]}"
+    attempt_id = f"ia-builder-{uuid4().hex[:8]}"
+
+    def runtime_snapshot() -> tuple[tuple[str, str, bytes], ...]:
+        return tuple(
+            (
+                path.relative_to(runtime_root).as_posix(),
+                "file" if path.is_file() else "directory",
+                path.read_bytes() if path.is_file() else b"",
+            )
+            for path in sorted(runtime_root.rglob("*"), key=lambda item: item.as_posix())
+        )
+
+    async def authority_counts() -> tuple[int, ...]:
+        authority_tables = (
+            EvidenceRequirementSetRow,
+            EvidenceRequirementRow,
+            EvidenceCheckpointRow,
+            EvidenceAuthorityEventRow,
+            HumanGateAuthorityEventRow,
+            HumanResultAuthorityEventRow,
+            JudgmentPolicyRow,
+            JudgmentPolicyProjectionRow,
+            CommandCenterJudgmentActionRow,
+            JudgmentAuthorityEventRow,
+        )
+        async with factory() as session:
+            counts = []
+            for table in authority_tables:
+                value = await session.scalar(select(func.count()).select_from(table))
+                counts.append(int(value or 0))
+            return tuple(counts)
+
+    async def scenario() -> None:
+        guard = P1_4GuardAuthority()
+        transitions = PostgresTransitionRepository(factory, TransitionEvaluator(guard))
+        kernel = WorkflowKernel(transitions)
+        executions = PostgresExecutionRepository(factory)
+        ready_request = TransitionRequest(
+            transition_request_id=f"invalid-history-builder-ready-{uuid4().hex}",
+            project_id="invalid-history-builder-project",
+            task_contract_id="invalid-history-builder-task",
+            task_contract_version="1",
+            work_run_id=run_id,
+            observed_state=None,
+            observed_state_version=0,
+            target_state=WorkflowState.READY,
+            requester_identity="invalid-history-builder-owner",
+            requester_type=RequesterType.SYSTEM,
+            runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD,
+            created_at=now,
+        )
+        ready_facts = tuple(
+            guard.issue(
+                guard_id=guard_id,
+                satisfied=True,
+                reason="INVALID_HISTORY_BUILDER_TEST_INITIAL_AUTHORITY",
+                authority_ref=f"invalid-history-builder-test:{guard_id.value}",
+                request=ready_request,
+            )
+            for guard_id in TRANSITION_MATRIX[(None, WorkflowState.READY)]
+        )
+        ready = await kernel.request_transition(ready_request, ready_facts)
+        assert ready.outcome is DecisionOutcome.ADMITTED
+        await executions.create_attempt(
+            attempt_id=attempt_id,
+            work_run_id=run_id,
+            profile_id="invalid-history-builder-profile",
+            profile_version="1",
+            registry_id="invalid-history-builder-registry",
+            registry_version="1",
+        )
+        _, start_candidate = await executions.load_authority(
+            work_run_id=run_id, execution_attempt_id=attempt_id
+        )
+        execution_refs = ExecutionReferenceAuthority()
+        start_candidate = execution_refs.register_start(start_candidate)
+        running_request = TransitionRequest(
+            transition_request_id=f"invalid-history-builder-running-{uuid4().hex}",
+            project_id="invalid-history-builder-project",
+            task_contract_id="invalid-history-builder-task",
+            task_contract_version="1",
+            work_run_id=run_id,
+            observed_state=WorkflowState.READY,
+            observed_state_version=1,
+            target_state=WorkflowState.RUNNING,
+            requester_identity="invalid-history-builder-owner",
+            requester_type=RequesterType.SYSTEM,
+            runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD,
+            created_at=now,
+        )
+        running_facts = []
+        for guard_id in TRANSITION_MATRIX[(WorkflowState.READY, WorkflowState.RUNNING)]:
+            if guard_id is GuardId.G_EXECUTION_STARTED:
+                running_facts.append(
+                    guard.issue_from_execution_ref(
+                        guard_id=guard_id,
+                        execution_ref=start_candidate,
+                        verifier=execution_refs,
+                        request=running_request,
+                    )
+                )
+            else:
+                running_facts.append(
+                    guard.issue(
+                        guard_id=guard_id,
+                        satisfied=True,
+                        reason="INVALID_HISTORY_BUILDER_TEST_RUNNING_AUTHORITY",
+                        authority_ref=f"invalid-history-builder-test:{guard_id.value}",
+                        request=running_request,
+                    )
+                )
+        running = await kernel.request_transition(running_request, tuple(running_facts))
+        assert running.outcome is DecisionOutcome.ADMITTED
+
+        target = runtime_root / run_id / attempt_id
+        source = target / "source"
+        source.mkdir(parents=True)
+        materialized_bytes = b"retained invalid-history materialization"
+        (source / "materialized.txt").write_bytes(materialized_bytes)
+        assert tuple(runtime_root.iterdir())
+        before_runtime = runtime_snapshot()
+        before_authorities = await authority_counts()
+        async with factory() as session:
+            before_run_count = int(
+                await session.scalar(select(func.count()).select_from(WorkRunRow)) or 0
+            )
+            before_attempt_count = int(
+                await session.scalar(select(func.count()).select_from(ExecutionAttemptRow)) or 0
+            )
+
+        def forbid_normal_composition(*_args, **_kwargs):
+            raise AssertionError("normal execution composition must remain unconstructed")
+
+        for name in (
+            "StockroomWorkspace",
+            "StockroomDockerRunner",
+            "DockerRuntime",
+            "LocalDeterministicProvider",
+            "ProviderToolResourceAuthority",
+            "SecretUseAuthority",
+            "SecretResolutionLeaseAuthority",
+            "LeaseBoundSecretResolver",
+            "ExecutionReferenceAuthority",
+            "EvidenceAdmissionService",
+            "PostgresEvidenceRepository",
+            "PostgresHumanAuthorityRepository",
+            "JudgmentPolicyAuthority",
+            "PostgresJudgmentAuthority",
+            "CommandCenterAuthority",
+            "build_stockroom_production_composition",
+            "StockroomCaptureRunner",
+            "AgentExecutionService",
+        ):
+            monkeypatch.setattr(stockroom_production_module, name, forbid_normal_composition)
+
+        service = await build_stockroom_invalid_history_disposition(
+            session_factory=factory,
+            repository_root=repository_root,
+            private_runtime_root=runtime_root,
+            downloads_root=downloads_root,
+            requester_identity="invalid-history-builder-owner",
+            clock=lambda: now,
+        )
+        assert isinstance(service, StockroomInvalidHistoryDisposition)
+        assert await authority_counts() == before_authorities
+        assert runtime_snapshot() == before_runtime
+
+        request = await service.authorize(
+            work_run_id=run_id,
+            execution_attempt_id=attempt_id,
+            expected_running_state_version=2,
+            expected_execution_version=1,
+            source_provenance_refs=("source-contract:invalid-history:builder",),
+        )
+        result = await service.dispose(request)
+        assert result.abort.status is ExecutionStatus.EXECUTION_FAILED
+        assert result.work_run.state is WorkflowState.FAILED
+        assert result.workspace.status == "QUARANTINED"
+        assert result.workspace.quarantine_target is not None
+        assert (
+            result.workspace.quarantine_target / "source/materialized.txt"
+        ).read_bytes() == materialized_bytes
+        assert not target.exists()
+
+        async with factory() as session:
+            attempt = await session.get(ExecutionAttemptRow, attempt_id)
+            work_run = await session.get(WorkRunRow, run_id)
+            started = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ExecutionEventRow)
+                    .where(
+                        ExecutionEventRow.execution_attempt_id == attempt_id,
+                        ExecutionEventRow.event_kind == "EXECUTION_STARTED",
+                    )
+                )
+                or 0
+            )
+            operations = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ExecutionOperationRow)
+                    .where(ExecutionOperationRow.execution_attempt_id == attempt_id)
+                )
+                or 0
+            )
+            outputs = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ExecutionOutputRefRow)
+                    .where(ExecutionOutputRefRow.execution_attempt_id == attempt_id)
+                )
+                or 0
+            )
+            evidence = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AdmittedEvidenceRow)
+                    .where(AdmittedEvidenceRow.work_run_id == run_id)
+                )
+                or 0
+            )
+            judgments = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(JudgmentRow)
+                    .where(JudgmentRow.work_run_id == run_id)
+                )
+                or 0
+            )
+            run_count = int(
+                await session.scalar(select(func.count()).select_from(WorkRunRow)) or 0
+            )
+            attempt_count = int(
+                await session.scalar(select(func.count()).select_from(ExecutionAttemptRow)) or 0
+            )
+        assert attempt is not None and work_run is not None
+        assert (attempt.status, attempt.execution_version) == ("EXECUTION_FAILED", 2)
+        assert (work_run.workflow_state, work_run.state_version) == ("FAILED", 3)
+        assert (started, operations, outputs, evidence, judgments) == (0, 0, 0, 0, 0)
+        assert (run_count, attempt_count) == (before_run_count, before_attempt_count)
+        assert await authority_counts() == before_authorities
+
+    try:
+        run(scenario())
+    finally:
+        run(engine.dispose())
 
 
 @pytest.mark.postgres
