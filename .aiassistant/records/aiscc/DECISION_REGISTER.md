@@ -1,5 +1,49 @@
 # AISCC Decision Register
 
+## AISCC-P2-3-S1-INVALID-HISTORY-DISPOSITION-RUNTIME-V1
+
+This bounded decision records Browser acceptance of the 1737 runtime result. It supersedes earlier pending-disposition projections; prior entries retain their historical meaning. This persistence task performed no runtime verification or execution.
+
+```text
+decision_id:
+AISCC-P2-3-S1-INVALID-HISTORY-DISPOSITION-RUNTIME-V1
+
+status:
+FINAL_ADMITTED / PERSISTED
+
+accepted result ZIP:
+c0590e0891a435b14b22b19ddc4206cac3441ef65f0e7559e2a8413133557783
+
+actual Commit A:
+af5a9f873f11da1fdf71362abde018a2bed313a4
+
+0036 WorkRun:
+FAILED/v3
+
+0036 ExecutionAttempt:
+EXECUTION_FAILED/v2
+
+0036 historical workspace:
+QUARANTINED / CONTENT_IDENTITY_PRESERVED
+
+workspace fingerprint:
+18433a8d92affe915d01e3bb1265b387a07dc6478e09c92306854908ab396068
+
+provider/tool operations:
+0
+
+runtime evidence:
+0
+
+Judgment:
+0
+
+new WorkRun/attempt during disposition:
+0
+```
+
+The stranded 0036 lineage is closed and forbidden for normal S1 reuse. Fresh normal S1 requires new WorkRun and attempt identities and separate authorization; it is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED.
+
 ## AISCC-P2-3-S1-DISPOSITION-ONLY-COMPOSITION-V1
 
 ```text

@@ -1,5 +1,32 @@
 # AISCC Next Actions
 
+## Immediate P2-3 authority (20260913_1755)
+
+This entry supersedes earlier immediate actions below while preserving them as history. The Browser-accepted disposition result is persisted in Commit A `af5a9f873f11da1fdf71362abde018a2bed313a4`; this task does not authorize fresh S1 execution.
+
+```text
+phase:
+P2-3
+
+work_type:
+FRESH_S1_NORMAL_PRODUCTION_PATH_EXECUTION
+
+title:
+P2-3 fresh S1 normal production-path execution
+
+status:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+
+minimum entry conditions:
+new WorkRun and new attempt identities only
+0036 lineage is terminal and forbidden for reuse
+exact retained private environment revalidated before execution
+source-owned normal production path only
+S1 expected terminal semantic = ACCEPTED
+```
+
+Environment revalidation and execution belong to a separately authorized task. No private environment access or new lineage creation occurred during this reconciliation.
+
 ## Immediate P2-3 authority (20260913_1633)
 
 This entry supersedes the earlier immediate action below while preserving it as history. It does not authorize runtime action.

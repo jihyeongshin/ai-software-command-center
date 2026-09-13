@@ -1,5 +1,50 @@
 # AISCC Current State Summary
 
+## Current P2-3 authority (20260913_1755)
+
+This entry supersedes the earlier current-authority summaries below, which remain historical records. Runtime facts reuse the Browser-accepted 1737 result; no runtime access or execution occurred during this persistence task.
+
+```text
+P2-3:
+IN_PROGRESS
+
+invalid-history disposition runtime:
+FINAL_ADMITTED / PERSISTED
+
+0036 WorkRun:
+FAILED/v3
+
+0036 ExecutionAttempt:
+EXECUTION_FAILED/v2
+
+0036 historical workspace:
+QUARANTINED / CONTENT_IDENTITY_PRESERVED
+
+accepted result ZIP:
+c0590e0891a435b14b22b19ddc4206cac3441ef65f0e7559e2a8413133557783
+
+provider/tool execution:
+NONE
+
+runtime evidence/Judgment:
+NONE
+
+new WorkRun/attempt during disposition:
+NONE
+
+0036 lineage:
+TERMINAL / CLOSED_FOR_REUSE
+
+fresh S1 normal execution:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+
+legacy 1400 active Task:
+NON_OWNED / PRESERVED
+
+actual Commit A:
+af5a9f873f11da1fdf71362abde018a2bed313a4
+```
+
 ## Current P2-3 authority (20260913_1633)
 
 This entry supersedes the earlier current-authority summary below while preserving it as history.
