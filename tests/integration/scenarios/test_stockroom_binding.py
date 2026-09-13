@@ -700,7 +700,8 @@ def test_v2_real_registration_coexists_with_v1(local_authority_sessions):
     asyncio.run(check())
 
 
-def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
+@pytest.mark.parametrize("scenario_index", range(4))
+def test_v2_local_scenario_owner_handoff(local_authority_sessions, scenario_index):
     """Fake execution/storage edges; real P1-6/P1-7 owners and P1-4 kernel.
 
     Does not prove PostgreSQL locking/DDL or provider/runtime provenance. The
@@ -745,7 +746,7 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
         root = Path(__file__).resolve().parents[3]
         _, human_config, judgment_config = _load_stockroom_fresh_authority_configs(root)
         _, authority, enrollments = _v2_evidence_fixture()
-        enrollment = enrollments[0]
+        enrollment = enrollments[scenario_index]
 
         def now():
             return datetime.now(UTC)
@@ -787,13 +788,11 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
             clock=lambda: judgment_config["issued_at"],
             authority_version=judgment_config["authority_version"],
         )
-        policy = await policy_authority.register(
-            **{
-                k: v
-                for k, v in judgment_config["policies"][0].items()
-                if k not in {"scenario_id", "scenario_version"}
-            }
-        )
+        policies = {}
+        for item in judgment_config["policies"]:
+            policies[item["scenario_id"]] = await policy_authority.register(
+                **{k: v for k, v in item.items() if k not in {"scenario_id", "scenario_version"}}
+            )
         judgment = PostgresJudgmentAuthority(
             local_authority_sessions, evidence, policy_authority, clock=now
         )
@@ -823,9 +822,15 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
             evidence_guard_authority=evidence_guard,
             human_guard_authority=human,
             judgment_authority=judgment,
-            judgment_enrollments={enrollment.scenario_id: SimpleNamespace(policy=policy)},
+            judgment_enrollments={
+                key: SimpleNamespace(policy=value) for key, value in policies.items()
+            },
+            human_reservation_authority=reservation,
+            human_selector_fingerprint="b" * 64,
+            static_evidence_issuer=enrollments[2].issuer,
+            static_policy_fixture=_local_static_policy_fixture(root),
         )
-        prepared = prepared_driver(SCENARIO_IDS[0])
+        prepared = prepared_driver(SCENARIO_IDS[scenario_index])
         adapter = StockroomCaptureOwnerAdapter(
             app,
             SimpleNamespace(prepared=prepared),
@@ -841,7 +846,12 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
             async def request_transition(
                 self, value, *, target, observed_state, observed_version, authority_refs
             ):
-                if target is WorkflowState.ACCEPTED:
+                if target in {
+                    WorkflowState.ACCEPTED,
+                    WorkflowState.REWORK_REQUIRED,
+                    WorkflowState.BLOCKED,
+                    WorkflowState.HUMAN_REQUIRED,
+                }:
                     result = await adapter.request_transition(
                         value,
                         target=target,
@@ -911,7 +921,31 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
 
             async def evaluate_evidence(self, value, candidate_ref):
                 result = await adapter.evaluate_evidence(value, candidate_ref)
-                assert result.status == "SATISFIED", result
+                expected = "UNSATISFIED" if scenario_index == 1 else "SATISFIED"
+                assert result.status == expected, result
+                return result
+
+            async def submit_static_policy_evidence(self, value, running_ref):
+                return await adapter.submit_static_policy_evidence(value, running_ref)
+
+            async def create_policy_blocker(self, value, evidence_ref):
+                return await adapter.create_policy_blocker(value, evidence_ref)
+
+            async def open_human_gate(self, value, evidence_ref):
+                from aiscc.human.models import HumanGateReservation
+
+                result = await adapter.open_human_gate(value, evidence_ref)
+                assert result.status == "PENDING", result
+                retained = adapter._handles[result.owner_ref]
+                assert isinstance(retained, HumanGateReservation)
+                pending = adapter._pending_requests[WorkflowState.HUMAN_REQUIRED]
+                assert reservation.matches_request(retained, pending)
+                assert adapter._pending_authority_refs[WorkflowState.HUMAN_REQUIRED] == {
+                    result.owner_ref
+                }
+                participant, = adapter._pending_participants[WorkflowState.HUMAN_REQUIRED]
+                assert participant._reservation is retained
+                self.gate_ref = result.owner_ref
                 return result
 
             async def issue_judgment(self, value, *, judgment_status, evidence_ref):
@@ -919,6 +953,9 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
                     value, judgment_status=judgment_status, evidence_ref=evidence_ref
                 )
                 assert result.status == "ADMITTED", result
+                if scenario_index == 1:
+                    assert judgment_status == "HOLD_REWORK_REQUIRED"
+                    return result
                 from aiscc.workflow.models import DecisionOutcome
 
                 pending = adapter._pending_requests[WorkflowState.ACCEPTED]
@@ -931,19 +968,72 @@ def test_v2_local_s1_owner_guard_handoff_accepts(local_authority_sessions):
                 assert (await kernel.load("run-1")).state is WorkflowState.ADMISSION_PENDING
                 return result
 
-        result = await StockroomCaptureRunner(LocalOwners()).run(prepared)
+        owners = LocalOwners()
+        result = await StockroomCaptureRunner(owners).run(prepared)
         assert result.status is StockroomCaptureStatus.COMPLETED, result
-        assert (result.workflow_state, result.state_version) == (WorkflowState.ACCEPTED, 4)
+        target = (WorkflowState.ACCEPTED, WorkflowState.REWORK_REQUIRED,
+                  WorkflowState.BLOCKED, WorkflowState.HUMAN_REQUIRED)[scenario_index]
+        expected_version = 3 if scenario_index == 2 else 4
+        assert (result.workflow_state, result.state_version) == (target, expected_version)
         current = await kernel.verify_consistency("run-1")
         assert current.task_contract_version == "2.0.0"
-        assert current.state is WorkflowState.ACCEPTED
+        assert current.state is target
+        from aiscc.persistence.models import (
+            EvidenceSetEvaluationRow,
+            ExecutionOperationRow,
+            HumanGateRow,
+            HumanResultRow,
+            P1_4BlockerProvenanceRow,
+        )
         async with local_authority_sessions() as session:
-            for model in (
-                AdmittedEvidenceRow,
-                JudgmentRow,
-                HumanGuardAttestationRow,
-                JudgmentGuardAttestationRow,
-            ):
-                assert await session.scalar(select(func.count()).select_from(model)) == 1
+            async def count(model):
+                return await session.scalar(select(func.count()).select_from(model))
+            assert await count(HumanResultRow) == 0
+            assert await count(JudgmentRow) == int(scenario_index in (0, 1))
+            assert await count(AdmittedEvidenceRow) == int(scenario_index != 1)
+            if scenario_index in (0, 1):
+                assert await count(HumanGuardAttestationRow) == 1
+                assert await count(JudgmentGuardAttestationRow) == 1
+                durable = await session.scalar(select(JudgmentRow))
+                expected_kind = "ACCEPTED" if scenario_index == 0 else "HOLD_REWORK_REQUIRED"
+                assert durable.judgment_kind == expected_kind
+            if scenario_index == 2:
+                assert not any(
+                    call[0] in {"execute", "materialize", "security", "grant"}
+                    for call in owners.calls
+                )
+                assert await count(ExecutionOperationRow) == 0
+                blocker = await session.scalar(select(P1_4BlockerProvenanceRow))
+                assert (blocker.blocker_kind, blocker.reason_code) == ("POLICY", "POLICY_CONFLICT")
+            if scenario_index == 3:
+                assert await count(HumanGateRow) == 1
+                assert await count(HumanGuardAttestationRow) == 1
+                assert await count(JudgmentGuardAttestationRow) == 0
+                gate = await session.scalar(select(HumanGateRow))
+                assert (gate.work_run_id, gate.opened_from_state, gate.opened_from_state_version,
+                        gate.bound_state_version) == ("run-1", "ADMISSION_PENDING", 3, 4)
+                retained = adapter._handles[owners.gate_ref]
+                assert gate.serialized_ref == owners.gate_ref
+                assert gate.human_gate_id == retained.human_gate_id
+                assert gate.gate_fingerprint == retained.gate_fingerprint
+                verified_gate = await human_repository.load_gate(owners.gate_ref)
+                assert verified_gate is not None
+                assert verified_gate.serialized_ref == owners.gate_ref
+                assert verified_gate.human_gate_version == retained.human_gate_version
+                assert "agent_claim" in [call[0] for call in owners.calls]
+            evaluation = await session.scalar(select(EvidenceSetEvaluationRow))
+            assert evaluation.outcome == ("UNSATISFIED" if scenario_index == 1 else "SATISFIED")
 
     asyncio.run(check())
+
+
+def _local_static_policy_fixture(root):
+    from types import MappingProxyType
+
+    from aiscc.scenarios.stockroom_production import _POLICY_CONFLICT_FIXTURE, PolicyConflictFixture
+
+    return MappingProxyType(
+        PolicyConflictFixture.model_validate_json(
+            (root / _POLICY_CONFLICT_FIXTURE).read_text(encoding="utf-8")
+        ).model_dump(mode="json")
+    )

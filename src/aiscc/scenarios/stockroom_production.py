@@ -1834,13 +1834,14 @@ class StockroomCaptureOwnerAdapter:
             if not isinstance(running, TransitionDecision):
                 raise AuthorityConflictError("RUNNING transition ref required")
             enrollment = self._enrollment(prepared)
+            static_policy_value = dict(self._app.static_policy_fixture)
             admitted_ref = await self._submit_durable_candidate(
                 prepared,
                 enrollment,
                 self._app.static_evidence_issuer,
-                value=dict(self._app.static_policy_fixture),
+                value=static_policy_value,
                 producer_attestation_ref=(
-                    f"server-fixture:{canonical_hash(self._app.static_policy_fixture)}"
+                    f"server-fixture:{canonical_hash(static_policy_value)}"
                 ),
                 execution_attempt_id=None,
                 operation_id=None,
@@ -1972,13 +1973,16 @@ class StockroomCaptureOwnerAdapter:
             participant = await self._app.human_guard_authority.gate_open_participant(
                 request, reservation, evidence_ref
             )
+            reservation_ref = (
+                f"p1-7-gate:{reservation.human_gate_version}:{reservation.human_gate_id}"
+            )
             self._pending_requests[WorkflowState.HUMAN_REQUIRED] = request
             self._pending_participants[WorkflowState.HUMAN_REQUIRED] = (participant,)
             self._pending_authority_refs[WorkflowState.HUMAN_REQUIRED] = frozenset(
-                {reservation.serialized_ref}
+                {reservation_ref}
             )
-            self._handles[reservation.serialized_ref] = reservation
-            return await self._snapshot_result(prepared, "PENDING", reservation.serialized_ref)
+            self._handles[reservation_ref] = reservation
+            return await self._snapshot_result(prepared, "PENDING", reservation_ref)
         except (AuthorityConflictError, ValueError, RuntimeError) as exc:
             return await self._failure(prepared, "DENIED", type(exc).__name__)
 
