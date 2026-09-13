@@ -857,7 +857,7 @@ def _transition_request(
         transition_request_id=f"stockroom-config-lookup-{scenario_id}-{target.value}",
         project_id="aiscc-stockroom-integration",
         task_contract_id=scenario_id,
-        task_contract_version="1.0.0",
+        task_contract_version="2.0.0",
         work_run_id=f"stockroom-config-lookup-{scenario_id}",
         observed_state=source,
         observed_state_version=3,
@@ -1033,7 +1033,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
         sessions = create_session_factory(engine)
         try:
             evidence_config = load_stockroom_evidence_config(
-                repository_root / "config/evidence/stockroom-capture.v1.json"
+                repository_root / "config/evidence/stockroom-capture.v2.json"
             )
             human_config = load_stockroom_human_config(
                 repository_root / "config/human/stockroom-capture.v1.json"

@@ -202,7 +202,7 @@ from aiscc.workflow.models import (
 )
 from aiscc.workflow.ports import TransitionTransactionParticipant
 
-_EVIDENCE_CONFIG = Path("config/evidence/stockroom-capture.v1.json")
+_EVIDENCE_CONFIG = Path("config/evidence/stockroom-capture.v2.json")
 _HUMAN_CONFIG = Path("config/human/stockroom-capture.v1.json")
 _JUDGMENT_CONFIG = Path("config/judgment/stockroom-capture.v2.json")
 _POLICY_CONFLICT_FIXTURE = Path("config/scenarios/stockroom/v1/fixtures/policy-conflict.json")
@@ -2163,7 +2163,7 @@ class StockroomCaptureOwnerAdapter:
                 request=request,
             )
         authority_ref = {
-            GuardId.G_CONTRACT: "stockroom-task-contract-config:v1",
+            GuardId.G_CONTRACT: "stockroom-task-contract-config:v2",
             GuardId.G_SCOPE: "stockroom-production-scope:v1",
             GuardId.G_RUNTIME_CONTEXT: "stockroom-owner-runtime-context:v1",
             GuardId.G_REWORK_SPEC: "stockroom-missing-evidence-rework:v1",
@@ -2333,7 +2333,7 @@ class StockroomCaptureOwnerAdapter:
             observed_at,
             enrollment.requirement.required_coverage,
             producer_attestation_ref,
-            config_version="stockroom-capture.v1",
+            config_version="stockroom-capture.v2",
         )
         prepared_content = self._app.durable_content_authority.prepare_structured(
             owner_id=issuer.issuer_id,
@@ -2567,9 +2567,7 @@ async def build_stockroom_production_application(
     image = resolve_stockroom_image(image_provenance_ref, dict(tool.image_binding_policy))
     runner = StockroomDockerRunner(trusted_docker_executable, image, cancellation)
     composition = build_stockroom_production_composition(image)
-    evidence_raw = load_stockroom_evidence_config(root / _EVIDENCE_CONFIG)
-    human_raw = load_stockroom_human_config(root / _HUMAN_CONFIG)
-    judgment_raw = load_stockroom_judgment_config(root / _JUDGMENT_CONFIG)
+    evidence_raw, human_raw, judgment_raw = _load_stockroom_fresh_authority_configs(root)
 
     durable_content_authority = P1_6DurableContentAuthority()
     evidence_repository = PostgresEvidenceRepository(
@@ -2802,6 +2800,49 @@ async def build_stockroom_production_application(
     )
 
 
+def _load_stockroom_fresh_authority_configs(
+    root: Path,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Project preserved policy semantics onto the disjoint fresh authority scope."""
+    evidence = load_stockroom_evidence_config(root / _EVIDENCE_CONFIG)
+    if (evidence["schema_version"], evidence["authority_id"], evidence["authority_version"]) != (
+        "2", "AISCC_STOCKROOM_CAPTURE_TASK_EVIDENCE_AUTHORITY_V2", "v2"
+    ):
+        raise ValueError("STOCKROOM_FRESH_EVIDENCE_V2_REQUIRED")
+    human = load_stockroom_human_config(root / _HUMAN_CONFIG)
+    judgment = load_stockroom_judgment_config(root / _JUDGMENT_CONFIG)
+    enrollments = {item["scenario_id"]: item for item in evidence["enrollments"]}
+    for policy in judgment["policies"]:
+        item = enrollments[policy["scenario_id"]]
+        if (
+            policy["task_contract_id"] != item["task_contract_id"]
+            or policy["task_contract_version"] != "1.0.0"
+            or policy["scenario_version"] != item["scenario_version"]
+            or policy["policy_version"] != "stockroom-judgment-v2"
+            or policy["evidence_checkpoint_ref"] != f'{item["checkpoint_id"]}@v1'
+            or policy["evidence_requirement_set_ref"] != f'{item["requirement_set_id"]}@v1'
+        ):
+            raise ValueError("STOCKROOM_LEGACY_JUDGMENT_BINDING_MISMATCH")
+        policy.update(
+            task_contract_version=item["task_contract_version"],
+            policy_version="stockroom-judgment-v3-evidence-v2",
+            evidence_checkpoint_ref=f'{item["checkpoint_id"]}@{item["checkpoint_version"]}',
+            evidence_requirement_set_ref=(
+                f'{item["requirement_set_id"]}@{item["requirement_set_version"]}'
+            ),
+        )
+    use = human["required_use"]
+    item = enrollments[use["scenario_id"]]
+    if (
+        use["task_contract_id"] != item["task_contract_id"]
+        or use["task_contract_version"] != "1.0.0"
+        or use["scenario_version"] != item["scenario_version"]
+    ):
+        raise ValueError("STOCKROOM_LEGACY_HUMAN_BINDING_MISMATCH")
+    use["task_contract_version"] = item["task_contract_version"]
+    return evidence, human, judgment
+
+
 def load_stockroom_evidence_config(path: Path) -> dict[str, Any]:
     root = _strict_json(path)
     _exact_keys(
@@ -2809,10 +2850,19 @@ def load_stockroom_evidence_config(path: Path) -> dict[str, Any]:
         {"schema_id", "schema_version", "authority", "durable_content_policy", "enrollments"},
         "evidence root",
     )
-    if root["schema_id"] != "AISCC-STOCKROOM-CAPTURE-EVIDENCE-V1" or root["schema_version"] != "1":
+    schema = (root["schema_id"], root["schema_version"])
+    if schema not in {
+        ("AISCC-STOCKROOM-CAPTURE-EVIDENCE-V1", "1"),
+        ("AISCC-STOCKROOM-CAPTURE-EVIDENCE-V2", "2"),
+    }:
         raise ValueError("STOCKROOM_EVIDENCE_SCHEMA_DENIED")
     authority = _table(root, "authority")
     _exact_keys(authority, {"authority_id", "authority_version"}, "evidence authority")
+    if schema[1] == "2" and authority != {
+        "authority_id": "AISCC_STOCKROOM_CAPTURE_TASK_EVIDENCE_AUTHORITY_V2",
+        "authority_version": "v2",
+    }:
+        raise ValueError("STOCKROOM_EVIDENCE_V2_AUTHORITY_REQUIRED")
     policy = _table(root, "durable_content_policy")
     _exact_keys(
         policy,
@@ -2870,6 +2920,15 @@ def load_stockroom_evidence_config(path: Path) -> dict[str, Any]:
         item["source_state"] = WorkflowState(_text(raw, "source_state"))
         item["target_state"] = WorkflowState(_text(raw, "target_state"))
         item["issued_at"] = _aware_datetime(raw, "issued_at")
+        if schema[1] == "2" and (
+            raw["issued_at"] != item["issued_at"].astimezone(UTC).isoformat()
+            or raw["task_contract_id"] != raw["scenario_id"]
+            or raw["task_contract_version"] != "2.0.0"
+            or any(raw[key] != "v2" for key in (
+                "requirement_set_version", "requirement_version", "checkpoint_version"
+            ))
+        ):
+            raise ValueError("STOCKROOM_EVIDENCE_V2_IMMUTABLE_SCOPE_REQUIRED")
         item["required_coverage"] = frozenset(_string_list(raw, "required_coverage"))
         if type(raw["public_export_allowed"]) is not bool:
             raise ValueError("public_export_allowed must be boolean")
@@ -2877,6 +2936,7 @@ def load_stockroom_evidence_config(path: Path) -> dict[str, Any]:
     if tuple(item["scenario_id"] for item in enrollments) != SCENARIO_IDS:
         raise ValueError("EXACT_STOCKROOM_EVIDENCE_ENROLLMENT_REQUIRED")
     return {
+        "schema_version": schema[1],
         "authority_id": _text(authority, "authority_id"),
         "authority_version": _text(authority, "authority_version"),
         "durable_policy_fingerprint": cast(str, policy["fingerprint"]),
