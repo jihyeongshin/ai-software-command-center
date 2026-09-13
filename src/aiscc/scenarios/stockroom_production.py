@@ -1247,6 +1247,10 @@ class StockroomAgentExecutionServiceFactory:
         def context_factory(**values: object) -> StockroomSecurityContext:
             scope = cast(ResourceScope, values["scope"])
             snapshot = cast(WorkflowSnapshot, values["current"])
+            # Provider/secret calls omit a process spec; use the verified factory binding.
+            requested_spec = cast(str, values["resolved_spec_fingerprint"])
+            if requested_spec and requested_spec != inputs.docker_spec_fingerprint:
+                raise AuthorityConflictError("execution context process spec binding mismatch")
             return application.stockroom_owner_restriction.seal_context(
                 context_id=_stable_id(
                     "stockroom-execution-context",
@@ -1266,7 +1270,7 @@ class StockroomAgentExecutionServiceFactory:
                 security_action=cast(SecurityActionClass, values["action"]),
                 scope=scope,
                 operation_fingerprint=cast(str, values["operation_fingerprint"]),
-                process_spec_fingerprint=cast(str, values["resolved_spec_fingerprint"]),
+                process_spec_fingerprint=inputs.docker_spec_fingerprint,
                 remaining_provider_calls=profile.provider_call_maximum,
                 remaining_tool_calls=application.composition.security_config.tool_calls,
                 remaining_process_calls=application.composition.security_config.process_calls,

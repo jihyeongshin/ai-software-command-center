@@ -44,6 +44,239 @@ POLICY_CONFIG = Path("config/security/stockroom-owner.v1.toml")
 CANDIDATE = ToolCallCandidate("stockroom_summary", "{}", "call-stockroom")
 
 
+def production_provider_fixture(tmp_path, monkeypatch):
+    """Real execution factory/security, with only materialization/persistence inert."""
+    import socket
+    import subprocess
+    from datetime import UTC, datetime
+    from threading import Event
+    from types import SimpleNamespace
+
+    from aiscc.evidence.service import EvidenceAdmissionService
+    from aiscc.human.repository import PostgresHumanAuthorityRepository
+    from aiscc.judgment.authority import PostgresJudgmentAuthority
+    from aiscc.providers.authority import (
+        ExecutionReferenceAuthority,
+        LeaseBoundSecretResolver,
+        SecretResolutionLeaseAuthority,
+        SecretUseAuthority,
+    )
+    from aiscc.providers.local_deterministic import (
+        LOCAL_COMPATIBILITY_SECRET_REF,
+        LOCAL_COMPATIBILITY_SENTINEL,
+        LocalDeterministicProvider,
+    )
+    from aiscc.providers.models import ExecutionAttemptRef, ExecutionStatus, ProviderCall
+    from aiscc.runtime.docker import StockroomCancellation
+    from aiscc.runtime.stockroom_workspace import StockroomWorkspace
+    from aiscc.scenarios.composition import build_stockroom_production_composition
+    from aiscc.scenarios.driver import (
+        StockroomMaterializedResultBinding,
+        StockroomOwnerDependencies,
+        prepare_stockroom_driver,
+    )
+    from aiscc.scenarios.runtime_models import MaterializedStockroom, StockroomWorkspaceLease
+    from aiscc.scenarios.stockroom_production import (
+        StockroomAgentExecutionServiceFactory,
+        StockroomMaterializerFactory,
+        _CurrentAttemptReader,
+        _CurrentBinding,
+    )
+    from aiscc.workflow.kernel import WorkflowKernel
+    from tests.unit.runtime.test_stockroom_image import synthetic_image
+
+    def forbidden_boundary(*args, **kwargs):
+        raise AssertionError("private DB/process/external network forbidden in this fixture")
+
+    monkeypatch.setattr(subprocess, "Popen", forbidden_boundary)
+    monkeypatch.setattr(socket.socket, "connect", forbidden_boundary)
+    image, *_ = synthetic_image(tmp_path, monkeypatch)
+    composition = build_stockroom_production_composition(image)
+    profile = composition.provider_profiles["stockroom-owner-s1-v1"].profile
+    restriction = StockroomOwnerRestriction(composition.security_config)
+    selectors = ProviderToolResourceAuthority(
+        allowed_resource_identities=frozenset({profile.provider_resource_identity}),
+        allowed_profile_ids=frozenset({profile.profile_id}),
+        allowed_scenarios=frozenset({"stockroom-s1-normal"}),
+        allowed_modes=frozenset({RuntimeMode.OWNER_SELF_DOGFOOD}),
+    )
+    secrets = SecretUseAuthority(
+        allowed_secret_refs=frozenset({profile.secret_ref}),
+        allowed_profile_ids=frozenset({profile.profile_id}),
+        allowed_scenarios=frozenset({"stockroom-s1-normal"}),
+        allowed_destinations=frozenset({profile.endpoint_ref}),
+        allowed_modes=frozenset({RuntimeMode.OWNER_SELF_DOGFOOD}),
+    )
+    policy = SecurityPolicy(default_profiles(), provider_tool_policy=selectors,
+                            secret_use_policy=secrets, stockroom_policy=restriction)
+    leases = SecretResolutionLeaseAuthority(policy.verify_consumption_receipt)
+    reader = _CurrentAttemptReader()
+    reader.current = WorkflowSnapshot("unit-s1-run", WorkflowState.RUNNING, 2)
+    reader.attempt = ExecutionAttemptRef(
+        "unit-s1-attempt", "unit-s1-run", "stockroom-s1-normal", "1.0.0",
+        WorkflowState.RUNNING, 2, 2, ExecutionStatus.RUNNING, "unit-execution-owner",
+        runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD,
+    )
+    app = SimpleNamespace(
+        project_id="unit-project", requester_identity="unit-owner", composition=composition,
+        repository_root=Path.cwd(), private_runtime_root=tmp_path,
+        security_policy=policy, stockroom_owner_restriction=restriction,
+        cancellation=StockroomCancellation("unit-s1-run", "unit-s1-attempt", Event()),
+        docker_runtime=DockerRuntime(policy),
+        local_provider=LocalDeterministicProvider(composition.provider_profiles),
+        secret_resolver=LeaseBoundSecretResolver(
+            leases, {LOCAL_COMPATIBILITY_SECRET_REF: LOCAL_COMPATIBILITY_SENTINEL}
+        ),
+        secret_lease_authority=leases, execution_repository=None,
+        provider_tool_authority=selectors, secret_use_authority=secrets,
+        execution_reference_authority=ExecutionReferenceAuthority(),
+        clock=lambda: datetime.now(UTC),
+    )
+    materializer = StockroomMaterializerFactory(app, _CurrentBinding())
+    factory = StockroomAgentExecutionServiceFactory(app, reader)
+    owners = StockroomOwnerDependencies(
+        object.__new__(WorkflowKernel), factory, object.__new__(EvidenceAdmissionService),
+        object.__new__(PostgresHumanAuthorityRepository),
+        object.__new__(PostgresJudgmentAuthority), object.__new__(StockroomWorkspace),
+        materializer, policy, restriction,
+    )
+    request = composition.request(scenario_id="stockroom-s1-normal", run_id="unit-s1-run",
+                                  attempt_id="unit-s1-attempt", expected_initial_state_version=1)
+    prepared = prepare_stockroom_driver(request, owners)
+    resource = composition.catalog.resource
+    (tmp_path / "inert-workspace").mkdir()
+    materialized = MaterializedStockroom(
+        resource.resource_ref, resource.source_commit, resource.subroot, resource.git_subtree,
+        (), resource.aggregate_sha256,
+        StockroomWorkspaceLease("unit-lease", "unit-s1-run", "unit-s1-attempt", tmp_path,
+                                tmp_path / "inert-workspace"),
+        "unit-s1-run", "unit-s1-attempt", tmp_path / "inert-workspace",
+    )
+    bound = object.__new__(StockroomMaterializedResultBinding)
+    object.__setattr__(bound, "materialized", materialized)
+    object.__setattr__(bound, "provenance", SimpleNamespace(
+        provenance_fingerprint="a" * 64, materialized_output_fingerprint="b" * 64,
+    ))
+
+    def fake_materialization_owner(self, *, prepared, result):
+        assert self is materializer and prepared.request is request and result is bound
+        return bound
+
+    monkeypatch.setattr(StockroomMaterializerFactory, "require_issued_result",
+                        fake_materialization_owner)
+    inputs = factory.prepare_inputs(prepared=prepared, materialized_result=bound)
+    service = factory.derive(prepared=prepared, inputs=inputs,
+                             execution_reference_authority=app.execution_reference_authority).owner
+    call = ProviderCall(
+        "unit-provider-op", "c" * 64, "unit-s1-attempt", "unit-s1-run",
+        WorkflowState.RUNNING, 2, RuntimeMode.OWNER_SELF_DOGFOOD, "unit-owner",
+        "stockroom-s1-normal", 2, profile,
+        ({"type": "message", "role": "user", "content": []},),
+        ({"name": "stockroom_summary"},), 1,
+    )
+    return SimpleNamespace(app=app, service=service, call=call, current=reader.current,
+                           prepared=prepared, inputs=inputs, policy=policy)
+
+
+def test_production_provider_grant_uses_bound_process_identity(tmp_path, monkeypatch):
+    fixture = production_provider_fixture(tmp_path, monkeypatch)
+    capabilities, secret = fixture.service._provider_capabilities(
+        fixture.call, fixture.current, fixture.call.operation_id
+    )
+    assert [x.scope.domain for x in capabilities] == [
+        ResourceDomain.PROVIDER, ResourceDomain.SECRET,
+    ]
+    assert capabilities[0].scope.resource_id == fixture.call.profile.provider_resource_identity
+    contexts = tuple(fixture.app.stockroom_owner_restriction._contexts.values())
+    assert {x.process_spec_fingerprint for x in contexts} == {
+        fixture.inputs.docker_spec_fingerprint
+    }
+    result = fixture.service.execute_provider(fixture.call, capabilities=capabilities,
+                                              secret_request=secret)
+    assert result.status == "completed"
+    assert result.tool_call.name == "stockroom_summary"
+    assert fixture.app.local_provider.invocation_count == 1
+
+
+@pytest.mark.parametrize("field", [
+    "provider", "tool_scope", "secret_scope", "run", "state", "version", "mode", "profile",
+])
+def test_production_provider_exact_grant_rejects_changed_request(field, tmp_path, monkeypatch):
+    from aiscc.contracts.security import SecurityAdmissionDecision
+
+    fixture = production_provider_fixture(tmp_path, monkeypatch)
+    fixture.service._provider_capabilities(
+        fixture.call, fixture.current, fixture.call.operation_id
+    )
+    request = next(request for _, request in fixture.policy._admissions.values()
+                   if request.resource_scope.domain is ResourceDomain.PROVIDER)
+    assert request.resource_grant.scope == request.resource_scope
+    if field == "provider":
+        changed = replace(request, resource_scope=ResourceScope(ResourceDomain.PROVIDER,
+                                                               "wrong-provider-resource"))
+    elif field in {"tool_scope", "secret_scope"}:
+        domain = ResourceDomain.TOOL if field == "tool_scope" else ResourceDomain.SECRET
+        changed = replace(request, resource_scope=ResourceScope(domain,
+                                                               request.resource_scope.resource_id))
+    elif field == "run":
+        changed = replace(request, run_id="wrong-run")
+    elif field == "state":
+        changed = replace(request, observed=replace(request.observed, state=WorkflowState.READY))
+    elif field == "version":
+        changed = replace(request, observed=replace(request.observed, state_version=3))
+    elif field == "mode":
+        changed = replace(request, mode=RuntimeMode.PUBLIC_BOUNDED_LIVE)
+    else:
+        changed = replace(request, profile_version="wrong-profile-version")
+    assert fixture.policy.evaluate(changed).decision is SecurityAdmissionDecision.DENY
+    assert fixture.app.local_provider.invocation_count == 0
+
+
+@pytest.mark.parametrize("field", ["attempt", "run", "version", "state", "mode", "profile"])
+def test_production_provider_call_cannot_reuse_other_binding(field, tmp_path, monkeypatch):
+    from aiscc.workflow.models import AuthorityConflictError
+
+    fixture = production_provider_fixture(tmp_path, monkeypatch)
+    capabilities, secret = fixture.service._provider_capabilities(
+        fixture.call, fixture.current, fixture.call.operation_id
+    )
+    call = fixture.call
+    if field == "attempt":
+        call = replace(call, execution_attempt_id="wrong-attempt")
+    elif field == "run":
+        call = replace(call, work_run_id="wrong-run")
+    elif field == "version":
+        call = replace(call, state_version=3)
+    elif field == "state":
+        fixture.service._authority_reader.current = replace(fixture.current,
+                                                           state=WorkflowState.READY)
+    elif field == "mode":
+        call = replace(call, runtime_mode=RuntimeMode.PUBLIC_BOUNDED_LIVE)
+    else:
+        call = replace(call, profile=replace(call.profile, model_ref="wrong-model"))
+    try:
+        result = fixture.service.execute_provider(call, capabilities=capabilities,
+                                                  secret_request=secret)
+    except (ValueError, AuthorityConflictError):
+        pass
+    else:
+        assert result.status == "denied"
+    assert fixture.app.local_provider.invocation_count == 0
+
+
+def test_production_context_rejects_foreign_process_spec(tmp_path, monkeypatch):
+    from aiscc.workflow.models import AuthorityConflictError
+
+    fixture = production_provider_fixture(tmp_path, monkeypatch)
+    with pytest.raises(AuthorityConflictError, match="process spec binding mismatch"):
+        fixture.service._stockroom_context_factory(
+            scope=ResourceScope(ResourceDomain.PROVIDER,
+                                fixture.call.profile.provider_resource_identity),
+            current=fixture.current, resolved_spec_fingerprint="f" * 64,
+        )
+    assert fixture.app.local_provider.invocation_count == 0
+
+
 def test_v2_policy_has_no_runtime_image_and_rejects_mixed_schema(tmp_path):
     path = Path("config/providers/stockroom-tools.v2.toml")
     text = path.read_text(encoding="utf-8")

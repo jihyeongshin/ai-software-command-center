@@ -88,6 +88,44 @@ def _owners() -> StockroomOwnerDependencies:
     )
 
 
+def test_s1_runner_uses_production_provider_grant_with_fake_owners(tmp_path, monkeypatch):
+    """S1 sequencing plus real production provider admission; no durable/runtime owners."""
+    from aiscc.scenarios.capture_runner import StockroomCaptureRunner
+    from aiscc.scenarios.driver import StockroomCaptureStatus
+    from tests.unit.providers.test_stockroom_tool import production_provider_fixture
+    from tests.unit.scenarios.test_stockroom_capture_runner import RecordingOwners
+
+    # Initialize asyncio's local self-pipe before forbidding socket connections.
+    loop = asyncio.new_event_loop()
+    fixture = production_provider_fixture(tmp_path, monkeypatch)
+
+    class LocalOwners(RecordingOwners):
+        async def execute(self, prepared, materialization_ref):
+            assert prepared is fixture.prepared
+            assert materialization_ref == "owner:materialize"
+            capabilities, secret = fixture.service._provider_capabilities(
+                fixture.call, fixture.current, fixture.call.operation_id
+            )
+            result = fixture.service.execute_provider(fixture.call, capabilities=capabilities,
+                                                      secret_request=secret)
+            assert result.status == "completed" and result.tool_call.name == "stockroom_summary"
+            return self._result("execute", WorkflowState.RUNNING, "COMPLETED")
+
+    owners = LocalOwners()
+    try:
+        result = loop.run_until_complete(StockroomCaptureRunner(owners).run(fixture.prepared))
+    finally:
+        loop.close()
+    assert result.status is StockroomCaptureStatus.COMPLETED
+    assert (result.workflow_state, result.state_version) == (WorkflowState.ACCEPTED, 4)
+    assert fixture.app.local_provider.invocation_count == 1
+    assert [name for name, _ in owners.calls] == [
+        "initial_ready", "create_attempt", "transition:RUNNING", "security", "grant",
+        "materialize", "execute", "transition:ADMISSION_PENDING", "submit_runtime",
+        "evaluate", "judgment:ACCEPTED", "transition:ACCEPTED",
+    ]
+
+
 def test_four_owner_bindings_prepare_without_runtime_side_effects(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
