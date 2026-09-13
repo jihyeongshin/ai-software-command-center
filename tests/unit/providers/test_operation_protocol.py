@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from aiscc.providers.events import legal_operation_edge, require_legal_operation_edge
+from aiscc.providers.events import (
+    legal_operation_edge,
+    lifecycle_result,
+    require_legal_operation_edge,
+)
 from aiscc.providers.models import ExecutionOperationOutcome as O
 from aiscc.providers.models import ExecutionOperationPhase as P
 
@@ -39,3 +43,17 @@ def test_every_accepted_operation_edge() -> None:
 def test_unlisted_edge_denies_without_repair(source: P, target: P, outcome: O | None) -> None:
     with pytest.raises(ValueError, match="ILLEGAL_OPERATION_PHASE_EDGE"):
         require_legal_operation_edge(source, target, outcome)
+
+
+def test_invalid_history_abort_is_the_only_start_free_terminal_edge() -> None:
+    assert (
+        lifecycle_result("NOT_STARTED", "EXECUTION_ABORTED_INVALID_HISTORY")
+        == "EXECUTION_FAILED"
+    )
+    for before, event in (
+        ("NOT_STARTED", "EXECUTION_FAILED"),
+        ("RUNNING", "EXECUTION_ABORTED_INVALID_HISTORY"),
+        ("EXECUTION_FAILED", "EXECUTION_ABORTED_INVALID_HISTORY"),
+    ):
+        with pytest.raises(ValueError, match="ILLEGAL_EXECUTION_STATUS_TRANSITION"):
+            lifecycle_result(before, event)

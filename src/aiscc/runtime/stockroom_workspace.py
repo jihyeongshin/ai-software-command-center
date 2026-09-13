@@ -8,9 +8,11 @@ After restart existing entries are unknown and cannot be adopted or reused.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import stat
+from dataclasses import dataclass
 from pathlib import Path
 from threading import RLock
 from uuid import uuid4
@@ -27,6 +29,28 @@ _DEVICES = {"CON", "PRN", "AUX", "NUL", "CLOCK$", "CONIN$", "CONOUT$"} | {
 }
 _MAX_FILE_BYTES = 64 * 1024
 _MAX_FILES = 14
+_SETTLEMENT_OBJECT_LIMIT = 256
+
+
+@dataclass(frozen=True, slots=True)
+class RestartWorkspaceInspection:
+    run_id: str
+    attempt_id: str
+    target: Path
+    exists: bool
+    target_identity: tuple[int, int, int] | None
+    inventory_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class RestartWorkspaceSettlementVerdict:
+    status: str
+    original_target: Path
+    quarantine_target: Path | None
+    original_identity: tuple[int, int, int] | None
+    quarantine_identity: tuple[int, int, int] | None
+    inventory_fingerprint: str
+    reason: str
 
 
 def safe_component(value: str) -> str:
@@ -261,3 +285,200 @@ class StockroomWorkspace:
                     WorkspaceOwnership.QUARANTINED,
                     "OWNERSHIP_OR_DELETE_UNCERTAIN_NO_REUSE",
                 )
+
+
+class StockroomRestartSafetySettlement:
+    """Quarantine one verified orphan workspace without adopting its historical lease."""
+
+    def __init__(
+        self,
+        runtime_root: Path,
+        *,
+        repository_root: Path,
+        source_object_root: Path,
+        downloads_root: Path,
+    ) -> None:
+        self._lock = RLock()
+        self.root = checked_absolute(runtime_root)
+        repository = checked_absolute(repository_root)
+        source_objects = checked_absolute(source_object_root)
+        if not downloads_root.is_absolute():
+            raise StockroomFailure("DOWNLOADS_CONFIG_REQUIRED")
+        for part in downloads_root.parts[1:]:
+            safe_component(part)
+        for excluded in (
+            repository,
+            repository / ".git",
+            source_objects,
+            downloads_root.resolve(),
+            Path.home() / "Downloads",
+        ):
+            if _overlaps(self.root, excluded):
+                raise StockroomFailure("RUNTIME_ROOT_OVERLAP")
+        self._root_identity = _identity(self.root)
+
+    def inspect(self, run_id: str, attempt_id: str) -> RestartWorkspaceInspection:
+        safe_component(run_id)
+        safe_component(attempt_id)
+        with self._lock:
+            if (
+                checked_absolute(self.root) != self.root
+                or _identity(self.root) != self._root_identity
+            ):
+                raise StockroomFailure("ROOT_IDENTITY_CHANGED")
+            run = self.root / run_id
+            target = run / attempt_id
+            if run.exists() and _identity(run)[2] != stat.S_IFDIR:
+                raise StockroomFailure("QUARANTINE_DENIED")
+            if not target.exists():
+                quarantine_root = self.root / ".aiscc-quarantine"
+                settled: list[Path] = []
+                if quarantine_root.exists():
+                    if _identity(quarantine_root)[2] != stat.S_IFDIR:
+                        raise StockroomFailure("QUARANTINE_DENIED")
+                    prefix = _restart_quarantine_prefix(run_id, attempt_id)
+                    settled = sorted(
+                        (
+                            item
+                            for item in quarantine_root.iterdir()
+                            if item.name.startswith(prefix)
+                        ),
+                        key=lambda item: item.name,
+                    )
+                if len(settled) > 1:
+                    raise StockroomFailure("QUARANTINE_DENIED")
+                if settled:
+                    quarantined = settled[0]
+                    if _identity(quarantined)[2] != stat.S_IFDIR:
+                        raise StockroomFailure("QUARANTINE_DENIED")
+                    fingerprint = _restart_inventory_fingerprint(
+                        run_id, attempt_id, _restart_inventory(quarantined)
+                    )
+                    if quarantined.name != f"{prefix}{fingerprint[:16]}":
+                        raise StockroomFailure("QUARANTINE_DENIED")
+                else:
+                    fingerprint = _restart_inventory_fingerprint(run_id, attempt_id, ())
+                return RestartWorkspaceInspection(
+                    run_id, attempt_id, target, False, None, fingerprint
+                )
+            identity = _identity(target)
+            if identity[2] != stat.S_IFDIR:
+                raise StockroomFailure("QUARANTINE_DENIED")
+            inventory = _restart_inventory(target)
+            return RestartWorkspaceInspection(
+                run_id,
+                attempt_id,
+                target,
+                True,
+                identity,
+                _restart_inventory_fingerprint(run_id, attempt_id, inventory),
+            )
+
+    def quarantine(
+        self, expected: RestartWorkspaceInspection
+    ) -> RestartWorkspaceSettlementVerdict:
+        if type(expected) is not RestartWorkspaceInspection:
+            raise StockroomFailure("EXACT_RESTART_INSPECTION_REQUIRED")
+        with self._lock:
+            current = self.inspect(expected.run_id, expected.attempt_id)
+            if current != expected:
+                raise StockroomFailure("QUARANTINE_DENIED")
+            quarantine_root = self.root / ".aiscc-quarantine"
+            quarantine_target = quarantine_root / (
+                f"{_restart_quarantine_prefix(expected.run_id, expected.attempt_id)}"
+                f"{expected.inventory_fingerprint[:16]}"
+            )
+            if not expected.exists:
+                if quarantine_target.exists():
+                    quarantine_identity = _identity(quarantine_target)
+                    fingerprint = _restart_inventory_fingerprint(
+                        expected.run_id,
+                        expected.attempt_id,
+                        _restart_inventory(quarantine_target),
+                    )
+                    if fingerprint != expected.inventory_fingerprint:
+                        raise StockroomFailure("QUARANTINE_DENIED")
+                    return RestartWorkspaceSettlementVerdict(
+                        "ALREADY_QUARANTINED",
+                        expected.target,
+                        quarantine_target,
+                        expected.target_identity,
+                        quarantine_identity,
+                        fingerprint,
+                        "EXACT_ORPHAN_BYTES_ALREADY_QUARANTINED",
+                    )
+                return RestartWorkspaceSettlementVerdict(
+                    "ABSENT",
+                    expected.target,
+                    None,
+                    None,
+                    None,
+                    expected.inventory_fingerprint,
+                    "EXACT_ATTEMPT_WORKSPACE_ABSENT",
+                )
+            if quarantine_target.exists():
+                raise StockroomFailure("QUARANTINE_DENIED")
+            if not quarantine_root.exists():
+                quarantine_root.mkdir(mode=0o700)
+            if _identity(quarantine_root)[2] != stat.S_IFDIR:
+                raise StockroomFailure("QUARANTINE_DENIED")
+            # Rename only the rechecked attempt directory. Never adopt or delete it.
+            expected.target.rename(quarantine_target)
+            quarantine_identity = _identity(quarantine_target)
+            fingerprint = _restart_inventory_fingerprint(
+                expected.run_id,
+                expected.attempt_id,
+                _restart_inventory(quarantine_target),
+            )
+            if fingerprint != expected.inventory_fingerprint:
+                raise StockroomFailure("QUARANTINE_POST_MOVE_IDENTITY_MISMATCH")
+            return RestartWorkspaceSettlementVerdict(
+                "QUARANTINED",
+                expected.target,
+                quarantine_target,
+                expected.target_identity,
+                quarantine_identity,
+                fingerprint,
+                "INVALID_HISTORY_ORPHAN_PRESERVED_NO_REUSE",
+            )
+
+
+def _restart_inventory(root: Path) -> tuple[dict[str, object], ...]:
+    rows: list[dict[str, object]] = []
+    pending = [root]
+    while pending:
+        path = pending.pop()
+        identity = _identity(path)
+        relative = "." if path == root else path.relative_to(root).as_posix()
+        row: dict[str, object] = {"path": relative, "identity": list(identity)}
+        if identity[2] == stat.S_IFDIR:
+            row["kind"] = "directory"
+            children = sorted(path.iterdir(), key=lambda item: item.name.casefold())
+            if len(rows) + len(children) > _SETTLEMENT_OBJECT_LIMIT:
+                raise StockroomFailure("QUARANTINE_INVENTORY_BOUND")
+            pending.extend(reversed(children))
+        else:
+            data = path.read_bytes()
+            row.update(
+                kind="file", bytes=len(data), sha256=hashlib.sha256(data).hexdigest()
+            )
+        rows.append(row)
+    return tuple(rows)
+
+
+def _restart_inventory_fingerprint(
+    run_id: str, attempt_id: str, inventory: tuple[dict[str, object], ...]
+) -> str:
+    payload = {"run_id": run_id, "attempt_id": attempt_id, "inventory": inventory}
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def _restart_quarantine_prefix(run_id: str, attempt_id: str) -> str:
+    identity = json.dumps(
+        {"run_id": run_id, "attempt_id": attempt_id},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return f"attempt-{hashlib.sha256(identity).hexdigest()[:40]}--"

@@ -85,9 +85,12 @@ from aiscc.judgment.models import (
 )
 from aiscc.persistence.models import ExecutionOutputRefRow, TransitionDecisionRow
 from aiscc.persistence.repository import (
+    INVALID_HISTORY_ABORT_REASON,
+    InvalidHistoryAbortResult,
     PostgresExecutionRepository,
     PostgresTransitionRepository,
     acquire_work_run_transaction_lock,
+    invalid_history_abort_provenance_fingerprint,
     verify_historical_transition_provenance,
 )
 from aiscc.providers.authority import (
@@ -135,7 +138,12 @@ from aiscc.runtime.stockroom_materializer import (
 from aiscc.runtime.stockroom_materializer import (
     operation_fingerprint as materialization_operation_fingerprint,
 )
-from aiscc.runtime.stockroom_workspace import StockroomWorkspace
+from aiscc.runtime.stockroom_workspace import (
+    RestartWorkspaceInspection,
+    RestartWorkspaceSettlementVerdict,
+    StockroomRestartSafetySettlement,
+    StockroomWorkspace,
+)
 from aiscc.scenarios.capture_runner import OwnerCallResult, StockroomCaptureRunner
 from aiscc.scenarios.composition import (
     StockroomOwnerComposition,
@@ -233,6 +241,28 @@ class StockroomJudgmentEnrollment:
     scenario_id: str
     scenario_version: str
     policy: JudgmentPolicy
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidHistoryDispositionRequest:
+    work_run_id: str
+    execution_attempt_id: str
+    expected_running_state_version: int
+    expected_execution_version: int
+    reason_code: str
+    provenance_refs: tuple[str, ...]
+    provenance_fingerprint: str
+    expected_workspace_identity: tuple[int, int, int] | None
+    expected_workspace_fingerprint: str
+    _issuer_token: object = field(repr=False, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidHistoryDispositionResult:
+    abort: InvalidHistoryAbortResult
+    work_run: WorkRun
+    workspace: RestartWorkspaceSettlementVerdict
+    failure_authority_ref: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -437,6 +467,368 @@ class StockroomProductionApplication:
         capture.adapter = adapter
         capture.runner = StockroomCaptureRunner(adapter)
         return capture
+
+    def invalid_history_disposition_service(self) -> StockroomInvalidHistoryDisposition:
+        """Build the isolated source owner; construction does not perform disposition."""
+        settlement = StockroomRestartSafetySettlement(
+            self.private_runtime_root,
+            repository_root=self.repository_root,
+            source_object_root=self.repository_root / ".git",
+            downloads_root=self.downloads_root,
+        )
+        return StockroomInvalidHistoryDisposition(
+            session_factory=self.session_factory,
+            execution_repository=self.execution_repository,
+            workflow_kernel=self.workflow_kernel,
+            guard_authority=self.p1_4_guard_authority,
+            workspace_settlement=settlement,
+            requester_identity=self.requester_identity,
+            clock=self.clock,
+        )
+
+
+class StockroomInvalidHistoryDisposition:
+    """Terminalize one exact invalid history without replaying execution lifecycle work."""
+
+    def __init__(
+        self,
+        *,
+        session_factory: async_sessionmaker[AsyncSession],
+        execution_repository: PostgresExecutionRepository,
+        workflow_kernel: WorkflowKernel,
+        guard_authority: P1_4GuardAuthority,
+        workspace_settlement: StockroomRestartSafetySettlement,
+        requester_identity: str,
+        clock: Callable[[], datetime],
+    ) -> None:
+        if not requester_identity:
+            raise ValueError("invalid-history disposition requester is required")
+        self._session_factory = session_factory
+        self._execution_repository = execution_repository
+        self._workflow_kernel = workflow_kernel
+        self._guard_authority = guard_authority
+        self._workspace_settlement = workspace_settlement
+        self._requester_identity = requester_identity
+        self._clock = clock
+        self._issuer_token = object()
+
+    def inspect_workspace(
+        self, *, work_run_id: str, execution_attempt_id: str
+    ) -> RestartWorkspaceInspection:
+        """Return caller-held identity/fingerprint authority for a following disposition."""
+        return self._workspace_settlement.inspect(work_run_id, execution_attempt_id)
+
+    async def authorize(
+        self,
+        *,
+        work_run_id: str,
+        execution_attempt_id: str,
+        expected_running_state_version: int,
+        expected_execution_version: int,
+        source_provenance_refs: tuple[str, ...],
+    ) -> InvalidHistoryDispositionRequest:
+        """Seal source-observed durable and workspace authority for one disposition."""
+        if (
+            not source_provenance_refs
+            or any(
+                type(ref) is not str
+                or not ref
+                or ref.startswith("stockroom-invalid-history-workspace:v1:")
+                for ref in source_provenance_refs
+            )
+        ):
+            raise AuthorityConflictError("source-owned invalid-history provenance required")
+        current = await self._workflow_kernel.load(work_run_id)
+        snapshot, attempt = await self._execution_repository.load_authority(
+            work_run_id=work_run_id,
+            execution_attempt_id=execution_attempt_id,
+        )
+        inspection = self.inspect_workspace(
+            work_run_id=work_run_id, execution_attempt_id=execution_attempt_id
+        )
+        if attempt.status is ExecutionStatus.NOT_STARTED and not inspection.exists:
+            raise AuthorityConflictError(
+                "source-owned invalid-history side-effect provenance is absent"
+            )
+        provenance_refs = (
+            *source_provenance_refs,
+            "stockroom-invalid-history-workspace:v1:"
+            f"{inspection.inventory_fingerprint}",
+        )
+        request = InvalidHistoryDispositionRequest(
+            work_run_id=work_run_id,
+            execution_attempt_id=execution_attempt_id,
+            expected_running_state_version=expected_running_state_version,
+            expected_execution_version=expected_execution_version,
+            reason_code=INVALID_HISTORY_ABORT_REASON,
+            provenance_refs=provenance_refs,
+            provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                work_run_id=work_run_id,
+                attempt_id=execution_attempt_id,
+                expected_state_version=expected_running_state_version,
+                expected_execution_version=expected_execution_version,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=provenance_refs,
+            ),
+            expected_workspace_identity=inspection.target_identity,
+            expected_workspace_fingerprint=inspection.inventory_fingerprint,
+            _issuer_token=self._issuer_token,
+        )
+        self._require_preflight_authority(request, current, snapshot, attempt)
+        return request
+
+    async def dispose(
+        self, request: InvalidHistoryDispositionRequest
+    ) -> InvalidHistoryDispositionResult:
+        if (
+            type(request) is not InvalidHistoryDispositionRequest
+            or request._issuer_token is not self._issuer_token
+        ):
+            raise AuthorityConflictError("exact invalid-history disposition request required")
+        current = await self._workflow_kernel.load(request.work_run_id)
+        snapshot, attempt = await self._execution_repository.load_authority(
+            work_run_id=request.work_run_id,
+            execution_attempt_id=request.execution_attempt_id,
+        )
+        self._require_preflight_authority(request, current, snapshot, attempt)
+        workspace_preflight = self._workspace_settlement.inspect(
+            request.work_run_id, request.execution_attempt_id
+        )
+        if (
+            workspace_preflight.target_identity != request.expected_workspace_identity
+            or workspace_preflight.inventory_fingerprint
+            != request.expected_workspace_fingerprint
+        ):
+            raise AuthorityConflictError("STOP_PRESERVE: workspace preflight changed")
+        expected_workspace_ref = (
+            "stockroom-invalid-history-workspace:v1:"
+            f"{workspace_preflight.inventory_fingerprint}"
+        )
+        if expected_workspace_ref not in request.provenance_refs:
+            raise AuthorityConflictError("STOP_PRESERVE: workspace provenance is unbound")
+
+        abort = await self._execution_repository.abort_invalid_history_attempt(
+            work_run_id=request.work_run_id,
+            attempt_id=request.execution_attempt_id,
+            expected_state_version=request.expected_running_state_version,
+            expected_execution_version=request.expected_execution_version,
+            reason_code=request.reason_code,
+            provenance_refs=request.provenance_refs,
+            provenance_fingerprint=request.provenance_fingerprint,
+        )
+        post_abort_snapshot, post_abort_attempt = (
+            await self._execution_repository.load_authority(
+                work_run_id=request.work_run_id,
+                execution_attempt_id=request.execution_attempt_id,
+            )
+        )
+        if (
+            post_abort_attempt.status is not ExecutionStatus.EXECUTION_FAILED
+            or post_abort_attempt.execution_version != request.expected_execution_version + 1
+            or post_abort_attempt.state is not WorkflowState.RUNNING
+            or post_abort_attempt.state_version != request.expected_running_state_version
+            or post_abort_snapshot.run_id != request.work_run_id
+        ):
+            raise AuthorityConflictError("STOP_PRESERVE: abort projection is not exact")
+
+        current = await self._workflow_kernel.load(request.work_run_id)
+        if current is None:
+            raise AuthorityConflictError("STOP_PRESERVE: WorkRun disappeared")
+        failure_authority_ref = _invalid_history_failure_authority_ref(
+            run_id=request.work_run_id,
+            attempt_id=request.execution_attempt_id,
+            abort_event_identity=abort.event_identity,
+            abort_execution_version=abort.execution_version,
+            running_state_version=request.expected_running_state_version,
+        )
+        if current.state is WorkflowState.RUNNING:
+            if current.state_version != request.expected_running_state_version:
+                raise AuthorityConflictError("STOP_PRESERVE: WorkRun version changed")
+            failure_request = TransitionRequest(
+                transition_request_id=_stable_id(
+                    "stockroom-invalid-history-failure",
+                    request.work_run_id,
+                    request.execution_attempt_id,
+                    abort.event_identity,
+                    str(current.state_version),
+                ),
+                project_id=current.project_id,
+                task_contract_id=current.task_contract_id,
+                task_contract_version=current.task_contract_version,
+                work_run_id=current.work_run_id,
+                observed_state=WorkflowState.RUNNING,
+                observed_state_version=current.state_version,
+                target_state=WorkflowState.FAILED,
+                requester_identity=self._requester_identity,
+                requester_type=RequesterType.SYSTEM,
+                runtime_mode=current.runtime_mode,
+                created_at=self._clock(),
+            )
+            failure_fact = self._guard_authority.issue(
+                guard_id=GuardId.G_FAILURE_TERMINAL,
+                satisfied=True,
+                reason=INVALID_HISTORY_ABORT_REASON,
+                authority_ref=failure_authority_ref,
+                request=failure_request,
+            )
+            decision = await self._workflow_kernel.request_transition(
+                failure_request, (failure_fact,)
+            )
+            if (
+                decision.outcome is not DecisionOutcome.ADMITTED
+                or decision.resulting_state is not WorkflowState.FAILED
+                or decision.resulting_state_version
+                != request.expected_running_state_version + 1
+            ):
+                raise AuthorityConflictError("STOP_PRESERVE: WorkRun failure denied")
+        elif (
+            current.state is WorkflowState.FAILED
+            and current.state_version == request.expected_running_state_version + 1
+        ):
+            await self._require_existing_failure_transition(
+                request, current, abort, failure_authority_ref
+            )
+        else:
+            raise AuthorityConflictError("STOP_PRESERVE: nonmatching disposition stage")
+
+        terminal = await self._workflow_kernel.load(request.work_run_id)
+        if terminal is None or not (
+            terminal.state is WorkflowState.FAILED
+            and terminal.state_version == request.expected_running_state_version + 1
+        ):
+            raise AuthorityConflictError("STOP_PRESERVE: WorkRun is not durably failed")
+        workspace = self._workspace_settlement.quarantine(workspace_preflight)
+        return InvalidHistoryDispositionResult(
+            abort=abort,
+            work_run=terminal,
+            workspace=workspace,
+            failure_authority_ref=failure_authority_ref,
+        )
+
+    async def _require_existing_failure_transition(
+        self,
+        request: InvalidHistoryDispositionRequest,
+        current: WorkRun,
+        abort: InvalidHistoryAbortResult,
+        failure_authority_ref: str,
+    ) -> None:
+        transition_request_id = _stable_id(
+            "stockroom-invalid-history-failure",
+            request.work_run_id,
+            request.execution_attempt_id,
+            abort.event_identity,
+            str(request.expected_running_state_version),
+        )
+        async with self._session_factory() as session:
+            verified = await verify_historical_transition_provenance(
+                session, transition_request_id
+            )
+        historical = verified.request
+        failure_observations = tuple(
+            observation
+            for observation in verified.evaluation.guards
+            if observation.guard_id is GuardId.G_FAILURE_TERMINAL
+        )
+        if (
+            historical.project_id != current.project_id
+            or historical.task_contract_id != current.task_contract_id
+            or historical.task_contract_version != current.task_contract_version
+            or historical.work_run_id != current.work_run_id
+            or historical.observed_state is not WorkflowState.RUNNING
+            or historical.observed_state_version
+            != request.expected_running_state_version
+            or historical.target_state is not WorkflowState.FAILED
+            or historical.requester_identity != self._requester_identity
+            or historical.requester_type is not RequesterType.SYSTEM
+            or historical.runtime_mode is not current.runtime_mode
+            or verified.decision.outcome is not DecisionOutcome.ADMITTED
+            or verified.decision.resulting_state is not WorkflowState.FAILED
+            or verified.decision.resulting_state_version != current.state_version
+            or len(failure_observations) != 1
+            or not failure_observations[0].satisfied
+            or failure_observations[0].reason != INVALID_HISTORY_ABORT_REASON
+            or failure_observations[0].authority_ref != failure_authority_ref
+        ):
+            raise AuthorityConflictError(
+                "STOP_PRESERVE: WorkRun failure provenance is nonmatching"
+            )
+
+    @staticmethod
+    def _require_preflight_authority(
+        request: InvalidHistoryDispositionRequest,
+        current: WorkRun | None,
+        snapshot: WorkflowSnapshot,
+        attempt: ExecutionAttemptRef,
+    ) -> None:
+        fingerprint = invalid_history_abort_provenance_fingerprint(
+            work_run_id=request.work_run_id,
+            attempt_id=request.execution_attempt_id,
+            expected_state_version=request.expected_running_state_version,
+            expected_execution_version=request.expected_execution_version,
+            reason_code=request.reason_code,
+            provenance_refs=request.provenance_refs,
+        )
+        if (
+            current is None
+            or request.reason_code != INVALID_HISTORY_ABORT_REASON
+            or request.provenance_fingerprint != fingerprint
+            or snapshot.run_id != request.work_run_id
+            or snapshot.state is not current.state
+            or snapshot.state_version != current.state_version
+            or attempt.execution_attempt_id != request.execution_attempt_id
+            or attempt.work_run_id != request.work_run_id
+            or attempt.project_id != current.project_id
+            or attempt.task_contract_id != current.task_contract_id
+            or attempt.task_contract_version != current.task_contract_version
+            or attempt.runtime_mode is not current.runtime_mode
+        ):
+            raise AuthorityConflictError("STOP_PRESERVE: invalid-history authority mismatch")
+        initial = (
+            current.state is WorkflowState.RUNNING
+            and current.state_version == request.expected_running_state_version
+            and attempt.status is ExecutionStatus.NOT_STARTED
+            and attempt.execution_version == request.expected_execution_version
+            and attempt.state is WorkflowState.READY
+            and attempt.state_version == request.expected_running_state_version - 1
+        )
+        partial = (
+            attempt.status is ExecutionStatus.EXECUTION_FAILED
+            and attempt.execution_version == request.expected_execution_version + 1
+            and attempt.state is WorkflowState.RUNNING
+            and attempt.state_version == request.expected_running_state_version
+            and (
+                (
+                    current.state is WorkflowState.RUNNING
+                    and current.state_version == request.expected_running_state_version
+                )
+                or (
+                    current.state is WorkflowState.FAILED
+                    and current.state_version == request.expected_running_state_version + 1
+                )
+            )
+        )
+        if not (initial or partial):
+            raise AuthorityConflictError("STOP_PRESERVE: nonmatching disposition stage")
+
+
+def _invalid_history_failure_authority_ref(
+    *,
+    run_id: str,
+    attempt_id: str,
+    abort_event_identity: str,
+    abort_execution_version: int,
+    running_state_version: int,
+) -> str:
+    payload = {
+        "failure_class": INVALID_HISTORY_ABORT_REASON,
+        "run_id": run_id,
+        "attempt_id": attempt_id,
+        "abort_event_identity": abort_event_identity,
+        "abort_execution_version": abort_execution_version,
+        "running_state": WorkflowState.RUNNING.value,
+        "running_state_version": running_state_version,
+    }
+    return f"stockroom-invalid-history-failure:v1:{canonical_sha256(payload)}"
 
 
 @dataclass(frozen=True, slots=True, eq=False)

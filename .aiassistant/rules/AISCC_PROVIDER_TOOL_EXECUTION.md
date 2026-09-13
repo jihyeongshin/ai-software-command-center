@@ -85,11 +85,26 @@ EXECUTION_FAILED
 |---|---|---|---|
 | `EXECUTION_ATTEMPT_CREATED` | no new attempt | `NOT_STARTED` | authoritative WorkRun is `READY`; exact start-control authorization, Task/profile/mode and attempt lineage are current; no other nonterminal attempt |
 | `EXECUTION_STARTED` | `NOT_STARTED` | `RUNNING` | exact prepared attempt was referenced by admitted `READY -> RUNNING`; authoritative WorkRun is now `RUNNING` at the bound version; no side effect has started; execution CAS succeeds |
+| `EXECUTION_ABORTED_INVALID_HISTORY` | `NOT_STARTED` | `EXECUTION_FAILED` | same exact WorkRun/attempt lineage; current WorkRun is `RUNNING` at the exact expected state version; exact expected execution version; zero execution operations; no execution output/submission, admitted runtime evidence, or Judgment; trusted source-owned immutable provenance proves an execution side effect occurred before `EXECUTION_STARTED`; required reason is `INVALID_HISTORY_SIDE_EFFECT_BEFORE_EXECUTION_START`; atomic lock/recheck and CAS succeed |
 | `EXECUTION_COMPLETED` | `RUNNING` | `EXECUTOR_COMPLETED` | final `AgentOutputRef` and `ExecutionSubmissionRef` are durably created; every admitted operation has known terminal outcome; required cleanup/sanitization is complete; WorkRun remains the exact bound `RUNNING/version` |
 | `EXECUTION_FAILED` | `RUNNING` | `EXECUTION_FAILED` | fatal, cancelled, retry-exhausted, unknown-outcome, workflow-left-running, or recovery-conflict event is durably classified; new side effects are closed |
 
 No other same-attempt status transition is valid. Duplicate exact events return the existing event and
 projection. A second different terminal event is an authority conflict.
+
+`EXECUTION_ABORTED_INVALID_HISTORY` is the only start-free terminalization edge. It disposes an
+attempt whose immutable history proves that an execution side effect occurred before execution start.
+It appends one typed event, preserves the original `NOT_STARTED` creation/`READY` causal state in the
+event metadata, separately binds the current `RUNNING` WorkRun state/version, records the exact reason
+and immutable provenance refs, and projects the attempt to `EXECUTION_FAILED`. It never fabricates a
+provider output or `ExecutionSubmissionRef`.
+
+This event is not `EXECUTION_STARTED`, a generic cancellation edge, or legal merely because a timeout
+occurred. It is forbidden after provider operation creation, does not authorize retry, and cannot be
+requested through the generic lifecycle transition API or by direct database/projection editing.
+Ordinary `EXECUTION_FAILED` from `RUNNING` remains unchanged. Exact retry of the same abort identity,
+versions, reason, and provenance returns the existing authoritative result without another event;
+any changed reason, identity, version, or provenance is an authority conflict.
 
 `EXECUTION_ATTEMPT_CREATED` is an inert start preparation admitted under P1-3
 `START_EXECUTION_CONTROL`. It supplies a candidate ref that P1-4 System authority may validate when

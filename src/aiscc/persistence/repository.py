@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from aiscc.contracts.canonical_json import canonical_sha256
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot, WorkflowState
 from aiscc.persistence.models import (
+    AdmittedEvidenceRow,
+    EvidenceCandidateRow,
     ExecutionAttemptRow,
     ExecutionEventRow,
     ExecutionOperationRow,
     ExecutionOutputRefRow,
+    JudgmentRow,
     OperationEventRow,
     P1_4BlockerProjectionRow,
     P1_4BlockerProvenanceRow,
@@ -74,6 +77,42 @@ from aiscc.workflow.ports import (
 
 _COUNTER_SCHEMA_VERSION = "AISCC-P1-5-DURABLE-COUNTERS-V1"
 _HISTORICAL_RECONSTRUCTION_TOKEN = object()
+INVALID_HISTORY_ABORT_EVENT = "EXECUTION_ABORTED_INVALID_HISTORY"
+INVALID_HISTORY_ABORT_REASON = "INVALID_HISTORY_SIDE_EFFECT_BEFORE_EXECUTION_START"
+
+
+def invalid_history_abort_provenance_fingerprint(
+    *,
+    work_run_id: str,
+    attempt_id: str,
+    expected_state_version: int,
+    expected_execution_version: int,
+    reason_code: str,
+    provenance_refs: tuple[str, ...],
+) -> str:
+    return canonical_sha256(
+        {
+            "schema": "AISCC_INVALID_HISTORY_ABORT_PROVENANCE_V1",
+            "work_run_id": work_run_id,
+            "execution_attempt_id": attempt_id,
+            "expected_state_version": expected_state_version,
+            "expected_execution_version": expected_execution_version,
+            "reason_code": reason_code,
+            "provenance_refs": list(provenance_refs),
+        }
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class InvalidHistoryAbortResult:
+    execution_attempt_id: str
+    work_run_id: str
+    event_id: str
+    event_identity: str
+    execution_version: int
+    status: ExecutionStatus
+    current_state: WorkflowState
+    current_state_version: int
 
 
 class HistoricalTransitionProvenanceError(AuthorityConflictError):
@@ -225,6 +264,10 @@ class PostgresExecutionRepository:
         *,
         refs: dict[str, object] | None = None,
     ) -> ExecutionStatus:
+        if event_kind == INVALID_HISTORY_ABORT_EVENT:
+            raise AuthorityConflictError(
+                "invalid-history abort requires the dedicated disposition API"
+            )
         async with self._session_factory() as session, session.begin():
             await _advisory_lock(session, f"execution-attempt:{attempt_id}")
             row = await session.scalar(
@@ -336,6 +379,209 @@ class PostgresExecutionRepository:
             if result.rowcount != 1:
                 raise AuthorityConflictError("execution projection CAS failed")
             return after
+
+    async def abort_invalid_history_attempt(
+        self,
+        *,
+        work_run_id: str,
+        attempt_id: str,
+        expected_state_version: int,
+        expected_execution_version: int,
+        reason_code: str,
+        provenance_refs: tuple[str, ...],
+        provenance_fingerprint: str,
+    ) -> InvalidHistoryAbortResult:
+        """Abort one exact pre-start side-effect history without synthesizing a start."""
+        expected_fingerprint = invalid_history_abort_provenance_fingerprint(
+            work_run_id=work_run_id,
+            attempt_id=attempt_id,
+            expected_state_version=expected_state_version,
+            expected_execution_version=expected_execution_version,
+            reason_code=reason_code,
+            provenance_refs=provenance_refs,
+        )
+        if (
+            not work_run_id
+            or not attempt_id
+            or type(expected_state_version) is not int
+            or expected_state_version < 1
+            or type(expected_execution_version) is not int
+            or expected_execution_version < 1
+            or reason_code != INVALID_HISTORY_ABORT_REASON
+            or not provenance_refs
+            or any(type(ref) is not str or not ref for ref in provenance_refs)
+            or len(provenance_fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in provenance_fingerprint)
+            or provenance_fingerprint != expected_fingerprint
+        ):
+            raise AuthorityConflictError("invalid-history abort provenance is not exact")
+        refs: dict[str, object] = {
+            "reason_code": reason_code,
+            "provenance_refs": list(provenance_refs),
+            "provenance_fingerprint": provenance_fingerprint,
+            "prior_causal_state": WorkflowState.READY.value,
+            "prior_causal_state_version": expected_state_version - 1,
+            "current_workflow_state": WorkflowState.RUNNING.value,
+            "current_workflow_state_version": expected_state_version,
+            "provider_operation_count": 0,
+        }
+        identity = _event_identity(
+            attempt_id, INVALID_HISTORY_ABORT_EVENT, expected_state_version, refs
+        )
+        async with self._session_factory() as session, session.begin():
+            await _advisory_lock(session, f"run:{work_run_id}")
+            await _advisory_lock(session, f"execution-attempt:{attempt_id}")
+            run = await session.scalar(
+                select(WorkRunRow)
+                .where(WorkRunRow.work_run_id == work_run_id)
+                .with_for_update()
+            )
+            attempt = await session.scalar(
+                select(ExecutionAttemptRow)
+                .where(ExecutionAttemptRow.execution_attempt_id == attempt_id)
+                .with_for_update()
+            )
+            if run is None or attempt is None or attempt.work_run_id != work_run_id:
+                raise AuthorityConflictError("invalid-history abort authority is missing")
+            await self._verify_attempt(session, attempt)
+            operation_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ExecutionOperationRow)
+                    .where(ExecutionOperationRow.execution_attempt_id == attempt_id)
+                )
+                or 0
+            )
+            output_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(ExecutionOutputRefRow)
+                    .where(ExecutionOutputRefRow.execution_attempt_id == attempt_id)
+                )
+                or 0
+            )
+            runtime_evidence_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AdmittedEvidenceRow)
+                    .join(
+                        EvidenceCandidateRow,
+                        EvidenceCandidateRow.candidate_id == AdmittedEvidenceRow.candidate_id,
+                    )
+                    .where(
+                        AdmittedEvidenceRow.work_run_id == work_run_id,
+                        EvidenceCandidateRow.issuer_type == "SYSTEM_RUNTIME_OBSERVATION",
+                    )
+                )
+                or 0
+            )
+            judgment_count = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(JudgmentRow)
+                    .where(JudgmentRow.work_run_id == work_run_id)
+                )
+                or 0
+            )
+            if operation_count or output_count or runtime_evidence_count or judgment_count:
+                raise AuthorityConflictError(
+                    "invalid-history abort requires empty downstream state"
+                )
+            existing = tuple(
+                await session.scalars(
+                    select(ExecutionEventRow).where(
+                        ExecutionEventRow.execution_attempt_id == attempt_id,
+                        ExecutionEventRow.event_kind == INVALID_HISTORY_ABORT_EVENT,
+                    )
+                )
+            )
+            if existing:
+                if len(existing) != 1:
+                    raise AuthorityConflictError("invalid-history abort event is ambiguous")
+                event = existing[0]
+                if (
+                    event.event_identity != identity
+                    or event.refs != refs
+                    or event.status_before != ExecutionStatus.NOT_STARTED.value
+                    or event.status_after != ExecutionStatus.EXECUTION_FAILED.value
+                    or event.execution_version_after != expected_execution_version + 1
+                    or event.causal_state != WorkflowState.RUNNING.value
+                    or event.causal_state_version != expected_state_version
+                    or attempt.status != ExecutionStatus.EXECUTION_FAILED.value
+                    or attempt.execution_version != event.execution_version_after
+                ):
+                    raise AuthorityConflictError("invalid-history abort replay conflicts")
+                return InvalidHistoryAbortResult(
+                    attempt_id,
+                    work_run_id,
+                    event.event_id,
+                    event.event_identity,
+                    attempt.execution_version,
+                    ExecutionStatus.EXECUTION_FAILED,
+                    WorkflowState(event.causal_state),
+                    event.causal_state_version,
+                )
+            if (
+                run.workflow_state != WorkflowState.RUNNING.value
+                or run.state_version != expected_state_version
+                or attempt.status != ExecutionStatus.NOT_STARTED.value
+                or attempt.execution_version != expected_execution_version
+                or attempt.task_contract_id != run.task_contract_id
+                or attempt.task_contract_version != run.task_contract_version
+                or attempt.runtime_mode != run.runtime_mode
+                or attempt.creation_state != WorkflowState.READY.value
+                or attempt.creation_state_version != expected_state_version - 1
+                or attempt.causal_state != WorkflowState.READY.value
+                or attempt.causal_state_version != expected_state_version - 1
+            ):
+                raise AuthorityConflictError("invalid-history abort state/version mismatch")
+            now = datetime.now().astimezone()
+            after = ExecutionStatus(
+                lifecycle_result(attempt.status, INVALID_HISTORY_ABORT_EVENT)
+            )
+            event = _execution_event(
+                attempt_id,
+                INVALID_HISTORY_ABORT_EVENT,
+                ExecutionStatus.NOT_STARTED,
+                after,
+                expected_execution_version + 1,
+                run,
+                refs,
+                now,
+            )
+            session.add(event)
+            await session.flush()
+            result = cast(
+                CursorResult[Any],
+                await session.execute(
+                    update(ExecutionAttemptRow)
+                    .where(
+                        ExecutionAttemptRow.execution_attempt_id == attempt_id,
+                        ExecutionAttemptRow.execution_version == expected_execution_version,
+                        ExecutionAttemptRow.status == ExecutionStatus.NOT_STARTED.value,
+                    )
+                    .values(
+                        status=after.value,
+                        execution_version=expected_execution_version + 1,
+                        latest_event_sequence=event.event_sequence,
+                        causal_state=run.workflow_state,
+                        causal_state_version=run.state_version,
+                        updated_at=now,
+                    )
+                ),
+            )
+            if result.rowcount != 1:
+                raise AuthorityConflictError("invalid-history abort projection CAS failed")
+            return InvalidHistoryAbortResult(
+                attempt_id,
+                work_run_id,
+                event.event_id,
+                event.event_identity,
+                expected_execution_version + 1,
+                after,
+                WorkflowState.RUNNING,
+                expected_state_version,
+            )
 
     async def create_operation(
         self,

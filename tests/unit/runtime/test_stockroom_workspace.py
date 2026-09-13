@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from aiscc.runtime.stockroom_workspace import StockroomWorkspace, checked_absolute, safe_component
+from aiscc.runtime.stockroom_workspace import (
+    StockroomRestartSafetySettlement,
+    StockroomWorkspace,
+    checked_absolute,
+    safe_component,
+)
 from aiscc.scenarios.runtime_models import StockroomFailure, WorkspaceOwnership
 
 
@@ -18,6 +23,18 @@ def owner(tmp_path: Path) -> StockroomWorkspace:
         (tmp_path / name).mkdir()
     (tmp_path / "repository/.git").mkdir()
     return StockroomWorkspace(
+        tmp_path / "runtime",
+        repository_root=tmp_path / "repository",
+        source_object_root=tmp_path / "repository/.git",
+        downloads_root=tmp_path / "downloads",
+    )
+
+
+def restart_owner(tmp_path: Path) -> StockroomRestartSafetySettlement:
+    for name in ("runtime", "repository", "downloads"):
+        (tmp_path / name).mkdir(exist_ok=True)
+    (tmp_path / "repository/.git").mkdir(exist_ok=True)
+    return StockroomRestartSafetySettlement(
         tmp_path / "runtime",
         repository_root=tmp_path / "repository",
         source_object_root=tmp_path / "repository/.git",
@@ -227,3 +244,88 @@ def test_destination_tamper_and_hardlink_denied(tmp_path: Path) -> None:
     except OSError as exc:
         pytest.skip(f"Host cannot create hardlinks: {type(exc).__name__}")
     assert workspace.cleanup(lease).ownership is WorkspaceOwnership.QUARANTINED
+
+
+def test_restart_safety_quarantines_exact_verified_orphan_without_lease(
+    tmp_path: Path,
+) -> None:
+    settlement = restart_owner(tmp_path)
+    target = settlement.root / "run" / "attempt"
+    target.mkdir(parents=True)
+    (target / "source").mkdir()
+    (target / "source/kept.txt").write_bytes(b"preserve-me")
+    sibling = settlement.root / "other" / "attempt"
+    sibling.mkdir(parents=True)
+    (sibling / "untouched.txt").write_bytes(b"untouched")
+
+    inspection = settlement.inspect("run", "attempt")
+    assert inspection.exists and inspection.target_identity is not None
+    assert not hasattr(settlement, "allocate")
+    verdict = settlement.quarantine(inspection)
+
+    assert verdict.status == "QUARANTINED"
+    assert verdict.original_identity == inspection.target_identity
+    assert verdict.inventory_fingerprint == inspection.inventory_fingerprint
+    assert verdict.quarantine_target is not None
+    assert (verdict.quarantine_target / "source/kept.txt").read_bytes() == b"preserve-me"
+    assert not target.exists()
+    assert (sibling / "untouched.txt").read_bytes() == b"untouched"
+
+    repeated = settlement.inspect("run", "attempt")
+    assert repeated.exists is False
+    assert repeated.inventory_fingerprint == inspection.inventory_fingerprint
+    repeated_verdict = settlement.quarantine(repeated)
+    assert repeated_verdict.status == "ALREADY_QUARANTINED"
+    assert repeated_verdict.quarantine_target == verdict.quarantine_target
+
+
+def test_restart_safety_requires_immediately_rechecked_fingerprint(tmp_path: Path) -> None:
+    settlement = restart_owner(tmp_path)
+    target = settlement.root / "run" / "attempt"
+    target.mkdir(parents=True)
+    payload = target / "payload"
+    payload.write_bytes(b"before")
+    inspection = settlement.inspect("run", "attempt")
+    payload.write_bytes(b"after")
+
+    with pytest.raises(StockroomFailure, match="QUARANTINE_DENIED"):
+        settlement.quarantine(inspection)
+    assert payload.read_bytes() == b"after"
+
+    current = settlement.inspect("run", "attempt")
+    forged = replace(current, inventory_fingerprint="0" * 64)
+    with pytest.raises(StockroomFailure, match="QUARANTINE_DENIED"):
+        settlement.quarantine(forged)
+    assert target.exists()
+
+
+def test_restart_safety_denies_symlink_and_ambiguous_quarantine(tmp_path: Path) -> None:
+    settlement = restart_owner(tmp_path)
+    target = settlement.root / "run" / "attempt"
+    target.mkdir(parents=True)
+    link = target / "escape"
+    try:
+        link.symlink_to(tmp_path / "downloads", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"Host cannot create directory symlinks: {type(exc).__name__}")
+    with pytest.raises(StockroomFailure, match="LINK_OR_REPARSE_DENIED"):
+        settlement.inspect("run", "attempt")
+    assert target.exists()
+
+    link.unlink()
+    first = settlement.quarantine(settlement.inspect("run", "attempt"))
+    assert first.quarantine_target is not None
+    prefix = first.quarantine_target.name.rsplit("--", 1)[0] + "--"
+    (first.quarantine_target.parent / f"{prefix}{'0' * 16}").mkdir()
+    with pytest.raises(StockroomFailure, match="QUARANTINE_DENIED"):
+        settlement.inspect("run", "attempt")
+
+
+def test_restart_safety_absent_is_truthful_and_non_mutating(tmp_path: Path) -> None:
+    settlement = restart_owner(tmp_path)
+    inspection = settlement.inspect("run", "attempt")
+    assert inspection.exists is False and inspection.target_identity is None
+    verdict = settlement.quarantine(inspection)
+    assert verdict.status == "ABSENT"
+    assert verdict.quarantine_target is None
+    assert not inspection.target.exists()

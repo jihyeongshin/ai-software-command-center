@@ -37,6 +37,11 @@ from aiscc.persistence.models import (
     PrivateProviderProtocolStateRow,
     WorkRunRow,
 )
+from aiscc.persistence.repository import (
+    INVALID_HISTORY_ABORT_EVENT,
+    INVALID_HISTORY_ABORT_REASON,
+    invalid_history_abort_provenance_fingerprint,
+)
 from aiscc.providers.authority import (
     ExecutionReferenceAuthority,
     LeaseBoundSecretResolver,
@@ -85,6 +90,226 @@ from aiscc.workflow.models import (
 
 def run(coroutine: Any) -> Any:
     return asyncio.run(coroutine)
+
+
+@pytest.mark.postgres
+def test_invalid_history_abort_is_exact_append_only_and_idempotent() -> None:
+    database_url = os.environ["AISCC_TEST_DATABASE_URL"]
+    engine = create_engine(database_url)
+    factory = create_session_factory(engine)
+    unique = uuid4().hex
+
+    async def create_invalid_shape(run_id: str, attempt_id: str) -> None:
+        now = datetime.now(UTC)
+        async with factory() as session, session.begin():
+            session.add(
+                WorkRunRow(
+                    work_run_id=run_id,
+                    project_id="invalid-history-project",
+                    task_contract_id="invalid-history-task",
+                    task_contract_version="1",
+                    workflow_state=WorkflowState.READY.value,
+                    state_version=1,
+                    runtime_mode=RuntimeMode.OWNER_SELF_DOGFOOD.value,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        repository = PostgresExecutionRepository(factory)
+        await repository.create_attempt(
+            attempt_id=attempt_id,
+            work_run_id=run_id,
+            profile_id="invalid-history-profile",
+            profile_version="1",
+            registry_id="invalid-history-registry",
+            registry_version="1",
+        )
+        async with factory() as session, session.begin():
+            await session.execute(
+                text(
+                    "UPDATE work_runs SET workflow_state='RUNNING', state_version=2 "
+                    "WHERE work_run_id=:run_id"
+                ),
+                {"run_id": run_id},
+            )
+
+    async def scenario() -> None:
+        repository = PostgresExecutionRepository(factory)
+        run_id = f"invalid-history-run-{unique}"
+        attempt_id = f"invalid-history-attempt-{unique}"
+        await create_invalid_shape(run_id, attempt_id)
+        refs = ("source-contract:invalid-history:test",)
+        fingerprint = invalid_history_abort_provenance_fingerprint(
+            work_run_id=run_id,
+            attempt_id=attempt_id,
+            expected_state_version=2,
+            expected_execution_version=1,
+            reason_code=INVALID_HISTORY_ABORT_REASON,
+            provenance_refs=refs,
+        )
+
+        with pytest.raises(AuthorityConflictError, match="dedicated disposition API"):
+            await repository.transition_attempt(attempt_id, INVALID_HISTORY_ABORT_EVENT)
+        with pytest.raises(AuthorityConflictError, match="state/version mismatch"):
+            await repository.abort_invalid_history_attempt(
+                work_run_id=run_id,
+                attempt_id=attempt_id,
+                expected_state_version=3,
+                expected_execution_version=1,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=refs,
+                provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                    work_run_id=run_id,
+                    attempt_id=attempt_id,
+                    expected_state_version=3,
+                    expected_execution_version=1,
+                    reason_code=INVALID_HISTORY_ABORT_REASON,
+                    provenance_refs=refs,
+                ),
+            )
+        with pytest.raises(AuthorityConflictError, match="state/version mismatch"):
+            await repository.abort_invalid_history_attempt(
+                work_run_id=run_id,
+                attempt_id=attempt_id,
+                expected_state_version=2,
+                expected_execution_version=2,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=refs,
+                provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                    work_run_id=run_id,
+                    attempt_id=attempt_id,
+                    expected_state_version=2,
+                    expected_execution_version=2,
+                    reason_code=INVALID_HISTORY_ABORT_REASON,
+                    provenance_refs=refs,
+                ),
+            )
+
+        result = await repository.abort_invalid_history_attempt(
+            work_run_id=run_id,
+            attempt_id=attempt_id,
+            expected_state_version=2,
+            expected_execution_version=1,
+            reason_code=INVALID_HISTORY_ABORT_REASON,
+            provenance_refs=refs,
+            provenance_fingerprint=fingerprint,
+        )
+        duplicate = await repository.abort_invalid_history_attempt(
+            work_run_id=run_id,
+            attempt_id=attempt_id,
+            expected_state_version=2,
+            expected_execution_version=1,
+            reason_code=INVALID_HISTORY_ABORT_REASON,
+            provenance_refs=refs,
+            provenance_fingerprint=fingerprint,
+        )
+        assert duplicate == result
+        assert result.status is ExecutionStatus.EXECUTION_FAILED
+        assert result.execution_version == 2
+        async with factory() as session:
+            attempt = await session.get(ExecutionAttemptRow, attempt_id)
+            events = tuple(
+                await session.scalars(
+                    select(ExecutionEventRow)
+                    .where(ExecutionEventRow.execution_attempt_id == attempt_id)
+                    .order_by(ExecutionEventRow.event_sequence)
+                )
+            )
+        assert attempt is not None
+        assert (attempt.status, attempt.execution_version) == ("EXECUTION_FAILED", 2)
+        assert [event.event_kind for event in events] == [
+            "EXECUTION_ATTEMPT_CREATED",
+            INVALID_HISTORY_ABORT_EVENT,
+        ]
+        abort_event = events[-1]
+        assert abort_event.event_identity == result.event_identity
+        assert (abort_event.causal_state, abort_event.causal_state_version) == ("RUNNING", 2)
+        assert abort_event.refs["prior_causal_state"] == "READY"
+        assert abort_event.refs["prior_causal_state_version"] == 1
+        assert abort_event.refs["current_workflow_state"] == "RUNNING"
+        assert abort_event.refs["current_workflow_state_version"] == 2
+
+        changed_refs = ("source-contract:changed",)
+        with pytest.raises(AuthorityConflictError, match="replay conflicts"):
+            await repository.abort_invalid_history_attempt(
+                work_run_id=run_id,
+                attempt_id=attempt_id,
+                expected_state_version=2,
+                expected_execution_version=1,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=changed_refs,
+                provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                    work_run_id=run_id,
+                    attempt_id=attempt_id,
+                    expected_state_version=2,
+                    expected_execution_version=1,
+                    reason_code=INVALID_HISTORY_ABORT_REASON,
+                    provenance_refs=changed_refs,
+                ),
+            )
+
+        operation_run = f"invalid-history-operation-run-{unique}"
+        operation_attempt = f"invalid-history-operation-attempt-{unique}"
+        await create_invalid_shape(operation_run, operation_attempt)
+        async with factory() as session, session.begin():
+            now = datetime.now(UTC)
+            session.add(
+                ExecutionOperationRow(
+                    operation_id=f"invalid-history-operation-{unique}",
+                    execution_attempt_id=operation_attempt,
+                    operation_kind=OperationKind.PROVIDER.value,
+                    operation_fingerprint="a" * 64,
+                    current_phase=ExecutionOperationPhase.PREPARED.value,
+                    outcome=None,
+                    resource_identity="invalid-history-resource",
+                    call_ordinal=1,
+                    parent_operation_id=None,
+                    latest_event_sequence=1,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        operation_refs = ("source-contract:operation-present",)
+        with pytest.raises(AuthorityConflictError, match="empty downstream state"):
+            await repository.abort_invalid_history_attempt(
+                work_run_id=operation_run,
+                attempt_id=operation_attempt,
+                expected_state_version=2,
+                expected_execution_version=1,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=operation_refs,
+                provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                    work_run_id=operation_run,
+                    attempt_id=operation_attempt,
+                    expected_state_version=2,
+                    expected_execution_version=1,
+                    reason_code=INVALID_HISTORY_ABORT_REASON,
+                    provenance_refs=operation_refs,
+                ),
+            )
+
+        with pytest.raises(AuthorityConflictError, match="authority is missing"):
+            await repository.abort_invalid_history_attempt(
+                work_run_id=f"foreign-run-{unique}",
+                attempt_id=operation_attempt,
+                expected_state_version=2,
+                expected_execution_version=1,
+                reason_code=INVALID_HISTORY_ABORT_REASON,
+                provenance_refs=operation_refs,
+                provenance_fingerprint=invalid_history_abort_provenance_fingerprint(
+                    work_run_id=f"foreign-run-{unique}",
+                    attempt_id=operation_attempt,
+                    expected_state_version=2,
+                    expected_execution_version=1,
+                    reason_code=INVALID_HISTORY_ABORT_REASON,
+                    provenance_refs=operation_refs,
+                ),
+            )
+
+    try:
+        run(scenario())
+    finally:
+        run(engine.dispose())
 
 
 class DurableSyntheticDispatcher:
