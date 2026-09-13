@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## AISCC-P2-3-S1-INVALID-HISTORY-ABORT-DISPOSITION-V1
+
+- decision_status: `FINAL_ADMITTED / PERSISTED`
+- accepted_result_zip_sha256: `b1dc8f91d1ba01c0198953fad70ace3d3c45276fe279d35c50521f2ad02b1381`
+- persistence_commit_a: `4341138dde5fbea487f10a8af256f78c5dcf37f3`
+- in_place_continuation: `FORBIDDEN_BY_CURRENT_CONTRACT`
+- event: `EXECUTION_ABORTED_INVALID_HISTORY`
+- lifecycle_edge: `NOT_STARTED -> EXECUTION_FAILED`
+- reason: `INVALID_HISTORY_SIDE_EFFECT_BEFORE_EXECUTION_START`
+- source_owned_disposition_order: attempt abort -> authentic `G_FAILURE_TERMINAL` -> WorkRun `RUNNING -> FAILED` -> restart-safe workspace quarantine
+- evidence_and_judgment: none
+- post_disposition_retry: new WorkRun lineage only; not authorized by this entry
+- retained_0036_state: not disposed; private runtime action remains not authorized
+
 각 entry는 decision과 implementation/verification evidence를 분리한다. Executor report나 local commit은 Human acceptance 또는 external runtime proof를 대신하지 않는다.
 
 ## AISCC-ORCHESTRATION-CORE-V1

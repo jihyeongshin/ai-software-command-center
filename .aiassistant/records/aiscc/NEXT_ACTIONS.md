@@ -1,5 +1,45 @@
 # AISCC Next Actions
 
+## Immediate P2-3 authority (20260913_1343)
+
+The invalid-history abort/disposition candidate is persisted at Commit A `4341138dde5fbea487f10a8af256f78c5dcf37f3`; its accepted result ZIP SHA-256 is `b1dc8f91d1ba01c0198953fad70ace3d3c45276fe279d35c50521f2ad02b1381`. This entry supersedes the earlier immediate recovery-design action below. That earlier text remains as history and does not authorize runtime action.
+
+```text
+phase:
+P2-3
+work_type:
+PRIVATE_S1_INVALID_HISTORY_DISPOSITION_EXECUTION
+title:
+P2-3 stranded S1 invalid-history disposition execution
+status:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+subject:
+existing exact 0036 run/attempt only
+expected preflight:
+WorkRun RUNNING/v2
+ExecutionAttempt NOT_STARTED
+execution_operations 0
+runtime evidence absent
+Judgment absent
+exact materialized workspace independently inspectable
+no running transient
+no later state change
+authorized later sequence:
+read-only preflight first
+-> exact invalid-history disposition only if all preconditions match
+-> attempt EXECUTION_FAILED
+-> WorkRun FAILED
+-> exact workspace quarantine/ABSENT verdict
+forbidden before later Browser authorization:
+new run/attempt
+provider/tool execution
+delayed EXECUTION_STARTED
+READY -> RUNNING replay
+DB-direct repair
+broad cleanup
+evidence/Judgment
+```
+
 Current P2-3 authority (20260913_1102): execution-start lifecycle correction and provider fixture alignment are FINAL_ADMITTED / PERSISTED at Commit A a4eb36611dca8d504610d9e3091950b0f32c20e7. Existing 0036 S1 is HOLD / PRESERVED; immediate action is PRIVATE_S1_RECOVERY_DESIGN, ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED. Prior readiness and execution-entry descriptions retain historical meaning and do not authorize replay or recovery.
 
 이 문서는 stable roadmap이다. per-turn execution log와 terminal judgment는 Cycle Record에 둔다.
