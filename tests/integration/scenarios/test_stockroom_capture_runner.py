@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from aiscc.bootstrap import build_stockroom_production
 from aiscc.contracts.security import ResourceDomain, SecurityAdmissionDecision
-from aiscc.contracts.workflow import RuntimeMode, WorkflowState
+from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot, WorkflowState
 from aiscc.evidence.models import EvidenceSetEvaluationRef
 from aiscc.judgment.models import JudgmentEvidenceBasisKind
 from aiscc.persistence import create_engine, create_session_factory
@@ -26,6 +26,7 @@ from aiscc.persistence.models import (
     EvidenceRequirementRow,
     EvidenceRequirementSetRow,
     ExecutionAttemptRow,
+    ExecutionEventRow,
     ExecutionOutputRefRow,
     JudgmentPolicyRow,
     JudgmentRow,
@@ -37,7 +38,12 @@ from aiscc.providers.local_deterministic import (
     STOCKROOM_SUMMARY,
     LocalDeterministicProvider,
 )
-from aiscc.providers.models import canonical_sha256
+from aiscc.providers.models import (
+    ExecutionAttemptRef,
+    ExecutionStatus,
+    ExecutionSubmissionRef,
+    canonical_sha256,
+)
 from aiscc.providers.service import AgentExecutionService
 from aiscc.providers.stockroom_tool import StockroomSummaryDispatcher
 from aiscc.runtime.docker import StockroomCancellation, StockroomDockerRunner
@@ -54,21 +60,28 @@ from aiscc.scenarios.runtime_models import (
 )
 from aiscc.scenarios.stockroom_production import (
     StockroomAgentExecutionServiceFactory,
+    StockroomCaptureOwnerAdapter,
     StockroomMaterializerFactory,
     StockroomSecurityAuthorization,
+    _CurrentAttemptReader,
+    _CurrentBinding,
     _derive_runtime_summary_observation,
     load_stockroom_evidence_config,
     load_stockroom_human_config,
     load_stockroom_judgment_config,
 )
-from aiscc.workflow.guards import GUARD_OWNER_POLICY
+from aiscc.workflow.evaluator import TransitionEvaluator
+from aiscc.workflow.guards import GUARD_OWNER_POLICY, P1_4GuardAuthority
+from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.matrix import TRANSITION_MATRIX
 from aiscc.workflow.models import (
     AuthorityConflictError,
     DecisionOutcome,
+    GuardId,
     GuardSemanticOwner,
     RequesterType,
     TransitionRequest,
+    WorkRun,
 )
 from tests.unit.runtime.test_stockroom_image import synthetic_image
 from tests.unit.scenarios.test_stockroom_capture_runner import RecordingOwners, prepared_driver
@@ -84,6 +97,192 @@ def database_url() -> str:
     if not value:
         pytest.skip("AISCC_TEST_DATABASE_URL is required for PostgreSQL evidence")
     return value
+
+
+class _ExecutionStartBoundaryReached(Exception):
+    """Test-only stop before security or provider work; never an execution result."""
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "none", "workflow_denied", "start_failure", "not_started", "causal_version",
+        "causal_state", "attempt_id", "attempt_run", "snapshot_run", "snapshot_version",
+        "snapshot_state", "prepared_id", "static",
+    ],
+)
+def test_stockroom_execution_start_owner_boundary(fault, monkeypatch):
+    """Actual adapter/kernel/guard/runner with isolated in-memory persistence seams.
+
+    Durable PostgreSQL proof belongs to the production-owner test below; this test
+    exercises failures without requiring or touching any external runtime.
+    """
+    prepared = prepared_driver(SCENARIO_IDS[2] if fault == "static" else SCENARIO_IDS[0])
+    object.__setattr__(prepared.request.enrollment, "provider_profile_id", "isolated-profile")
+    object.__setattr__(prepared.request.enrollment, "provider_profile_version", "1")
+    binding = prepared.request.run_binding
+    guard_authority = P1_4GuardAuthority()
+    evaluator = TransitionEvaluator(guard_authority)
+    trace = []
+
+    class Transitions:
+        current = None
+
+        async def decide(self, request, facts, **kwargs):
+            if request.target_state is WorkflowState.RUNNING:
+                trace.append("workflow")
+                assert execution.ref.status is ExecutionStatus.NOT_STARTED
+                if fault == "workflow_denied":
+                    facts = tuple(f for f in facts if f.guard_id is not GuardId.G_SCOPE)
+            _, decision = evaluator.evaluate(request=request, current=self.current, facts=facts)
+            if decision.outcome is DecisionOutcome.ADMITTED:
+                self.current = WorkRun(
+                    project_id=request.project_id,
+                    task_contract_id=request.task_contract_id,
+                    task_contract_version=request.task_contract_version,
+                    work_run_id=request.work_run_id,
+                    state=decision.resulting_state,
+                    state_version=decision.resulting_state_version,
+                    runtime_mode=request.runtime_mode,
+                    created_at=decision.decided_at,
+                    updated_at=decision.decided_at,
+                )
+            return decision
+
+        async def get_work_run(self, work_run_id):
+            assert work_run_id == binding.run_id
+            return self.current
+
+    transitions = Transitions()
+    refs = ExecutionReferenceAuthority()
+
+    class Execution:
+        ref = None
+        starts = 0
+
+        async def create_attempt(self, **kwargs):
+            assert self.ref is None
+            assert transitions.current.state is WorkflowState.READY
+            self.ref = ExecutionAttemptRef(
+                execution_attempt_id=binding.attempt_id,
+                work_run_id=binding.run_id,
+                task_contract_id=prepared.request.scenario_id,
+                task_contract_version="1.0.0",
+                state=WorkflowState.READY,
+                state_version=1,
+                execution_version=1,
+                status=ExecutionStatus.NOT_STARTED,
+                issuer_ref=refs.issuer_ref,
+            )
+            return SimpleNamespace(
+                execution_attempt_id=binding.attempt_id,
+                work_run_id=binding.run_id,
+                task_contract_id=self.ref.task_contract_id,
+                task_contract_version=self.ref.task_contract_version,
+                causal_state="READY", causal_state_version=1, execution_version=1,
+                status="NOT_STARTED", runtime_mode=prepared.request.runtime_mode.value,
+                provider_profile_id=kwargs["profile_id"],
+                provider_profile_version=kwargs["profile_version"],
+                tool_registry_id=kwargs["registry_id"],
+                tool_registry_version=kwargs["registry_version"],
+            )
+
+        async def transition_attempt(self, attempt_id, event_kind):
+            trace.append("start")
+            self.starts += 1
+            assert self.starts == 1
+            assert attempt_id == binding.attempt_id and event_kind == "EXECUTION_STARTED"
+            assert (transitions.current.state, transitions.current.state_version) == (
+                WorkflowState.RUNNING, 2
+            )
+            if fault == "start_failure":
+                raise AuthorityConflictError("injected start failure")
+            self.ref = replace(
+                self.ref, state=WorkflowState.RUNNING, state_version=2,
+                status=ExecutionStatus.RUNNING, execution_version=2,
+            )
+            return ExecutionStatus.RUNNING
+
+        async def load_authority(self, **kwargs):
+            trace.append("reload")
+            assert kwargs == {"work_run_id": binding.run_id,
+                              "execution_attempt_id": binding.attempt_id}
+            snapshot = WorkflowSnapshot(binding.run_id, WorkflowState.RUNNING, 2)
+            mutations = {
+                "not_started": {"status": ExecutionStatus.NOT_STARTED},
+                "causal_version": {"state_version": 1},
+                "causal_state": {"state": WorkflowState.READY},
+                "attempt_id": {"execution_attempt_id": "foreign-attempt"},
+                "attempt_run": {"work_run_id": "foreign-run"},
+            }
+            snapshot_mutations = {
+                "snapshot_run": {"run_id": "foreign-run"},
+                "snapshot_version": {"state_version": 3},
+                "snapshot_state": {"state": WorkflowState.READY},
+            }
+            return (
+                replace(snapshot, **snapshot_mutations.get(fault, {})),
+                replace(self.ref, **mutations.get(fault, {})),
+            )
+
+    execution = Execution()
+    application = SimpleNamespace(
+        workflow_kernel=WorkflowKernel(transitions), execution_repository=execution,
+        execution_reference_authority=refs, p1_4_guard_authority=guard_authority,
+        project_id="isolated-lifecycle-test", requester_identity="isolated-test-owner",
+        clock=lambda: datetime(2026, 9, 13, tzinfo=UTC),
+        composition=SimpleNamespace(tool_config=SimpleNamespace(
+            registry_id="isolated-registry", registry_version="1"
+        )),
+        evidence_enrollments={prepared.request.scenario_id: SimpleNamespace(
+            requirement=SimpleNamespace(task_contract_id=prepared.request.scenario_id,
+                                        task_contract_version="1.0.0")
+        )},
+    )
+    capture = SimpleNamespace(prepared=prepared)
+    reader = _CurrentAttemptReader()
+    adapter = StockroomCaptureOwnerAdapter(application, capture, _CurrentBinding(), reader)
+    original_create = adapter.create_attempt
+
+    async def create_with_binding_check(*args):
+        result = await original_create(*args)
+        assert reader.attempt is adapter._handles[result.owner_ref]
+        execution.ref = reader.attempt
+        if fault == "prepared_id":
+            foreign = refs.register_start(replace(reader.attempt, execution_attempt_id="foreign"))
+            adapter._handles[result.owner_ref] = foreign
+        return result
+
+    monkeypatch.setattr(adapter, "create_attempt", create_with_binding_check)
+
+    async def stop_at_boundary(*args):
+        trace.append("static" if fault == "static" else "security")
+        raise _ExecutionStartBoundaryReached
+
+    monkeypatch.setattr(adapter, "seal_security_context", stop_at_boundary)
+    monkeypatch.setattr(adapter, "submit_static_policy_evidence", stop_at_boundary)
+    runner = StockroomCaptureRunner(adapter)
+    if fault in {"none", "static"}:
+        with pytest.raises(_ExecutionStartBoundaryReached):
+            run(runner.run(prepared))
+        if fault == "none":
+            assert trace == ["workflow", "start", "reload", "security"]
+            assert reader.attempt == execution.ref
+            assert reader.attempt.status is ExecutionStatus.RUNNING
+        else:
+            assert trace == ["workflow", "static"]
+            assert execution.starts == 0
+    else:
+        result = run(runner.run(prepared))
+        assert result.status.value == "STOPPED"
+        assert [p.operation for p in result.progress][-1] == "READY_TO_RUNNING"
+        assert "security" not in trace and "static" not in trace
+        assert reader.attempt.status is ExecutionStatus.NOT_STARTED
+        assert execution.starts == (0 if fault in {"workflow_denied", "prepared_id"} else 1)
+        assert transitions.current.state is (
+            WorkflowState.READY if fault in {"workflow_denied", "prepared_id"}
+            else WorkflowState.RUNNING
+        )
 
 
 def _transition_request(
@@ -252,6 +451,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
         key = (binding.run_id, binding.attempt_id)
         return bounded_returns[key]
 
+    durable_execute = AgentExecutionService.execute
     monkeypatch.setattr(StockroomMaterializer, "materialize", bounded_materialize)
     monkeypatch.setattr(LocalDeterministicProvider, "call", fail_sync("provider"))
     monkeypatch.setattr(
@@ -391,7 +591,32 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 (WorkflowState.RUNNING, 2, WorkflowState.ADMISSION_PENDING),
             ):
                 request = s2_capture.adapter._request(s2_capture.prepared, source, version, target)
+                if (source, target) == (
+                    WorkflowState.RUNNING, WorkflowState.ADMISSION_PENDING
+                ):
+                    s2_submission = application.execution_reference_authority.register_submission(
+                        ExecutionSubmissionRef(
+                            submission_id=f"bounded-s2-submission-{uuid4()}",
+                            execution_attempt_id=s2_capture.prepared.attempt_binding.attempt_id,
+                            work_run_id=request.work_run_id,
+                            task_contract_id=request.task_contract_id,
+                            task_contract_version=request.task_contract_version,
+                            state=WorkflowState.RUNNING,
+                            state_version=2,
+                            status=ExecutionStatus.EXECUTOR_COMPLETED,
+                            event_range_hash=canonical_sha256({"fixture": "bounded-s2-submission"}),
+                            issuer_ref=application.execution_reference_authority.issuer_ref,
+                        )
+                    )
                 facts = tuple(
+                    application.p1_4_guard_authority.issue_from_execution_ref(
+                        guard_id=guard,
+                        execution_ref=s2_submission,
+                        verifier=application.execution_reference_authority,
+                        request=request,
+                    )
+                    if guard is GuardId.G_EXECUTOR_SUBMISSION
+                    else
                     application.p1_4_guard_authority.issue(
                         guard_id=guard,
                         satisfied=True,
@@ -518,6 +743,9 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 WorkflowState.READY,
                 1,
             )
+            prepared_attempt = capture.adapter._current_reader.attempt
+            assert prepared_attempt.status is ExecutionStatus.NOT_STARTED
+            assert prepared_attempt.state is WorkflowState.READY
             running = await capture.adapter.request_transition(
                 capture.prepared,
                 target=WorkflowState.RUNNING,
@@ -539,10 +767,23 @@ def test_production_owner_graph_and_bounded_running_prefix(
             )
             assert (snapshot.state, snapshot.state_version) == (WorkflowState.RUNNING, 2)
             assert authentic_attempt.execution_attempt_id == attempt.owner_ref == attempt_id
+            assert authentic_attempt.status is ExecutionStatus.RUNNING
+            assert (authentic_attempt.state, authentic_attempt.state_version) == (
+                WorkflowState.RUNNING, snapshot.state_version
+            )
+            assert capture.adapter._current_reader.attempt == authentic_attempt
+            assert prepared_attempt.status is ExecutionStatus.NOT_STARTED
             async with sessions() as session:
                 persisted_attempt = await session.get(ExecutionAttemptRow, attempt_id)
                 assert persisted_attempt is not None
                 assert persisted_attempt.work_run_id == run_id
+                starts = tuple(await session.scalars(select(ExecutionEventRow).where(
+                    ExecutionEventRow.execution_attempt_id == attempt_id,
+                    ExecutionEventRow.event_kind == "EXECUTION_STARTED",
+                )))
+                assert len(starts) == 1
+                assert starts[0].refs == {}
+                assert starts[0].causal_state_version == snapshot.state_version
 
             sealed = await capture.adapter.seal_security_context(
                 capture.prepared, running.owner_ref
@@ -671,6 +912,18 @@ def test_production_owner_graph_and_bounded_running_prefix(
             execution_inputs = runtime.execution_inputs
             execution_derivation = runtime.execution_derivation
             assert type(execution_derivation.owner) is AgentExecutionService
+
+            async def reached_running_gate(*args, **kwargs):
+                counters["execution"] += 1
+                raise _ExecutionStartBoundaryReached
+
+            with monkeypatch.context() as entry_probe:
+                entry_probe.setattr(AgentExecutionService, "execute", durable_execute)
+                entry_probe.setattr(
+                    AgentExecutionService, "_recover_nonterminal_operation", reached_running_gate
+                )
+                with pytest.raises(_ExecutionStartBoundaryReached):
+                    await capture.adapter.execute(capture.prepared, materialized_call.owner_ref)
             assert execution_derivation.owner._tool_dispatcher is execution_inputs.dispatcher
             assert execution_derivation.provenance.factory_ref == execution_factory.factory_ref
             assert (
@@ -887,7 +1140,7 @@ def test_production_owner_graph_and_bounded_running_prefix(
                 "materialize": 2,
                 "provider": 0,
                 "dispatcher": 0,
-                "execution": 0,
+                "execution": 1,
             }
             assert tuple(private_runtime_root.iterdir()) == ()
         finally:

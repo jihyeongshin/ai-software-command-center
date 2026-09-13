@@ -113,6 +113,7 @@ class DurableSyntheticDispatcher:
                 "arguments": arguments,
                 "underlying_resource_requirements": [],
                 "secret_requirement": None,
+                "resolved_dispatch_context": None,
             }
         )
         return ToolOutputRef(
@@ -173,6 +174,10 @@ class SameDomainWrongResourceService(AgentExecutionService):
         selector_request: object | None,
         fingerprint: str,
         action: SecurityActionClass = SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
+        execution_attempt_id: str = "",
+        provider_profile_id: str = "",
+        provider_profile_version: str = "",
+        resolved_spec_fingerprint: str = "",
     ) -> CapabilityConsumeRequest:
         if scope == ResourceScope(ResourceDomain.FILESYSTEM, "workspace:server-owned-exact"):
             scope = ResourceScope(ResourceDomain.FILESYSTEM, "workspace:same-domain-wrong")
@@ -186,6 +191,10 @@ class SameDomainWrongResourceService(AgentExecutionService):
             selector_request=selector_request,
             fingerprint=fingerprint,
             action=action,
+            execution_attempt_id=execution_attempt_id,
+            provider_profile_id=provider_profile_id,
+            provider_profile_version=provider_profile_version,
+            resolved_spec_fingerprint=resolved_spec_fingerprint,
         )
 
 

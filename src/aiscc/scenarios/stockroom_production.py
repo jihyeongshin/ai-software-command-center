@@ -1071,6 +1071,21 @@ class StockroomCaptureOwnerAdapter:
                 request = pending
             else:
                 request = self._request(prepared, observed_state, observed_version, target)
+            start_attempt: ExecutionAttemptRef | None = None
+            if observed_state is WorkflowState.READY and target is WorkflowState.RUNNING:
+                if len(authority_refs) != 1:
+                    raise AuthorityConflictError("exact prepared execution attempt ref required")
+                prepared_attempt = self._require_handle(authority_refs[0], ExecutionAttemptRef)
+                if (
+                    prepared_attempt.execution_attempt_id != prepared.request.run_binding.attempt_id
+                    or prepared_attempt.work_run_id != prepared.request.run_binding.run_id
+                    or prepared_attempt.status is not ExecutionStatus.NOT_STARTED
+                    or prepared_attempt.state is not WorkflowState.READY
+                    or prepared_attempt.state_version != observed_version
+                ):
+                    raise AuthorityConflictError("prepared execution start binding mismatch")
+                if prepared.request.scenario_id != "stockroom-s3-policy-conflict":
+                    start_attempt = prepared_attempt
             facts: list[TrustedGuardFact] = []
             participants = list(self._pending_participants.pop(target, ()))
             for guard in sorted(
@@ -1100,7 +1115,7 @@ class StockroomCaptureOwnerAdapter:
                 request, tuple(facts), transaction_participant=participant
             )
             self._handles[decision.transition_decision_id] = decision
-            return await self._transition_result(decision, request)
+            return await self._transition_result(decision, request, start_attempt=start_attempt)
         except (AuthorityConflictError, ValueError, RuntimeError) as exc:
             return await self._failure(prepared, "DENIED", type(exc).__name__)
 
@@ -2004,7 +2019,11 @@ class StockroomCaptureOwnerAdapter:
         return OwnerCallResult(status, owner_ref, current.state, current.state_version, reason)
 
     async def _transition_result(
-        self, decision: TransitionDecision, request: TransitionRequest
+        self,
+        decision: TransitionDecision,
+        request: TransitionRequest,
+        *,
+        start_attempt: ExecutionAttemptRef | None = None,
     ) -> OwnerCallResult:
         state = decision.resulting_state or WorkflowState.READY
         if decision.outcome is not DecisionOutcome.ADMITTED:
@@ -2020,6 +2039,33 @@ class StockroomCaptureOwnerAdapter:
             raise AuthorityConflictError("admitted transition projection is missing")
         if current.state is not state or current.state_version != decision.resulting_state_version:
             raise AuthorityConflictError("transition decision/kernel snapshot mismatch")
+        if start_attempt is not None:
+            if (
+                current.work_run_id != start_attempt.work_run_id
+                or current.state is not WorkflowState.RUNNING
+                or current.state_version != start_attempt.state_version + 1
+                or decision.transition_request_id != request.transition_request_id
+            ):
+                raise AuthorityConflictError("execution start requires exact admitted RUNNING")
+            await self._app.execution_repository.transition_attempt(
+                start_attempt.execution_attempt_id, "EXECUTION_STARTED"
+            )
+            snapshot, attempt = await self._app.execution_repository.load_authority(
+                work_run_id=start_attempt.work_run_id,
+                execution_attempt_id=start_attempt.execution_attempt_id,
+            )
+            if (
+                snapshot.run_id != start_attempt.work_run_id
+                or snapshot.state is not WorkflowState.RUNNING
+                or snapshot.state_version != decision.resulting_state_version
+                or attempt.execution_attempt_id != start_attempt.execution_attempt_id
+                or attempt.work_run_id != snapshot.run_id
+                or attempt.status is not ExecutionStatus.RUNNING
+                or attempt.state is not snapshot.state
+                or attempt.state_version != snapshot.state_version
+            ):
+                raise AuthorityConflictError("post-start execution authority mismatch")
+            self._current_reader.attempt = attempt
         self._current_reader.current = WorkflowSnapshot(
             current.work_run_id, current.state, current.state_version
         )
