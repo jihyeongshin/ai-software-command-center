@@ -1,0 +1,289 @@
+{
+  "agent_claim_vs_system_admission": {
+    "HumanResult_created": false,
+    "agent_human_claim": {
+      "basis": "Static system policy evidence; no provider/tool operation",
+      "status": "NOT_APPLICABLE"
+    },
+    "evidence_admission_outcomes": [
+      {
+        "issuer_type": "SYSTEM_STATIC_PROOF",
+        "outcome": "ADMITTED",
+        "reason": "ADMITTED"
+      }
+    ],
+    "executor_claim_is_authority": false,
+    "system_admission_is_required": true
+  },
+  "blocker": {
+    "authority_revision": 1,
+    "blocked_epoch": 3,
+    "blocker_kind": "POLICY",
+    "presence": "PRESENT",
+    "reason_code": "POLICY_CONFLICT",
+    "resumability": "RESUMABLE",
+    "updated_at": "2026-09-13T16:32:54.511947Z"
+  },
+  "display_label": "Recorded Run Replay",
+  "evidence_summary": {
+    "admission_decisions": [
+      {
+        "checkpoint_ref": "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2",
+        "decided_at": "2026-09-13T16:32:54.308962Z",
+        "issuer_type": "SYSTEM_STATIC_PROOF",
+        "outcome": "ADMITTED",
+        "reason": "ADMITTED",
+        "requirement_ref": "stockroom-s3-policy-conflict:policy-conflict-static@v2",
+        "sensitivity": "PUBLIC_SAFE"
+      }
+    ],
+    "admitted": [
+      {
+        "admitted_at": "2026-09-13T16:32:54.308962Z",
+        "body_exported": false,
+        "checkpoint_ref": "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2",
+        "content_hash": "b86c4980ad64513134e45f8bbf144cd74d2acd4dfb323823cc56fd047ec31149",
+        "coverage_keys": [
+          "baseline",
+          "policy_conflict",
+          "requested_replacement"
+        ],
+        "issuer_type": "SYSTEM_STATIC_PROOF",
+        "requirement_ref": "stockroom-s3-policy-conflict:policy-conflict-static@v2",
+        "sensitivity": "PUBLIC_SAFE"
+      }
+    ],
+    "admitted_count": 1,
+    "checkpoints": [
+      {
+        "checkpoint_ref": "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2",
+        "fingerprint": "f7e5c2fec899b049a545cbf7d7ef9cdd725cc63f5a22abb3a7abce1f17ced95c",
+        "requirement_set_ref": "stockroom-s3-policy-conflict:evidence-set@v2",
+        "source_state": "RUNNING",
+        "target_state": "BLOCKED",
+        "transition_purpose_id": null,
+        "transition_purpose_version": null
+      }
+    ],
+    "raw_bodies_exported": false,
+    "rejected_count": 0,
+    "requirement_sets": [
+      {
+        "fingerprint": "3ca38ecbc3b4c0a0122f6757f34c8112310af47af954f6391553c5caa6d273e3",
+        "ordered_checkpoint_refs": [
+          "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2"
+        ],
+        "ordered_requirement_refs": [
+          "stockroom-s3-policy-conflict:policy-conflict-static@v2"
+        ],
+        "requirement_root_hash": "8592be308531a89d026abc7316e247a085e23c7e5da513cd7b9c1c6abe9cb294",
+        "requirement_set_ref": "stockroom-s3-policy-conflict:evidence-set@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "requirements": [
+      {
+        "applicable_checkpoint_refs": [
+          "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2"
+        ],
+        "evidence_type_id": "STOCKROOM_POLICY_CONFLICT",
+        "evidence_type_version": "v1",
+        "fingerprint": "045211ee47234559a05bf915a40d3462a5168f236533bee8d3f273260e99642f",
+        "freshness_kind": "WORKRUN_STATE_VERSION_SCOPED",
+        "obligation": "REQUIRED",
+        "profile": "EXECUTOR_REQUIRED",
+        "requirement_ref": "stockroom-s3-policy-conflict:policy-conflict-static@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "set_evaluations": [
+      {
+        "checkpoint_ref": "stockroom-s3-policy-conflict:POLICY_BLOCKER_EVIDENCE@v2",
+        "evaluated_at": "2026-09-13T16:32:54.432019Z",
+        "outcome": "SATISFIED",
+        "requirement_set_ref": "stockroom-s3-policy-conflict:evidence-set@v2"
+      }
+    ]
+  },
+  "executed_at_end_or_terminal_observation": "2026-09-13T16:32:54.511947Z",
+  "executed_at_start": "2026-09-13T16:32:54.148809Z",
+  "execution_summary": {
+    "attempt_created_at": "2026-09-13T16:32:54.249100Z",
+    "attempt_status": "NOT_STARTED",
+    "attempt_updated_at": "2026-09-13T16:32:54.249100Z",
+    "attempt_version": 1,
+    "events": [
+      {
+        "kind": "EXECUTION_ATTEMPT_CREATED",
+        "recorded_at": "2026-09-13T16:32:54.249100+00:00",
+        "version_after": 1
+      }
+    ],
+    "external_inference_calls": 0,
+    "external_inference_evidence_class": "BROWSER_ACCEPTED_EXECUTION_EVIDENCE; LOCAL_DETERMINISTIC_PROVIDER",
+    "operation_phases": [],
+    "provider_operation_count": 0,
+    "tool_operation_count": 0
+  },
+  "final_workflow_state": "BLOCKED",
+  "human": {
+    "authority_revision": null,
+    "bound_state": null,
+    "bound_state_version": null,
+    "opened_at": null,
+    "presence": "NONE",
+    "purpose_id": null,
+    "purpose_version": null,
+    "required": false,
+    "result_count": 0,
+    "result_status": "NONE",
+    "state": "NOT_REQUIRED",
+    "status": null,
+    "suspension_status": null,
+    "updated_at": null
+  },
+  "judgment": {
+    "authority_revision": null,
+    "issued_at": null,
+    "kind": "NONE",
+    "owner_policy": null,
+    "presence": "NONE",
+    "reason_code": null,
+    "state_version": null,
+    "status": "NONE"
+  },
+  "live": false,
+  "no_inference_notice": "No LLM inference is performed while viewing this replay.",
+  "orchestrator": {
+    "commit_evidence_class": "ACCEPTED_GOVERNANCE_PLUS_EXACT_GIT_SOURCE_PROVENANCE",
+    "commit_not_read_from_durable_execution_column": true,
+    "execution_commit": "a1c934ea75906a548f2bc4adc777c2a0ecc99be5"
+  },
+  "public_admission": "CANONICAL_CORPUS_ACCEPTED_PUBLIC_RELEASE_PENDING",
+  "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+  "replay_id": "stockroom-recorded-1cbcf87ed3a94f32e1988883",
+  "replay_kind": "RECORDED_RUN_REPLAY",
+  "scenario": {
+    "id": "stockroom-s3-policy-conflict",
+    "version": "1.0.0"
+  },
+  "schema_id": "AISCC-RECORDED-RUN-REPLAY-V1",
+  "source_run_fingerprint_sha256": "1cbcf87ed3a94f32e1988883002805d315937a8f050538a5c1c286feddd8e9fa",
+  "state_version": 3,
+  "synthetic_repository": {
+    "commit": "05185c57a6265a4002050ce25cdfde3dc87e9779",
+    "name": "synthetic-stockroom",
+    "source_aggregate_sha256": "be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d"
+  },
+  "timestamp_basis": {
+    "end_or_terminal_observation": "Last admitted durable transition decision.decided_at; S4 denotes entry into pending Human state, not a Human decision",
+    "start": "First durable workflow transition request.created_at"
+  },
+  "transition_trace": [
+    {
+      "decided_at": "2026-09-13T16:32:54.166004Z",
+      "evaluated_at": "2026-09-13T16:32:54.166004Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T16:32:54.148809Z",
+      "resulting_state": "READY",
+      "resulting_state_version": 1,
+      "sequence": 1,
+      "source_state": null,
+      "source_state_version": 0,
+      "target_state": "READY"
+    },
+    {
+      "decided_at": "2026-09-13T16:32:54.282939Z",
+      "evaluated_at": "2026-09-13T16:32:54.282939Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_EXECUTION_STARTED",
+          "outcome": "PASS",
+          "reason": "P1_5_EXECUTION_REF_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T16:32:54.269332Z",
+      "resulting_state": "RUNNING",
+      "resulting_state_version": 2,
+      "sequence": 2,
+      "source_state": "READY",
+      "source_state_version": 1,
+      "target_state": "RUNNING"
+    },
+    {
+      "decided_at": "2026-09-13T16:32:54.511947Z",
+      "evaluated_at": "2026-09-13T16:32:54.511947Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_BLOCKER",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_BLOCKER_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T16:32:54.495311Z",
+      "resulting_state": "BLOCKED",
+      "resulting_state_version": 3,
+      "sequence": 3,
+      "source_state": "RUNNING",
+      "source_state_version": 2,
+      "target_state": "BLOCKED"
+    }
+  ],
+  "truthful_notice": "This is a replay of a previously executed AISCC workflow.",
+  "viewing_llm_inference_calls": 0
+}
