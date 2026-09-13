@@ -1,5 +1,47 @@
 # AISCC Next Actions
 
+## Immediate P2-3 authority (20260913_1633)
+
+This entry supersedes the earlier immediate action below while preserving it as history. It does not authorize runtime action.
+
+```text
+phase:
+P2-3
+
+work_type:
+PRIVATE_S1_INVALID_HISTORY_DISPOSITION_EXECUTION_RETRY
+
+title:
+P2-3 stranded S1 disposition execution via dedicated builder
+
+status:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+
+subject:
+exact retained 0036 run/attempt only
+
+required builder:
+build_stockroom_invalid_history_disposition
+
+required preflight:
+reconstruct exact private root authority
+verify WorkRun RUNNING/v2
+verify attempt NOT_STARTED/v1 causal READY-v1
+verify zero operations/outputs/evidence/Judgment
+verify active historical workspace/fingerprint
+verify no running Stockroom transient
+
+forbidden before later Browser authorization:
+full production builder
+new run/attempt
+provider/tool execution
+delayed EXECUTION_STARTED
+READY→RUNNING replay
+DB-direct repair
+broad cleanup
+evidence/Judgment
+```
+
 ## Immediate P2-3 authority (20260913_1343)
 
 The invalid-history abort/disposition candidate is persisted at Commit A `4341138dde5fbea487f10a8af256f78c5dcf37f3`; its accepted result ZIP SHA-256 is `b1dc8f91d1ba01c0198953fad70ace3d3c45276fe279d35c50521f2ad02b1381`. This entry supersedes the earlier immediate recovery-design action below. That earlier text remains as history and does not authorize runtime action.

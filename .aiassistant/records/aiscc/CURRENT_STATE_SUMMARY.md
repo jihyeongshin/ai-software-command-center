@@ -1,5 +1,53 @@
 # AISCC Current State Summary
 
+## Current P2-3 authority (20260913_1633)
+
+This entry supersedes the earlier current-authority summary below while preserving it as history.
+
+```text
+P2-3:
+IN_PROGRESS
+
+invalid-history abort contract:
+FINAL_ADMITTED / PERSISTED
+
+source-owned invalid-history disposition:
+FINAL_ADMITTED / PERSISTED
+
+disposition-only composition entrypoint:
+FINAL_ADMITTED / PERSISTED
+
+entrypoint:
+build_stockroom_invalid_history_disposition
+
+accepted result ZIP:
+620ffa448306c0f6486658cb8807e1887206311c2198be7d100c9f30f59ce4d1
+
+scenario:
+57 / 57 PASS
+
+provider persistence:
+24 / 24 PASS
+
+workflow handoff:
+3 / 3 PASS
+
+unit:
+745 passed / 3 skipped
+
+0036 durable S1:
+HOLD / PRESERVED / NOT YET DISPOSED
+
+private disposition execution retry:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+
+legacy 1400 active Task:
+NON_OWNED / PRESERVED
+
+actual Commit A:
+7e2ea251f88ca07c6fd1bde38f73956f8885adbe
+```
+
 ## Current P2-3 authority (20260913_1343)
 
 This projection supersedes the 20260913_1102 current projection only as the current authority. Prior accepted and persisted history below retains its historical meaning. No private runtime was reinspected and no test was rerun during this reconciliation.

@@ -1,5 +1,36 @@
 # AISCC Decision Register
 
+## AISCC-P2-3-S1-DISPOSITION-ONLY-COMPOSITION-V1
+
+```text
+decision_id:
+AISCC-P2-3-S1-DISPOSITION-ONLY-COMPOSITION-V1
+
+status:
+FINAL_ADMITTED / PERSISTED
+
+accepted result ZIP:
+620ffa448306c0f6486658cb8807e1887206311c2198be7d100c9f30f59ce4d1
+
+actual Commit A:
+7e2ea251f88ca07c6fd1bde38f73956f8885adbe
+
+dedicated public builder:
+build_stockroom_invalid_history_disposition
+
+full production builder:
+UNCHANGED
+
+StockroomWorkspace empty-root invariant:
+PRESERVED
+
+private runtime disposition:
+NOT EXECUTED
+
+next:
+separate exact private-runtime disposition retry
+```
+
 ## AISCC-P2-3-S1-INVALID-HISTORY-ABORT-DISPOSITION-V1
 
 - decision_status: `FINAL_ADMITTED / PERSISTED`
