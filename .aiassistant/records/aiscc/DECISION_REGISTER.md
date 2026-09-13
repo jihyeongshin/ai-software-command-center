@@ -1021,3 +1021,47 @@ separate exact Browser-issued private S1 execution Task
 ```
 
 Authority: `.aiassistant/reports/aiscc/20260912_2334_aiscc-p2-3-s1-producer-provenance-source-final-acceptance-judgment-1.md` and `.aiassistant/records/aiscc/cycles/20260912_2334_aiscc-p2-3-s1-producer-provenance-source-final-acceptance-persistence-entry-1.cycle.md`. Accepted verification is reused, not rerun; runtime admission is not implied.
+
+## AISCC-P2-3-S1-EXECUTION-START-LIFECYCLE-CORRECTION-V1
+
+```text
+decision_id:
+AISCC-P2-3-S1-EXECUTION-START-LIFECYCLE-CORRECTION-V1
+
+decision_status:
+FINAL_ADMITTED / PERSISTED
+
+Browser accepted result ZIP:
+50dce7aa4ad298021848a9ac96adf32c5ffacd0fc403a3ae5a7f54273283500e
+
+actual Commit A:
+a4eb36611dca8d504610d9e3091950b0f32c20e7
+
+production correction:
+Stockroom READY->RUNNING admitted
+-> durable EXECUTION_STARTED on exact prepared attempt
+-> authoritative RUNNING and exact causal state/version verification before downstream execution
+
+durable scenario:
+55/55 PASS
+
+provider persistence:
+23/23 PASS
+
+provider fixture alignment:
+resolved_dispatch_context fingerprint + current _issue_capability optional keyword contract
+FINAL_ADMITTED / PERSISTED
+
+0036 stranded runtime:
+HOLD / PRESERVED, not recovered
+WorkRun RUNNING/v2; ExecutionAttempt NOT_STARTED
+execution_operations 0; runtime evidence none; Judgment none
+
+next authority:
+separate recovery-design/authorization Task
+
+runtime recovery:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+```
+
+Authority: .aiassistant/reports/aiscc/20260913_1102_aiscc-p2-3-s1-execution-start-candidate-final-acceptance-judgment-1.md and .aiassistant/records/aiscc/cycles/20260913_1102_aiscc-p2-3-s1-execution-start-candidate-final-acceptance-persistence-entry-1.cycle.md. Accepted verification is reused, not rerun. Earlier decisions remain historical lineage; this entry supersedes their immediate private-S1 execution-entry wording only. No retained runtime access or recovery is admitted.

@@ -1,5 +1,66 @@
 # AISCC Current State Summary
 
+## Current P2-3 authority (20260913_1102)
+
+This current projection supersedes earlier readiness and execution-entry snapshots below. Prior accepted/persisted history retains its verification-time meaning and does not authorize recovery.
+
+```text
+P2-3:
+IN_PROGRESS
+
+S1 producer-provenance source correction:
+FINAL_ADMITTED / PERSISTED
+producer-provenance Commit A:
+35cee94a92d1f12801576ef48038196922687f42
+
+S1 execution-start lifecycle correction:
+FINAL_ADMITTED / PERSISTED
+
+provider fixture alignment:
+FINAL_ADMITTED / PERSISTED
+
+accepted result ZIP:
+50dce7aa4ad298021848a9ac96adf32c5ffacd0fc403a3ae5a7f54273283500e
+
+actual execution-start Commit A:
+a4eb36611dca8d504610d9e3091950b0f32c20e7
+
+durable scenario verification:
+55 / 55 PASS
+
+provider persistence:
+23 / 23 PASS
+
+0036 durable S1:
+HOLD / PRESERVED
+
+0036 WorkRun:
+RUNNING / v2
+
+0036 ExecutionAttempt:
+NOT_STARTED
+
+0036 execution operations:
+0
+
+0036 runtime evidence:
+none
+
+0036 Judgment:
+none
+
+runtime recovery:
+NOT_AUTHORIZED
+
+next governance state:
+RECOVERY_DESIGN_ENTRY_READY
+
+recovery status:
+ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED
+```
+
+Authority: .aiassistant/reports/aiscc/20260913_1102_aiscc-p2-3-s1-execution-start-candidate-final-acceptance-judgment-1.md and .aiassistant/records/aiscc/cycles/20260913_1102_aiscc-p2-3-s1-execution-start-candidate-final-acceptance-persistence-entry-1.cycle.md. The 0036 state is inherited accepted evidence, not newly inspected runtime. No test rerun or runtime recovery was performed.
+
 ## project
 
 - project: `AI Software Command Center (AISCC)`
@@ -49,7 +110,7 @@
 | P2-3 Cut B environment provisioning | `FINAL_ADMITTED / PERSISTED` |
 | P2-3 runtime prerequisites | `ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED` |
 | P2-3 Cut C final readiness binding | `FINAL_ADMITTED / PERSISTED` |
-| P2-3 actual S1-S4 scenario execution | `NOT_STARTED` |
+| P2-3 actual S1-S4 scenario execution | `S1 HOLD / PRESERVED; S2-S4 NOT_STARTED` |
 | P2-3 capture/export corpus | `NOT_STARTED` |
 | P2-3 Replay | `NOT_STARTED / NOT_ADMITTED` |
 | P2-4 Self-Dogfooding Cutover | `NOT_STARTED` |
@@ -1395,12 +1456,12 @@ Terminal Cycle:
 - P2-3 A1 capture-runner core: `ACCEPTED / CLOSED / PERSISTED`
 - A1 source commit: `6385ab41a92e43e438e8992bacf929e7daf5130d`
 - A1 post-commit reconciliation: `PASS / 21 of 21 RAW_EXACT / amend not required`
-- next subtask: `P2-3 private S1 normal scenario execution/capture retry after producer-provenance correction`
+- next subtask: `P2-3 stranded S1 RUNNING/NOT_STARTED in-place recovery boundary design; ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`
 - P2-3 A2 production owner/bootstrap integration: `IMPLEMENTATION ACCEPTED / PERSISTED`
 - A2 COMMIT_A: `d98f9ad108e95ba659b9c6a10770119af22175a1`
 - A2 terminal persistence: `ACCEPTED / A2_TERMINAL_PERSISTENCE_COMPLETE`
 - runtime prerequisites: `ENVIRONMENT_ADMITTED / CUT_C_READINESS_FINAL_ADMITTED`
-- actual S1-S4 scenario execution: `NOT_STARTED`
+- actual S1-S4 scenario execution: `S1 HOLD / PRESERVED; S2-S4 NOT_STARTED`
 - capture/export corpus: `NOT_STARTED`
 - P2-3 Replay: `NOT_STARTED`
 - PUBLIC_BOUNDED_LIVE: `NOT_RELEASED`
