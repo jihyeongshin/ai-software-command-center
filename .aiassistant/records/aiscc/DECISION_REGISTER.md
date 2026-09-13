@@ -1,5 +1,46 @@
 # AISCC Decision Register
 
+## AISCC-P2-3-CANONICAL-SCENARIO-REPLAY-CORPUS-V1
+
+- decision_id: `AISCC-P2-3-CANONICAL-SCENARIO-REPLAY-CORPUS-V1`
+- decision: Canonical Stockroom scenario pack and four-member Recorded Run Replay corpus are accepted as P2-3 terminal evidence.
+- decision_status: `ACCEPTED / CLOSED`
+- implementation_status: `PERSISTED`
+- verification_status: `BROWSER_ACCEPTED / PRIVATE_RUNTIME_AND_REPLAY_INTEGRITY_VERIFIED`
+- authority: current 0237 Task/Cycle/Judgment and accepted 0145 runtime Replay evidence.
+
+| Phase / boundary | Current status |
+| --- | --- |
+| P2-1 | ACCEPTED / CLOSED |
+| P2-2 | ACCEPTED / CLOSED |
+| P2-3 | ACCEPTED / CLOSED |
+| P2-4 | NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE |
+| P2 | IN_PROGRESS |
+| Recorded Replay | CANONICAL / PERSISTED |
+| Public Bounded Live | NOT_RELEASED |
+| public release | NOT_COMPLETED / PENDING |
+| public deployment | NOT_COMPLETED |
+| P3 | NOT_STARTED |
+
+| Scenario | Browser-accepted terminal evidence |
+| --- | --- |
+| S1 v5 | WorkRun ACCEPTED; Judgment ACCEPTED |
+| S2 v6 | WorkRun REWORK_REQUIRED; JudgmentKind HOLD_REWORK_REQUIRED |
+| S3 v9 | WorkRun BLOCKED; POLICY / POLICY_CONFLICT; static policy evidence ADMITTED; provider/tool/Judgment/HumanResult 0 |
+| S4 v10 | WorkRun HUMAN_REQUIRED; PRE_HUMAN evidence SATISFIED; HumanGate PENDING; HumanResult/Judgment 0 |
+
+Recorded Replay has four canonical members at `.aiassistant/reports/aiscc/replay/stockroom/v1`, persisted in Commit A `68017ed5f3d15c0512dbf04899c798352adee710`. Corpus integrity root: `a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e`. Index SHA-256: `c92fb81c43cef9b1c379c2df8dac967aa55f4ddae73780d31f5d51c617aa38e0` (4084 bytes). Index member paths are relative to that directory.
+
+The sanitized, read-only Recorded Run Replay describes previously executed workflows with actual execution timestamps and commits. Viewing LLM inference calls are 0; live=false; raw evidence bodies are absent. Runtime and sanitization/IP/private-value evidence is REUSED_ACCEPTED from Browser-accepted 0145 result ZIP `02ef19ba18e7f36de37f8cc1edfa6fd1228973f298c5735ee38402f1b14a995a`; this reconciliation performs no runtime or private access. Canonical metadata promotion and integrity were verified locally. Public release remains pending; public deployment is NOT_COMPLETED and Public Bounded Live is NOT_RELEASED. Public deployment/release verification remains future P3-owned work, with P3 NOT_STARTED.
+
+Non-blocking historical limitations: generic legacy P1-6 literal-offset fingerprint compatibility is DEFERRED; historical v1 authority remains preserved. Stranded historical S3 v7 is preserved / not reused. The 0036 lineage remains terminal / closed for reuse. The 0205 path-basis omission and 0224 predecessor-count transcription were Command Center contract defects, not product/Replay defects; original Task/result bytes remain preserved. Verified 0205 aggregate is 25 EXECUTED_PASS / 1 EXECUTED_FAIL / 40 BLOCKED_REQUIRED_EVIDENCE (sole failed row CANONICAL_INDEX_HASH_EXACT); 0224 is 16 EXECUTED_PASS / 54 BLOCKED_REQUIRED_EVIDENCE. Neither is an active P2-3 blocker under corrected 0237 authority.
+
+Next executable: P2-4 Self-Dogfooding Cutover, NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE. The accepted AISCC-COMPETITION-PUBLIC-RUNTIME-V1 decision remains a project boundary; it is not a deployed fact.
+
+## Historical decision provenance
+
+Earlier decisions below retain their historical acceptance and provenance. Their phase/next-action projections describe their issuance time and are superseded by the single current terminal entry above. Historical P0/P1 decisions are unchanged.
+
 ## AISCC-P2-3-S1-INVALID-HISTORY-DISPOSITION-RUNTIME-V1
 
 This bounded decision records Browser acceptance of the 1737 runtime result. It supersedes earlier pending-disposition projections; prior entries retain their historical meaning. This persistence task performed no runtime verification or execution.

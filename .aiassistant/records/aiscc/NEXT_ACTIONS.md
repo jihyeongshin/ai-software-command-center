@@ -1,6 +1,50 @@
 # AISCC Next Actions
 
-## Immediate P2-3 authority (20260913_1755)
+## Current next action (20260914_0237)
+
+```text
+phase: P2-4
+title: Self-Dogfooding Cutover
+status: NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+```
+
+Scope: one actual AISCC self-dogfood golden cycle, explicit self-dogfood execution mode/provenance, and reuse of existing governance/runtime. No generic planner, autonomous loop, or public deployment. This reconciliation does not begin P2-4 implementation. S1-S4 minimum runtime proof and Replay capture are CLOSED; no additional scenario rerun/refinement is the next action. P3 remains NOT_STARTED.
+
+## Current canonical queue
+
+| Phase / boundary | Current status |
+| --- | --- |
+| P2-1 | ACCEPTED / CLOSED |
+| P2-2 | ACCEPTED / CLOSED |
+| P2-3 | ACCEPTED / CLOSED |
+| P2-4 | NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE |
+| P2 | IN_PROGRESS |
+| Recorded Replay | CANONICAL / PERSISTED |
+| Public Bounded Live | NOT_RELEASED |
+| public release | NOT_COMPLETED / PENDING |
+| public deployment | NOT_COMPLETED |
+| P3 | NOT_STARTED |
+
+### Accepted P2-3 entry evidence
+
+| Scenario | Browser-accepted terminal evidence |
+| --- | --- |
+| S1 v5 | WorkRun ACCEPTED; Judgment ACCEPTED |
+| S2 v6 | WorkRun REWORK_REQUIRED; JudgmentKind HOLD_REWORK_REQUIRED |
+| S3 v9 | WorkRun BLOCKED; POLICY / POLICY_CONFLICT; static policy evidence ADMITTED; provider/tool/Judgment/HumanResult 0 |
+| S4 v10 | WorkRun HUMAN_REQUIRED; PRE_HUMAN evidence SATISFIED; HumanGate PENDING; HumanResult/Judgment 0 |
+
+Recorded Replay has four canonical members at `.aiassistant/reports/aiscc/replay/stockroom/v1`, persisted in Commit A `68017ed5f3d15c0512dbf04899c798352adee710`. Corpus integrity root: `a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e`. Index SHA-256: `c92fb81c43cef9b1c379c2df8dac967aa55f4ddae73780d31f5d51c617aa38e0` (4084 bytes). Index member paths are relative to that directory.
+
+The sanitized, read-only Recorded Run Replay describes previously executed workflows with actual execution timestamps and commits. Viewing LLM inference calls are 0; live=false; raw evidence bodies are absent. Runtime and sanitization/IP/private-value evidence is REUSED_ACCEPTED from Browser-accepted 0145 result ZIP `02ef19ba18e7f36de37f8cc1edfa6fd1228973f298c5735ee38402f1b14a995a`; this reconciliation performs no runtime or private access. Canonical metadata promotion and integrity were verified locally. Public release remains pending; public deployment is NOT_COMPLETED and Public Bounded Live is NOT_RELEASED. Public deployment/release verification remains future P3-owned work, with P3 NOT_STARTED.
+
+Non-blocking historical limitations: generic legacy P1-6 literal-offset fingerprint compatibility is DEFERRED; historical v1 authority remains preserved. Stranded historical S3 v7 is preserved / not reused. The 0036 lineage remains terminal / closed for reuse. The 0205 path-basis omission and 0224 predecessor-count transcription were Command Center contract defects, not product/Replay defects; original Task/result bytes remain preserved. Verified 0205 aggregate is 25 EXECUTED_PASS / 1 EXECUTED_FAIL / 40 BLOCKED_REQUIRED_EVIDENCE (sole failed row CANONICAL_INDEX_HASH_EXACT); 0224 is 16 EXECUTED_PASS / 54 BLOCKED_REQUIRED_EVIDENCE. Neither is an active P2-3 blocker under corrected 0237 authority.
+
+## Historical snapshots (superseded by 0237 current authority)
+
+All earlier sections below are preserved historical snapshots, including their former current/next-action wording. They do not define a current P2-3 status or authorize runtime work. The current status and next action are exclusively above this boundary.
+
+## Historical immediate P2-3 authority (20260913_1755)
 
 This entry supersedes earlier immediate actions below while preserving them as history. The Browser-accepted disposition result is persisted in Commit A `af5a9f873f11da1fdf71362abde018a2bed313a4`; this task does not authorize fresh S1 execution.
 
@@ -27,7 +71,7 @@ S1 expected terminal semantic = ACCEPTED
 
 Environment revalidation and execution belong to a separately authorized task. No private environment access or new lineage creation occurred during this reconciliation.
 
-## Immediate P2-3 authority (20260913_1633)
+## Historical immediate P2-3 authority (20260913_1633)
 
 This entry supersedes the earlier immediate action below while preserving it as history. It does not authorize runtime action.
 
@@ -69,7 +113,7 @@ broad cleanup
 evidence/Judgment
 ```
 
-## Immediate P2-3 authority (20260913_1343)
+## Historical immediate P2-3 authority (20260913_1343)
 
 The invalid-history abort/disposition candidate is persisted at Commit A `4341138dde5fbea487f10a8af256f78c5dcf37f3`; its accepted result ZIP SHA-256 is `b1dc8f91d1ba01c0198953fad70ace3d3c45276fe279d35c50521f2ad02b1381`. This entry supersedes the earlier immediate recovery-design action below. That earlier text remains as history and does not authorize runtime action.
 
@@ -109,7 +153,7 @@ broad cleanup
 evidence/Judgment
 ```
 
-Current P2-3 authority (20260913_1102): execution-start lifecycle correction and provider fixture alignment are FINAL_ADMITTED / PERSISTED at Commit A a4eb36611dca8d504610d9e3091950b0f32c20e7. Existing 0036 S1 is HOLD / PRESERVED; immediate action is PRIVATE_S1_RECOVERY_DESIGN, ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED. Prior readiness and execution-entry descriptions retain historical meaning and do not authorize replay or recovery.
+Historical P2-3 authority (20260913_1102): execution-start lifecycle correction and provider fixture alignment are FINAL_ADMITTED / PERSISTED at Commit A a4eb36611dca8d504610d9e3091950b0f32c20e7. Existing 0036 S1 is HOLD / PRESERVED; immediate action is PRIVATE_S1_RECOVERY_DESIGN, ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED. Prior readiness and execution-entry descriptions retain historical meaning and do not authorize replay or recovery.
 
 이 문서는 stable roadmap이다. per-turn execution log와 terminal judgment는 Cycle Record에 둔다.
 
@@ -160,7 +204,7 @@ The accepted preconditions include both the P1-6 durable-content design and runt
 Cut A source implementation is `ACCEPTED / PERSISTED` at `750c37aecb4c264f66aabf12dedb8d54e20a7f95`.
 Cut A executable proof is `REUSED_ACCEPTED`; Cut B is `FINAL_ADMITTED / PERSISTED` with provenance persisted by Commit A `474826340a89b5c597aa066ff0d414bfc8f43229`. Cut C is `FINAL_ADMITTED / PERSISTED`; private S1 is `ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED`.
 
-## canonical queue
+## Historical canonical queue before 0237
 
 The corrected source-authority contract, prerequisite owner-authority exact contract, and P1-8 runtime are
 accepted. P1, P2-1, P2-2, P2-3 Phase 1A, Phase 1B-B1/B2/B3, Phase 1B, the actual-capture runtime-entry audit, the Stockroom process settlement fix, and A1 are closed; P2-3 A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness is FINAL_ADMITTED / PERSISTED with Browser review COMPLETED; 0036 private S1 is HOLD / PRESERVED; recovery design is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser-issued recovery-design Task:
@@ -263,7 +307,7 @@ Human final review:
 ACCEPTED
 ```
 
-## current release status
+## Historical release status before 0237
 
 ```text
 P1-3 safeguard prerequisite:
@@ -416,7 +460,7 @@ HUMAN_PENDING
 The prerequisite owner-authority design blocker is `CLEARED_BY_HUMAN_ACCEPTED_JOINT_DESIGN`. P1-8 runtime, P1,
 P2-1 and P2-2 are closed. P2-2 is persisted at `05185c57a6265a4002050ce25cdfde3dc87e9779`. P2-3 Phase 1A is closed and persisted at `c9214ce21010978682a35ea6e55743610996097d`. Phase 1B-B1 is closed and persisted at `ffbaa11986de54269cbac0f55e980440b639b5a6`; Phase 1B-B2 is closed and persisted at `8abcfb7cd4dbf7c639e6883dce8be3b33c48b516`; Phase 1B-B3 is closed and persisted at `cf3d8c28efbc7c382f7253dde443b60419d9386b`. Phase 1B is closed and persisted. The actual-capture runtime-entry audit is complete, the Stockroom process settlement fix and A1 are closed and persisted, and A2 implementation is accepted and persisted. Cut A source authority is accepted and persisted; Cut B environment provisioning is FINAL_ADMITTED / PERSISTED and persistence review is COMPLETED; Cut C readiness is FINAL_ADMITTED / PERSISTED with Browser review COMPLETED; 0036 private S1 is HOLD / PRESERVED; recovery design is ENTRY_READY / NOT_STARTED / NOT_AUTHORIZED under a separate exact Browser-issued recovery-design Task; actual captures, corpus/export, Replay, and release verification have not started.
 
-## current next action
+## Historical next action before 0237
 
 ```text
 phase:

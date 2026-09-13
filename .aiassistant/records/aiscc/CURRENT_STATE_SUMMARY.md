@@ -1,6 +1,50 @@
 # AISCC Current State Summary
 
-## Current P2-3 authority (20260913_1755)
+## Current terminal authority (20260914_0237)
+
+| Phase / boundary | Current status |
+| --- | --- |
+| P2-1 | ACCEPTED / CLOSED |
+| P2-2 | ACCEPTED / CLOSED |
+| P2-3 | ACCEPTED / CLOSED |
+| P2-4 | NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE |
+| P2 | IN_PROGRESS |
+| Recorded Replay | CANONICAL / PERSISTED |
+| Public Bounded Live | NOT_RELEASED |
+| public release | NOT_COMPLETED / PENDING |
+| public deployment | NOT_COMPLETED |
+| P3 | NOT_STARTED |
+
+### P2-3 terminal evidence
+
+| Scenario | Browser-accepted terminal evidence |
+| --- | --- |
+| S1 v5 | WorkRun ACCEPTED; Judgment ACCEPTED |
+| S2 v6 | WorkRun REWORK_REQUIRED; JudgmentKind HOLD_REWORK_REQUIRED |
+| S3 v9 | WorkRun BLOCKED; POLICY / POLICY_CONFLICT; static policy evidence ADMITTED; provider/tool/Judgment/HumanResult 0 |
+| S4 v10 | WorkRun HUMAN_REQUIRED; PRE_HUMAN evidence SATISFIED; HumanGate PENDING; HumanResult/Judgment 0 |
+
+Recorded Replay has four canonical members at `.aiassistant/reports/aiscc/replay/stockroom/v1`, persisted in Commit A `68017ed5f3d15c0512dbf04899c798352adee710`. Corpus integrity root: `a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e`. Index SHA-256: `c92fb81c43cef9b1c379c2df8dac967aa55f4ddae73780d31f5d51c617aa38e0` (4084 bytes). Index member paths are relative to that directory.
+
+The sanitized, read-only Recorded Run Replay describes previously executed workflows with actual execution timestamps and commits. Viewing LLM inference calls are 0; live=false; raw evidence bodies are absent. Runtime and sanitization/IP/private-value evidence is REUSED_ACCEPTED from Browser-accepted 0145 result ZIP `02ef19ba18e7f36de37f8cc1edfa6fd1228973f298c5735ee38402f1b14a995a`; this reconciliation performs no runtime or private access. Canonical metadata promotion and integrity were verified locally. Public release remains pending; public deployment is NOT_COMPLETED and Public Bounded Live is NOT_RELEASED. Public deployment/release verification remains future P3-owned work, with P3 NOT_STARTED.
+
+Non-blocking historical limitations: generic legacy P1-6 literal-offset fingerprint compatibility is DEFERRED; historical v1 authority remains preserved. Stranded historical S3 v7 is preserved / not reused. The 0036 lineage remains terminal / closed for reuse. The 0205 path-basis omission and 0224 predecessor-count transcription were Command Center contract defects, not product/Replay defects; original Task/result bytes remain preserved. Verified 0205 aggregate is 25 EXECUTED_PASS / 1 EXECUTED_FAIL / 40 BLOCKED_REQUIRED_EVIDENCE (sole failed row CANONICAL_INDEX_HASH_EXACT); 0224 is 16 EXECUTED_PASS / 54 BLOCKED_REQUIRED_EVIDENCE. Neither is an active P2-3 blocker under corrected 0237 authority.
+
+### Next executable phase
+
+```text
+phase: P2-4
+title: Self-Dogfooding Cutover
+status: NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+```
+
+Scope: one actual AISCC self-dogfood golden cycle, explicit self-dogfood execution mode/provenance, and reuse of existing governance/runtime. No generic planner, autonomous loop, or public deployment. This reconciliation does not begin P2-4 implementation. S1-S4 minimum runtime proof and Replay capture are CLOSED; no additional scenario rerun/refinement is the next action. P3 remains NOT_STARTED.
+
+## Historical snapshots (superseded by 0237 current authority)
+
+All earlier sections below are preserved historical snapshots, including their former current/next-action wording. They do not define a current P2-3 status or authorize runtime work. The current status and next action are exclusively above this boundary.
+
+## Historical P2-3 authority (20260913_1755)
 
 This entry supersedes the earlier current-authority summaries below, which remain historical records. Runtime facts reuse the Browser-accepted 1737 result; no runtime access or execution occurred during this persistence task.
 
@@ -45,7 +89,7 @@ actual Commit A:
 af5a9f873f11da1fdf71362abde018a2bed313a4
 ```
 
-## Current P2-3 authority (20260913_1633)
+## Historical P2-3 authority (20260913_1633)
 
 This entry supersedes the earlier current-authority summary below while preserving it as history.
 
@@ -93,7 +137,7 @@ actual Commit A:
 7e2ea251f88ca07c6fd1bde38f73956f8885adbe
 ```
 
-## Current P2-3 authority (20260913_1343)
+## Historical P2-3 authority (20260913_1343)
 
 This projection supersedes the 20260913_1102 current projection only as the current authority. Prior accepted and persisted history below retains its historical meaning. No private runtime was reinspected and no test was rerun during this reconciliation.
 
@@ -141,7 +185,7 @@ invalid-history disposition persistence Commit A:
 4341138dde5fbea487f10a8af256f78c5dcf37f3
 ```
 
-## Current P2-3 authority (20260913_1102)
+## Historical P2-3 authority (20260913_1102)
 
 This current projection supersedes earlier readiness and execution-entry snapshots below. Prior accepted/persisted history retains its verification-time meaning and does not authorize recovery.
 
@@ -208,7 +252,7 @@ Authority: .aiassistant/reports/aiscc/20260913_1102_aiscc-p2-3-s1-execution-star
 - accepted thesis owner: `.aiassistant/reports/aiscc/AISCC_PRODUCT_THESIS.md`
 - accepted thesis: AISCC는 Coding Agent 자체가 아니라, AI가 수행한 software work를 Task Contract, authority, task-scoped evidence ownership, proof admission, system-owned state transition, human judgment, durable Cycle provenance 아래에서 통제하는 `Software Engineering Governance Control Plane`이다.
 
-## phase status
+## Historical phase status before 0237
 
 | phase | status |
 |---|---|
@@ -1533,7 +1577,7 @@ Terminal Cycle:
 
 `.aiassistant/records/aiscc/cycles/20260901_2155_aiscc-p1-8-jcs-safe-integer-joint-design-final-acceptance-1.cycle.md`
 
-## blockers and next action
+## Historical blockers and next action before 0237
 
 - P1-1: `ACCEPTED / CLOSED`
 - P1-2: `ACCEPTED / CLOSED`
