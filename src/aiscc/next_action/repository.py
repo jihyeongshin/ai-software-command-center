@@ -80,6 +80,7 @@ class PostgresNextActionRepository:
         descriptors: tuple[NextActionDescriptor, ...],
         policy_authority: P1_8NextActionPolicyAuthority,
         task_authority_verifier: ExternalTaskAuthorityVerifierPort,
+        genesis_repository=None,
     ) -> None:
         self._session_factory = session_factory
         self._eligibility_policy = eligibility_policy
@@ -87,6 +88,7 @@ class PostgresNextActionRepository:
         self._descriptors = {item.action_ref.serialized: item for item in descriptors}
         self._policy_authority = policy_authority
         self._task_authority_verifier = task_authority_verifier
+        self._genesis_repository = genesis_repository
         if len(self._descriptors) != len(descriptors):
             raise ValueError("configured ActionRef values must be unique")
         if (
@@ -367,12 +369,40 @@ class PostgresNextActionRepository:
                     session, project_id, memory_entry_ids
                 )
                 authoritative_input_refs = tuple(sorted(memory_entry_ids))
+            elif mode is NextActionSelectionMode.SELF_DOGFOOD_GENESIS:
+                if (
+                    len(proposals) != 1
+                    or memory_entry_ids
+                    or operational_work_run_id is not None
+                    or human_judgment_ref is not None
+                ):
+                    raise NextActionError(
+                        NextActionErrorCode.NOT_SUPPORTED,
+                        "genesis has one bounded proposal and no predecessor/Human refs",
+                    )
+                genesis = await self._verify_genesis_selection_input(
+                    session, project_id, proposals[0].parameters, selection_id=None
+                )
+                _, _, genesis_descriptors = self._policy_authority.issue_genesis_policy_catalog(
+                    authority=genesis, now=selected_at
+                )
+                if (
+                    proposals[0].action_ref != genesis_descriptors[0].action_ref
+                    or datetime.fromisoformat(genesis.value["issued_at"]) > selected_at
+                ):
+                    raise NextActionError(
+                        NextActionErrorCode.IDENTITY_CONFLICT,
+                        "genesis action/issuance epoch differs",
+                    )
+                authoritative_input_refs = (str(proposals[0].parameters["genesis_authority_ref"]),)
+                context_selection = None
+                operational_rank = 0
             elif memory_entry_ids:
                 raise NextActionError(
                     NextActionErrorCode.NON_CURRENT_MEMORY,
                     "operational recovery uses source-domain facts, not memory claims",
                 )
-            else:
+            elif mode is NextActionSelectionMode.OPERATIONAL_RECOVERY:
                 (
                     authoritative_input_refs,
                     operational_rank,
@@ -380,6 +410,8 @@ class PostgresNextActionRepository:
                     session, project_id, operational_work_run_id
                 )
                 context_selection = None
+            else:
+                raise NextActionError(NextActionErrorCode.NOT_SUPPORTED, "unknown selection mode")
             if mode is NextActionSelectionMode.CYCLE_DERIVED:
                 assert context_selection is not None
                 authoritative_rank = dict(self._selection_policy.class_to_rank)[
@@ -1055,7 +1087,15 @@ class PostgresNextActionRepository:
                     raise NextActionError(
                         NextActionErrorCode.PRIORITY_SOURCE_NOT_ENROLLED, "source lineage differs"
                     )
-            else:
+            elif (
+                evaluation.payload.get("mode") == NextActionSelectionMode.SELF_DOGFOOD_GENESIS.value
+            ):
+                await self._verify_genesis_selection_input(
+                    session, expected_project_id, selection.parameters, selection_id=selection_id
+                )
+            elif (
+                evaluation.payload.get("mode") == NextActionSelectionMode.OPERATIONAL_RECOVERY.value
+            ):
                 source_run_id = evaluation.payload.get("operational_work_run_id")
                 if not isinstance(source_run_id, str):
                     raise NextActionError(
@@ -1065,7 +1105,40 @@ class PostgresNextActionRepository:
                 await self._require_operational_recovery(
                     session, expected_project_id, source_run_id
                 )
+            else:
+                raise NextActionError(NextActionErrorCode.NOT_SUPPORTED, "unknown source mode")
             return selection, candidate, descriptor
+
+    async def _verify_genesis_selection_input(
+        self, session, project_id, parameters, *, selection_id
+    ):
+        from aiscc.next_action.genesis import GenesisAuthorityRepository
+
+        if (
+            not isinstance(self._genesis_repository, GenesisAuthorityRepository)
+            or self._genesis_repository.context.project_id != project_id
+        ):
+            raise NextActionError(
+                NextActionErrorCode.AUTHORITY_DENIED, "genesis owner not enrolled"
+            )
+        if set(parameters) != {"genesis_authority_ref", "genesis_authority_fingerprint"}:
+            raise NextActionError(
+                NextActionErrorCode.IDENTITY_CONFLICT, "genesis parameters differ"
+            )
+        authority = await self._genesis_repository.verify_current(
+            session,
+            parameters["genesis_authority_ref"],
+            parameters["genesis_authority_fingerprint"],
+            selection_id=selection_id,
+        )
+        _, _, expected = self._policy_authority.issue_genesis_policy_catalog(
+            authority=authority, now=datetime.now(UTC)
+        )
+        if expected[0].action_ref.serialized not in self._descriptors:
+            raise NextActionError(
+                NextActionErrorCode.DESCRIPTOR_NOT_CURRENT, "genesis descriptor/authority differ"
+            )
+        return authority
 
     async def replay(self, selection_id: str) -> tuple[NextActionSelection, TaskIssuanceCandidate]:
         async with self._session_factory() as session:
@@ -1422,6 +1495,49 @@ class PostgresNextActionRepository:
                 raise NextActionError(
                     NextActionErrorCode.HISTORICAL_CORRUPTION,
                     "historical recovery authority binding differs",
+                )
+        elif mode == NextActionSelectionMode.SELF_DOGFOOD_GENESIS.value:
+            from aiscc.next_action.genesis import GenesisAuthorityRepository
+
+            if not isinstance(self._genesis_repository, GenesisAuthorityRepository):
+                raise NextActionError(
+                    NextActionErrorCode.AUTHORITY_DENIED, "genesis read owner absent"
+                )
+            parameters = row.payload.get("parameters", {})
+            if set(parameters) != {"genesis_authority_ref", "genesis_authority_fingerprint"}:
+                raise NextActionError(
+                    NextActionErrorCode.HISTORICAL_CORRUPTION, "genesis parameters malformed"
+                )
+            authority = await self._genesis_repository.read(
+                session,
+                parameters["genesis_authority_ref"],
+                parameters["genesis_authority_fingerprint"],
+            )
+            _, _, expected = self._policy_authority.issue_genesis_policy_catalog(
+                authority=authority, now=datetime.now(UTC)
+            )
+            if (
+                refs != (authority.authority_ref,)
+                or authority.value["project_id"] != row.project_id
+                or datetime.fromisoformat(authority.value["issued_at"]) > row.selected_at
+                or row.action_ref != expected[0].action_ref.serialized
+                or row.payload.get("memory_refs") != []
+                or any(
+                    x is not None
+                    for x in (
+                        row.external_context_ref,
+                        row.external_context_fingerprint,
+                        row.external_context_snapshot_ref,
+                        row.external_context_snapshot_fingerprint,
+                        row.external_context_event_high_watermark,
+                        row.memory_authority_event_high_watermark,
+                    )
+                )
+                or evaluation.payload.get("operational_work_run_id") is not None
+                or evaluation.payload.get("authoritative_priority_rank") != 0
+            ):
+                raise NextActionError(
+                    NextActionErrorCode.HISTORICAL_CORRUPTION, "genesis lineage differs"
                 )
         elif mode == NextActionSelectionMode.CYCLE_DERIVED.value:
             raw_memory_refs = row.payload.get("memory_refs")

@@ -1202,6 +1202,24 @@ class ProjectMemoryViewRow(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class GenesisAuthorityRow(Base):
+    __tablename__ = "self_dogfood_genesis_authority"
+    __table_args__ = (
+        UniqueConstraint("project_id", "record_kind", name="uq_genesis_project_kind"),
+        CheckConstraint("record_kind IN ('ISSUED','TASK_BOUND')", name="ck_genesis_record_kind"),
+        CheckConstraint("fingerprint ~ '^[0-9a-f]{64}$'", name="ck_genesis_fingerprint"),
+        CheckConstraint(
+            "octet_length(canonical_body) BETWEEN 1 AND 16384", name="ck_genesis_body_size"
+        ),
+    )
+    record_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    record_kind: Mapped[str] = mapped_column(String(16), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class NextActionDescriptorRow(Base):
     __tablename__ = "next_action_descriptors"
 

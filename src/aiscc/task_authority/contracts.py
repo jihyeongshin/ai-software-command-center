@@ -316,12 +316,27 @@ class TaskContractBodyV1:
         string(provenance["orchestrator_version"], 160)
         if re.fullmatch(r"[0-9a-f]{40}", string(provenance["orchestrator_commit"])) is None:
             raise TaskContractError("invalid orchestrator commit")
+        source_claim = body["source_next_action"]
+        if not isinstance(source_claim, Mapping) or "action_ref" not in source_claim:
+            raise TaskContractError("source action claim absent")
         src = closed(
             body["source_next_action"],
             "selection_id selection_version selection_fingerprint project_revision "
             "action_ref descriptor_fingerprint issuance_candidate_id "
-            "issuance_candidate_fingerprint external_context",
+            "issuance_candidate_fingerprint external_context"
+            + (
+                " genesis_authority"
+                if action_claim(source_claim["action_ref"]).action_id == GENESIS_ACTION_ID
+                else ""
+            ),
         )
+        if "genesis_authority" in src:
+            genesis = closed(src["genesis_authority"], "authority_ref fingerprint phase_id")
+            string(genesis["authority_ref"])
+            fingerprint(genesis["fingerprint"])
+            string(genesis["phase_id"], 96)
+            if src["external_context"] is not None or version != 1:
+                raise TaskContractError("genesis forbids Cycle context and changed versions")
         for k in ("selection_id", "selection_version", "action_ref", "issuance_candidate_id"):
             string(src[k])
         for k in (
@@ -421,6 +436,8 @@ class VerifiedTaskContractBindingV1:
 
 
 SUPPORTED_ACTION_ID = "open-cycle-derived-task-issuance"
+GENESIS_ACTION_ID = "open-self-dogfood-genesis-task-issuance"
+SUPPORTED_ACTION_IDS = frozenset({SUPPORTED_ACTION_ID, GENESIS_ACTION_ID})
 UNSUPPORTED_SOURCE = "TASKCONTRACT_V1_UNSUPPORTED_NEXT_ACTION_SOURCE"
 
 

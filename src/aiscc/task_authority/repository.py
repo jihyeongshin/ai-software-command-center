@@ -21,8 +21,9 @@ from aiscc.persistence.models import (
     TaskContractBodyRow,
 )
 from aiscc.task_authority.contracts import (
+    GENESIS_ACTION_ID,
     SCHEMA,
-    SUPPORTED_ACTION_ID,
+    SUPPORTED_ACTION_IDS,
     UNSUPPORTED_SOURCE,
     IssuedTaskContractV1,
     TaskContractBodyV1,
@@ -198,6 +199,13 @@ class PostgresExternalTaskAuthorityRepository:
 
     async def _contract_row_receipt(self, session, row):
         body = TaskContractBodyV1.from_bytes(bytes(row.canonical_body))
+        if (
+            action_claim(body.value["source_next_action"]["action_ref"]).action_id
+            == GENESIS_ACTION_ID
+        ):
+            from aiscc.next_action.genesis import verify_genesis_task_binding
+
+            await verify_genesis_task_binding(session, body)
         refrow = await session.get(TaskConstraintRefRow, row.constraint_ref)
         eventrow = await session.get(TaskConstraintAuthorityEventRow, row.issuance_event_ref)
         if refrow is None or eventrow is None:
@@ -313,7 +321,7 @@ class PostgresExternalTaskAuthorityRepository:
                 raise TaskContractError("scope symlink/reparse escape")
         source = v["source_next_action"]
         action = action_claim(source["action_ref"])
-        if action.action_id != SUPPORTED_ACTION_ID:
+        if action.action_id not in SUPPORTED_ACTION_IDS:
             raise TaskContractError(UNSUPPORTED_SOURCE)
         try:
             selected, candidate, descriptor = await next_actions.verify_current_selection(
@@ -324,7 +332,13 @@ class PostgresExternalTaskAuthorityRepository:
                 expected_selection_fingerprint=source["selection_fingerprint"],
                 expected_action_ref=action,
                 expected_descriptor_fingerprint=source["descriptor_fingerprint"],
-                allowed_selection_modes=frozenset({NextActionSelectionMode.CYCLE_DERIVED}),
+                allowed_selection_modes=frozenset(
+                    {
+                        NextActionSelectionMode.SELF_DOGFOOD_GENESIS
+                        if action.action_id == GENESIS_ACTION_ID
+                        else NextActionSelectionMode.CYCLE_DERIVED
+                    }
+                ),
             )
         except NextActionError as exc:
             if exc.code is NextActionErrorCode.NOT_SUPPORTED:
@@ -338,7 +352,24 @@ class PostgresExternalTaskAuthorityRepository:
         ):
             raise TaskContractError("source candidate/descriptor differs")
         context = source["external_context"]
-        if context is None or (
+        if action.action_id == GENESIS_ACTION_ID:
+            genesis = source["genesis_authority"]
+            authority = await next_actions._verify_genesis_selection_input(
+                session, project, selected.parameters, selection_id=selected.selection_id
+            )
+            if (
+                context is not None
+                or genesis["authority_ref"] != authority.authority_ref
+                or genesis["fingerprint"] != authority.fingerprint
+                or genesis["phase_id"] != authority.value["phase_id"]
+                or any(authority.value[k] != repository[k] for k in repository)
+                or any(
+                    authority.value[k] != v["execution_provenance"][k]
+                    for k in ("runtime_mode", "cycle_execution_mode")
+                )
+            ):
+                raise TaskContractError("genesis body/owner context differs")
+        elif context is None or (
             context["context_ref"],
             context["context_fingerprint"],
             context["snapshot_ref"],
@@ -352,9 +383,10 @@ class PostgresExternalTaskAuthorityRepository:
             selected.external_context_event_high_watermark,
         ):
             raise TaskContractError("source context differs")
-        await self.verify_next_action_context(
-            **plain(context), require_current=False, session=session
-        )
+        if context is not None:
+            await self.verify_next_action_context(
+                **plain(context), require_current=False, session=session
+            )
         supplied = tuple((x["ref"], x["fingerprint"]) for x in v["authority_refs"])
         if supplied != required_refs:
             raise TaskContractError("required independent authority set differs")
@@ -454,6 +486,16 @@ class PostgresExternalTaskAuthorityRepository:
                 if row.contract_version == v["contract_version"]:
                     if bytes(row.canonical_body) != body.canonical_body:
                         raise TaskContractError("same-version body differs")
+                    if (
+                        action_claim(v["source_next_action"]["action_ref"]).action_id
+                        == GENESIS_ACTION_ID
+                    ):
+                        _, _, _, _, required_refs, _ = self._contract_composition()
+                        await self._contract_constraint_locks(session, rows, required_refs)
+                        await _lock(session, "external-task-authority:snapshot")
+                        await self._verify_contract_inputs(session, body)
+                        if not await self._verify_contract_current_projection(session, rows):
+                            raise TaskContractError("genesis TaskContract no longer current")
                     return await self._contract_row_receipt(session, row)
             if v["contract_version"] != len(rows) + 1 or (
                 rows and rows[-1].body_sha256 != expected_current_body_sha256
@@ -466,6 +508,15 @@ class PostgresExternalTaskAuthorityRepository:
             # Existing snapshot certification takes its lock before the counter row.
             await _lock(session, "external-task-authority:snapshot")
             await self._verify_contract_inputs(session, body)
+            if action_claim(v["source_next_action"]["action_ref"]).action_id == GENESIS_ACTION_ID:
+                _, _, actions, _, _, _ = self._contract_composition()
+                src = v["source_next_action"]
+                authority = await actions._genesis_repository.read(
+                    session,
+                    src["genesis_authority"]["authority_ref"],
+                    src["genesis_authority"]["fingerprint"],
+                )
+                await actions._genesis_repository._bind_task(session, body, authority, issued_at)
             if rows and not await self._verify_contract_current_projection(session, rows):
                 raise TaskContractError("latest revoked family cannot issue again")
             expected_ref = "task-constraint:v1:tc-body-" + body.body_sha256

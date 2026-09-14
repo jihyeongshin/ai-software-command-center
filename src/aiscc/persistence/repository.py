@@ -1610,6 +1610,10 @@ class PostgresExecutionRepository:
 
             if decision.outcome is DecisionOutcome.ADMITTED:
                 if current_row is None:
+                    # Serialize empty-project genesis enrollment with owner-owned creation.
+                    # Participant family locks have already been acquired; no reverse
+                    # family/currentness dependency or issuer WorkRun lock is introduced.
+                    await _advisory_lock(session, f"p1-8-memory-project:{request.project_id}")
                     session.add(
                         WorkRunRow(
                             work_run_id=request.work_run_id,

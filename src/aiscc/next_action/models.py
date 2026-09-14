@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
@@ -44,6 +44,7 @@ class DescriptorSourceKind(StrEnum):
 class NextActionSelectionMode(StrEnum):
     OPERATIONAL_RECOVERY = "OPERATIONAL_RECOVERY"
     CYCLE_DERIVED = "CYCLE_DERIVED"
+    SELF_DOGFOOD_GENESIS = "SELF_DOGFOOD_GENESIS"
 
 
 class HumanInputKind(StrEnum):
@@ -330,6 +331,76 @@ class P1_8NextActionPolicyAuthority:
             canonical_payload=payload,
         )
 
+    def issue_genesis_policy_catalog(self, *, authority, now):
+        from aiscc.next_action.genesis import ACTION, MODE, GenesisNextActionAuthorityV1
+
+        if not isinstance(authority, GenesisNextActionAuthorityV1):
+            raise ValueError("typed genesis authority required; persisted owner verifies selection")
+        _, selection, _ = self.issue_policy_catalog_v1(now=now)
+        payload = {
+            "schema": "AISCC-P1-8-SELF-DOGFOOD-GENESIS-DESCRIPTOR-V1",
+            "action_id": ACTION,
+            "source_mode": MODE,
+            "genesis_authority_ref": authority.authority_ref,
+            "genesis_authority_fingerprint": authority.fingerprint,
+            "context": authority.value,
+            "task_issuance_owner": TASK_ISSUANCE_OWNER,
+            "parameter_rules": {
+                "genesis_authority_ref": "string",
+                "genesis_authority_fingerprint": "string",
+            },
+        }
+        fp = canonical_hash(payload)
+        policy_id = "P1_8_SELF_DOGFOOD_GENESIS_ELIGIBILITY_POLICY"
+        catalog_ref = "p1-8-genesis-catalog:v1"
+        catalog_hash = canonical_hash(
+            {"design": "AISCC-P1-8-SELF-DOGFOOD-GENESIS-BOOTSTRAP-V1", "action": ACTION}
+        )
+        descriptor = replace(
+            self._fixed_operational_descriptor(),
+            action_ref=ActionRef(policy_id, "v1", ACTION, "v1", fp),
+            project_restriction=authority.value["project_id"],
+            scope_restrictions={"phase_id": authority.value["phase_id"]},
+            parameter_schema_id="P1_8_SELF_DOGFOOD_GENESIS_PARAMETERS_V1",
+            parameter_schema_fingerprint=canonical_hash(payload["parameter_rules"]),
+            parameter_rules=payload["parameter_rules"],
+            source_authority_ref=catalog_ref,
+            source_authority_fingerprint=catalog_hash,
+            allowed_selection_modes=(NextActionSelectionMode.SELF_DOGFOOD_GENESIS,),
+            priority_classification_source_ref=authority.authority_ref,
+            priority_classification_source_hash=authority.fingerprint,
+            priority_rank=0,
+            dependency_ordinal=0,
+            critical_path_ordinal=0,
+            descriptor_policy_ordinal=0,
+            required_human_input_kind=HumanInputKind.NONE,
+            fingerprint=fp,
+            canonical_payload=payload,
+        )
+        bindings = ((descriptor.action_ref.serialized, fp),)
+        eligibility = NextActionEligibilityPolicy(
+            policy_id,
+            "v1",
+            "p1-8-genesis-eligibility:v1:" + fp,
+            "P1_8_NEXT_ACTION_ELIGIBILITY_POLICY_AUTHORITY_V1",
+            self.authority_version,
+            1,
+            bindings,
+            now.astimezone(UTC),
+            1,
+            NextActionCurrentDisposition.WITHDRAW_CURRENT,
+            canonical_hash(
+                {
+                    "policy_id": policy_id,
+                    "catalog_ref": catalog_ref,
+                    "catalog_fingerprint": catalog_hash,
+                    "bindings": bindings,
+                }
+            ),
+            self.__seal,
+        )
+        return eligibility, selection, (descriptor,)
+
     def issue_context_bound_descriptor(
         self,
         *,
@@ -575,7 +646,33 @@ class P1_8NextActionPolicyAuthority:
     def recognizes_policy(
         self, policy: NextActionEligibilityPolicy | NextActionSelectionPolicy
     ) -> bool:
-        if isinstance(policy, NextActionEligibilityPolicy):
+        if (
+            isinstance(policy, NextActionEligibilityPolicy)
+            and policy.policy_id == "P1_8_SELF_DOGFOOD_GENESIS_ELIGIBILITY_POLICY"
+        ):
+            from aiscc.next_action.genesis import ACTION
+
+            bindings = policy.enrolled_action_bindings
+            exact = (
+                len(bindings) == 1
+                and policy.policy_ref == "p1-8-genesis-eligibility:v1:" + bindings[0][1]
+                and policy.authority_id == "P1_8_NEXT_ACTION_ELIGIBILITY_POLICY_AUTHORITY_V1"
+                and policy.fingerprint
+                == canonical_hash(
+                    {
+                        "policy_id": policy.policy_id,
+                        "catalog_ref": "p1-8-genesis-catalog:v1",
+                        "catalog_fingerprint": canonical_hash(
+                            {
+                                "design": "AISCC-P1-8-SELF-DOGFOOD-GENESIS-BOOTSTRAP-V1",
+                                "action": ACTION,
+                            }
+                        ),
+                        "bindings": bindings,
+                    }
+                )
+            )
+        elif isinstance(policy, NextActionEligibilityPolicy):
             exact = (
                 policy.policy_id == ELIGIBILITY_POLICY_ID
                 and policy.policy_ref == ELIGIBILITY_POLICY_REF
@@ -613,6 +710,24 @@ class P1_8NextActionPolicyAuthority:
     def recognizes_descriptor(self, descriptor: NextActionDescriptor) -> bool:
         if descriptor.canonical_payload is None:
             return False
+        if descriptor.action_ref.action_id == "open-self-dogfood-genesis-task-issuance":
+            from aiscc.contracts.canonical_json import canonical_json_bytes
+            from aiscc.next_action.genesis import GenesisNextActionAuthorityV1
+
+            try:
+                authority = GenesisNextActionAuthorityV1(
+                    canonical_json_bytes(descriptor.canonical_payload["context"])
+                )
+                _, _, expected = self.issue_genesis_policy_catalog(
+                    authority=authority, now=datetime.now(UTC)
+                )
+                return (
+                    descriptor._authority_seal is self.__seal
+                    and descriptor == expected[0]
+                    and descriptor.canonical_payload == expected[0].canonical_payload
+                )
+            except (ValueError, KeyError, TypeError):
+                return False
         operational = descriptor.action_ref.action_id == ("open-operational-recovery-task-issuance")
         expected = (
             OPERATIONAL_DESCRIPTOR_FINGERPRINT

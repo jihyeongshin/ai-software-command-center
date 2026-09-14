@@ -789,7 +789,7 @@ def test_migration_empty_upgrade_downgrade_and_nonempty_preservation(database_ur
     asyncio.run(admin(f'CREATE DATABASE "{dbname}"'))
     try:
         assert migration("upgrade", "head")[0] == 0
-        assert asyncio.run(snapshot())[:2] == ("20260914_0011", 0)
+        assert asyncio.run(snapshot())[:2] == ("20260914_0012", 0)
         assert migration("downgrade", "20260901_0008")[0] == 0
         assert migration("upgrade", "head")[0] == 0
 

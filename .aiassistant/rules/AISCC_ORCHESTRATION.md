@@ -475,3 +475,54 @@ claim that editing or completion has happened. No governed source edit precedes 
 The accepted 1721 completion lease/submission semantics remain unchanged. Completion
 leases still require RUNNING. No generic executor, shell runner, new guard/state,
 provider fabrication, automatic commit, network or golden execution is authorized.
+
+## Accepted 2010: one-time self-dogfood Genesis authority
+
+Normative design: `AISCC-P1-8-SELF-DOGFOOD-GENESIS-BOOTSTRAP-V1`.
+Human-provided design acceptance is recorded in the byte-exact 1916 Human review
+(SHA-256 `09c93a9a67ca064bd269240787b8fdd5380f05693f4394dc74bba778c9f0da8a`).
+This amendment extends the earlier source capability statements only as stated below;
+all historical catalog JSON, fingerprints, Cycle provenance and other owner boundaries remain unchanged.
+
+`SELF_DOGFOOD_GENESIS` is an explicit source mode with action
+`open-self-dogfood-genesis-task-issuance`. It is never a fallback, recovery translation,
+Cycle-derived alias, Replay import, Markdown import, or LLM action selection.
+The separate Genesis catalog requires exactly one externally owner-issued authority
+and one proposal. It fabricates no predecessor WorkRun, source Cycle, memory entry,
+CycleMemoryReference, Human result, Evidence or Judgment.
+
+The immutable canonical authority binds project, authority ID, source mode, action,
+repository ID, absolute root, exact base commit, phase, OWNER_SELF_DOGFOOD runtime,
+AISCC_SELF_DOGFOOD execution mode, external Command Center issuer identity/version,
+and UTC issuance time. Its fingerprint authenticates the complete canonical body.
+Only a bootstrap-bound external writer can persist it; constructing or parsing bytes
+is not owner issuance. Selection and Task issuance verify the persisted authority,
+exact enrolled context and currentness in the caller's database transaction.
+
+Initial enrollment requires no operational WorkRun, no admitted operational Cycle,
+no CURRENT NEXT_ACTION_CONTEXT lineage, and no conflicting current selection.
+After Task binding, only that exact family's own WorkRun lineage may coexist until
+its first owner-admitted Cycle. Any admitted Cycle permanently makes Genesis
+non-current, even after restart, historical replay, projection rebuild or later
+context withdrawal. Any CURRENT cycle-derived context also denies Genesis.
+Historical reads remain possible and never confer currentness.
+
+One operational project has at most one Genesis authority and one exact TaskContract
+family/body (version 1). Exact retries return the durable result; changed body,
+different family or a second distinct authority is denied. Revocation cannot free
+this one-time binding. New issuance and currentness after the first Cycle fail with
+GENESIS_NOT_ELIGIBLE; corrupt or partial reciprocal authority/body records fail closed.
+
+TaskContract V1 supports exactly SELF_DOGFOOD_GENESIS and CYCLE_DERIVED.
+OPERATIONAL_RECOVERY remains a valid P1-8 source but is rejected by this issuer before
+any source WorkRun lock or body mutation. No general planner is introduced.
+
+Authorized implementation/testing does not authorize an actual golden run. A later
+Task must separately authorize the first operational Genesis enrollment, TaskContract,
+READY, external IDE start, completion lease before edit, trusted submission, Evidence,
+Judgment and Cycle. This amendment itself performs none of those operational actions.
+Tests may exercise existing owner APIs in disposable PostgreSQL; their synthetic
+guard capabilities are implementation proofs, never actual golden authority.
+The accepted steady-state path remains CYCLE_DERIVED after the first owner-admitted
+Cycle; no restart or revoked context reopens Genesis. Browser review remains required
+for implementation candidates.
