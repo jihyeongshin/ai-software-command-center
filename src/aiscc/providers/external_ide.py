@@ -744,3 +744,555 @@ class _ExternalIdeLeaseWriter:
 def _bind_external_ide_writer(repository):
     """Trusted local composition only; never expose to the IDE completion client."""
     return repository._bind_writer()
+
+
+# Start authority is deliberately separate from the accepted completion domain above.
+_START_OWNER = object()
+_START_REFS = WeakValueDictionary()
+START_PREFIX = "external-ide-start:"
+
+
+@dataclass(frozen=True, init=False)
+class ExternalIdeExecutionStartPermitV1:
+    canonical_body: bytes
+
+    def __init__(self, value):
+        fields = set(
+            [
+                "schema",
+                "producer",
+                "project_id",
+                "permit_id",
+                "work_run_id",
+                "state",
+                "state_version",
+                "task_id",
+                "contract_id",
+                "contract_version",
+                "body_ref",
+                "body_sha256",
+                "repository_id",
+                "repository_root",
+                "base_commit",
+                "inner_task_sha256",
+                "allowed_paths",
+                "forbidden_paths",
+                "scope_fingerprint",
+                "issued_at",
+                "expires_at",
+                "capability_hash",
+                "ready_transition_id",
+            ]
+        )
+        if type(value) is not dict or set(value) != fields:
+            _deny("closed start permit fields differ")
+        data = canonical_json_bytes(value)  # NFC, safe integers, no float/unknown JSON types.
+        if value["schema"] != "AISCC-EXTERNAL-IDE-START-PERMIT-V1" or value["producer"] != PRODUCER:
+            _deny("start producer/schema denied")
+        if value["state"] != "READY":
+            _deny("READY start permit required")
+        for key in ("state_version", "contract_version"):
+            if type(value[key]) is not int or value[key] < 1:
+                _deny("positive exact start version required")
+        for key in (
+            "project_id",
+            "permit_id",
+            "work_run_id",
+            "task_id",
+            "contract_id",
+            "repository_id",
+            "ready_transition_id",
+        ):
+            if (
+                not isinstance(value[key], str)
+                or re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", value[key]) is None
+            ):
+                _deny("invalid start identity")
+        for key in ("body_sha256", "inner_task_sha256", "scope_fingerprint", "capability_hash"):
+            if not isinstance(value[key], str) or not _HEX.fullmatch(value[key]):
+                _deny("invalid start fingerprint")
+        if not isinstance(value["body_ref"], str) or not re.fullmatch(
+            r"task-contract-body:v1:sha256:[0-9a-f]{64}", value["body_ref"]
+        ):
+            _deny("invalid start body ref")
+        if not isinstance(value["base_commit"], str) or not re.fullmatch(
+            r"[0-9a-f]{40}", value["base_commit"]
+        ):
+            _deny("invalid start base")
+        root = value["repository_root"]
+        if (
+            not isinstance(root, str)
+            or not Path(root).is_absolute()
+            or str(Path(root)) != root
+            or any(ord(c) < 32 for c in root)
+        ):
+            _deny("canonical absolute start root required")
+        for key in ("allowed_paths", "forbidden_paths"):
+            _paths(value[key], scope=True)
+        if not value["allowed_paths"]:
+            _deny("bounded start scope required")
+        for a in value["allowed_paths"]:
+            for b in value["forbidden_paths"]:
+                if _matches(a.removesuffix("/**"), [b]) or _matches(b.removesuffix("/**"), [a]):
+                    _deny("start scope overlap")
+        if (
+            _hash(canonical_json_bytes({k: value[k] for k in ("allowed_paths", "forbidden_paths")}))
+            != value["scope_fingerprint"]
+        ):
+            _deny("start scope fingerprint differs")
+        issued, expires = (_timestamp(value[k]) for k in ("issued_at", "expires_at"))
+        if not timedelta(0) < expires - issued <= timedelta(hours=1):
+            _deny("start expiry outside bounded window")
+        object.__setattr__(self, "canonical_body", data)
+
+    @property
+    def value(self):
+        return _freeze(json.loads(self.canonical_body))
+
+    @property
+    def fingerprint(self):
+        return _hash(self.canonical_body)
+
+
+def _start_request_hash(request):
+    from dataclasses import asdict
+
+    value = asdict(request)
+    value["created_at"] = request.created_at.astimezone(UTC).isoformat()
+    return _hash(canonical_json_bytes(value))
+
+
+def _bind_start_request(permit, request):
+    v = permit.value
+    if (
+        request.project_id != v["project_id"]
+        or request.work_run_id != v["work_run_id"]
+        or request.task_contract_id != v["contract_id"]
+        or request.task_contract_version != "v" + str(v["contract_version"])
+        or request.observed_state is not WorkflowState.READY
+        or request.observed_state_version != v["state_version"]
+        or request.target_state is not WorkflowState.RUNNING
+        or request.runtime_mode is not RuntimeMode.OWNER_SELF_DOGFOOD
+        or request.evidence_refs
+        or request.human_result_refs
+        or request.judgment_refs
+        or request.blocker_claim
+        or request.blocker_resolution_claim
+    ):
+        _deny("exact external start request denied")
+
+
+@dataclass(frozen=True)
+class ExternalIdeExecutionStartRef:
+    permit: ExternalIdeExecutionStartPermitV1
+    request_hash: str
+    _owner_token: object
+
+
+@dataclass(frozen=True)
+class VerifiedExternalIdeExecutionStartV1:
+    start_ref: ExternalIdeExecutionStartRef
+
+    @property
+    def common_ref(self):
+        ref = self.start_ref
+        if _START_REFS.get(id(ref)) is not ref or ref._owner_token is not _START_OWNER:
+            _deny("unverified external start")
+        return ref
+
+
+def _start_ref(permit, request):
+    ref = ExternalIdeExecutionStartRef(permit, _start_request_hash(request), _START_OWNER)
+    _START_REFS[id(ref)] = ref
+    return ref
+
+
+def verify_external_start_ref(ref, request):
+    if (
+        type(ref) is not ExternalIdeExecutionStartRef
+        or ref._owner_token is not _START_OWNER
+        or _START_REFS.get(id(ref)) is not ref
+    ):
+        return False
+    try:
+        _bind_start_request(ref.permit, request)
+        return ref.request_hash == _start_request_hash(request)
+    except (ValueError, TypeError):
+        return False
+
+
+async def _load_start_permit(session, permit_id):
+    from aiscc.persistence.models import ExternalIdeExecutionStartPermitRow
+
+    row = await session.get(ExternalIdeExecutionStartPermitRow, permit_id)
+    if row is None:
+        _deny("start permit missing")
+    permit = ExternalIdeExecutionStartPermitV1(
+        verify_canonical_json_bytes(bytes(row.canonical_body))
+    )
+    if (
+        row.permit_id != permit.value["permit_id"]
+        or row.work_run_id != permit.value["work_run_id"]
+        or row.producer_kind != PRODUCER
+        or row.body_sha256 != permit.fingerprint
+    ):
+        _deny("AUTHORITY_CORRUPTION: start permit")
+    return permit
+
+
+def _start_body(permit, request, started_at):
+    return canonical_json_bytes(
+        dict(
+            schema="AISCC-EXTERNAL-IDE-START-V1",
+            started_at=started_at,
+            producer=PRODUCER,
+            start_id=START_PREFIX + permit.value["permit_id"],
+            permit_fingerprint=permit.fingerprint,
+            transition_request_id=request.transition_request_id,
+            request_hash=_start_request_hash(request),
+        )
+    )
+
+
+async def verify_external_start_in_session(session, start_id):
+    """Reconstruct only committed historical start lineage; never a provider attempt."""
+    from aiscc.persistence.models import ExternalIdeExecutionStartRow, TaskContractBodyRow
+    from aiscc.workflow.models import GuardId
+
+    row = await session.get(ExternalIdeExecutionStartRow, start_id)
+    if row is None:
+        _deny("external start missing")
+    permit = await _load_start_permit(session, row.permit_id)
+    v = permit.value
+    body_row = await session.get(TaskContractBodyRow, v["body_ref"])
+    if body_row is None:
+        _deny("AUTHORITY_CORRUPTION: start TaskContract missing")
+    body = TaskContractBodyV1.from_bytes(bytes(body_row.canonical_body))
+    if body.body_sha256 != body_row.body_sha256 or body.body_ref != body_row.body_ref:
+        _deny("AUTHORITY_CORRUPTION: start TaskContract hash")
+    _bind_body(permit, body)
+    ready = await verify_historical_transition_provenance(session, v["ready_transition_id"])
+    _bind_ready(
+        permit,
+        ready.request,
+        ready.decision.resulting_state,
+        ready.decision.resulting_state_version,
+    )
+    raw = verify_canonical_json_bytes(bytes(row.canonical_body))
+    started_at = raw.get("started_at")
+    if not _timestamp(v["issued_at"]) <= _timestamp(started_at) < _timestamp(v["expires_at"]):
+        _deny("AUTHORITY_CORRUPTION: start time outside permit")
+    source = await verify_historical_transition_provenance(session, row.transition_request_id)
+    _bind_start_request(permit, source.request)
+    if (
+        source.decision.resulting_state is not WorkflowState.RUNNING
+        or source.decision.resulting_state_version != v["state_version"] + 1
+        or row.start_id != START_PREFIX + v["permit_id"]
+        or row.producer_kind != PRODUCER
+        or row.work_run_id != v["work_run_id"]
+        or bytes(row.canonical_body) != _start_body(permit, source.request, started_at)
+        or row.body_sha256 != _hash(bytes(row.canonical_body))
+    ):
+        _deny("AUTHORITY_CORRUPTION: external start lineage")
+    guards = [g for g in source.evaluation.guards if g.guard_id is GuardId.G_EXECUTION_STARTED]
+    if (
+        len(guards) != 1
+        or not guards[0].satisfied
+        or guards[0].reason != "P1_5_EXECUTION_REF_VERIFIED"
+        or guards[0].authority_ref != "p1-5:ExternalIdeExecutionStartRef"
+    ):
+        _deny("AUTHORITY_CORRUPTION: start guard provenance")
+    return VerifiedExternalIdeExecutionStartV1(_start_ref(permit, source.request))
+
+
+def _bind_ready(permit, run, state, version):
+    v = permit.value
+    if (
+        run.work_run_id != v["work_run_id"]
+        or run.project_id != v["project_id"]
+        or run.task_contract_id != v["contract_id"]
+        or run.task_contract_version != "v" + str(v["contract_version"])
+        or run.runtime_mode is not RuntimeMode.OWNER_SELF_DOGFOOD
+        or state is not WorkflowState.READY
+        or version != v["state_version"]
+    ):
+        _deny("exact READY WorkRun required")
+
+
+class ExternalIdeExecutionStartRepository:
+    """Trusted local start composition; start opens authority, it never edits source."""
+
+    def __init__(
+        self,
+        sessions,
+        task_authority,
+        observer,
+        *,
+        system_authority,
+        transition_repository,
+        clock=lambda: datetime.now(UTC),
+    ):
+        from aiscc.persistence.repository import PostgresTransitionRepository
+        from aiscc.task_authority.repository import PostgresExternalTaskAuthorityRepository
+        from aiscc.workflow.guards import P1_4GuardAuthority
+
+        if (
+            type(task_authority) is not PostgresExternalTaskAuthorityRepository
+            or type(observer) is not LocalGitObserver
+            or type(system_authority) is not P1_4GuardAuthority
+            or type(transition_repository) is not PostgresTransitionRepository
+        ):
+            _deny("existing trusted start owners required")
+        self._sessions, self._tasks, self._observer = sessions, task_authority, observer
+        self._system, self._transitions, self._clock = (
+            system_authority,
+            transition_repository,
+            clock,
+        )
+        self.__writer = None
+
+    def _fresh(self, permit, capability, inner_task_bytes):
+        v = permit.value
+        if not isinstance(capability, str) or not hmac.compare_digest(
+            _hash(capability.encode()), v["capability_hash"]
+        ):
+            _deny("start capability denied")
+        if type(inner_task_bytes) is not bytes or _hash(inner_task_bytes) != v["inner_task_sha256"]:
+            _deny("start task hash denied")
+        if not _timestamp(v["issued_at"]) <= _now(self._clock) < _timestamp(v["expires_at"]):
+            _deny("start permit expired/stale")
+
+    async def _current(self, session, permit):
+        v = permit.value
+        await acquire_work_run_transaction_lock(session, v["work_run_id"])
+        ready = await verify_historical_transition_provenance(session, v["ready_transition_id"])
+        _bind_ready(permit, ready.work_run, ready.work_run.state, ready.work_run.state_version)
+        _bind_ready(
+            permit,
+            ready.request,
+            ready.decision.resulting_state,
+            ready.decision.resulting_state_version,
+        )
+        receipt = await self._tasks.get_task_contract(
+            v["project_id"], v["contract_id"], v["contract_version"], session=session
+        )
+        if receipt is None:
+            _deny("start TaskContract missing")
+        _bind_body(permit, receipt.body)
+        await self._tasks.verify_task_contract(
+            receipt,
+            require_current=True,
+            expected_repository_binding={
+                k: v[k] for k in ("repository_id", "repository_root", "base_commit")
+            },
+            expected_next_action_ref=receipt.body.value["source_next_action"]["action_ref"],
+            session=session,
+        )
+        first = self._observer.observe(permit)
+        second = self._observer.observe(permit)
+        if (
+            first.root != second.root
+            or second.value["head"] != v["base_commit"]
+            or second.value["entries"]
+            or second.value["index"]
+            or not second.value["diff_check"]
+        ):
+            _deny("start requires clean exact repository/base")
+
+    def _bind_writer(self):
+        if self.__writer is not None:
+            _deny("start writer already bound")
+        self.__writer = object()
+        return _ExternalIdeStartWriter(self, self.__writer)
+
+    async def _issue(
+        self,
+        writer,
+        session,
+        *,
+        receipt,
+        work_run_id,
+        state_version,
+        ready_transition_id,
+        inner_task_bytes,
+        ttl,
+    ):
+        from aiscc.persistence.models import ExternalIdeExecutionStartPermitRow
+
+        if writer is not self.__writer or writer is None or not session.in_transaction():
+            _deny("trusted start writer/caller transaction required")
+        if type(inner_task_bytes) is not bytes or not inner_task_bytes:
+            _deny("exact Task bytes required")
+        t = receipt.body.value
+        token, now = secrets.token_urlsafe(32), _now(self._clock)
+        scope = {k: t[k] for k in ("allowed_paths", "forbidden_paths")}
+        permit = ExternalIdeExecutionStartPermitV1(
+            dict(
+                schema="AISCC-EXTERNAL-IDE-START-PERMIT-V1",
+                producer=PRODUCER,
+                project_id=t["project_id"],
+                permit_id="local-ide-start-" + uuid4().hex,
+                work_run_id=work_run_id,
+                state="READY",
+                state_version=state_version,
+                task_id=t["task_id"],
+                contract_id=t["contract_id"],
+                contract_version=t["contract_version"],
+                body_ref=receipt.body.body_ref,
+                body_sha256=receipt.body.body_sha256,
+                **plain(t["repository_binding"]),
+                inner_task_sha256=_hash(inner_task_bytes),
+                **scope,
+                scope_fingerprint=_hash(canonical_json_bytes(scope)),
+                issued_at=now.isoformat(),
+                expires_at=(now + ttl).isoformat(),
+                capability_hash=_hash(token.encode()),
+                ready_transition_id=ready_transition_id,
+            )
+        )
+        await self._current(session, permit)
+        self._fresh(permit, token, inner_task_bytes)
+        session.add(
+            ExternalIdeExecutionStartPermitRow(
+                permit_id=permit.value["permit_id"],
+                work_run_id=work_run_id,
+                producer_kind=PRODUCER,
+                canonical_body=permit.canonical_body,
+                body_sha256=permit.fingerprint,
+            )
+        )
+        await session.flush()
+        return permit, token
+
+    async def start(self, *, permit_id, capability, inner_task_bytes, request):
+        # Only this composition receives a transient pre-start ref. It never returns a
+        # ref/fact/participant before P1-4's transaction has committed successfully.
+        from aiscc.persistence.models import ExternalIdeExecutionStartRow
+
+        async with self._sessions() as session, session.begin():
+            permit = await _load_start_permit(session, permit_id)
+            self._fresh(permit, capability, inner_task_bytes)
+            _bind_start_request(permit, request)
+            old = await session.get(ExternalIdeExecutionStartRow, START_PREFIX + permit_id)
+            if old is not None:
+                verified = await verify_external_start_in_session(session, old.start_id)
+                if not verify_external_start_ref(verified.common_ref, request):
+                    _deny("changed start retry")
+            else:
+                await self._current(session, permit)
+        participant = _ExternalIdeStartParticipant(
+            self, permit, capability, inner_task_bytes, request
+        )
+        try:
+            return await self._transitions.decide(request, (), transaction_participant=participant)
+        finally:
+            participant.close()
+
+    async def resolve(self, start_id):
+        async with self._sessions() as session, session.begin():
+            return await verify_external_start_in_session(session, start_id)
+
+
+class _ExternalIdeStartWriter:
+    def __init__(self, repository, token):
+        self._repository, self._token = repository, token
+
+    async def issue(self, session, **kwargs):
+        return await self._repository._issue(self._token, session, **kwargs)
+
+
+def _bind_external_ide_start_writer(repository):
+    return repository._bind_writer()
+
+
+class _ExternalIdeStartParticipant:
+    def __init__(self, repository, permit, capability, task, request):
+        self.repo, self.permit, self.capability, self.task, self.request = (
+            repository,
+            permit,
+            capability,
+            task,
+            request,
+        )
+        self.ref = _start_ref(permit, request)
+
+    def close(self):
+        _START_REFS.pop(id(self.ref), None)
+        self.capability = None
+
+    def facts(self, request):
+        from aiscc.providers.authority import ExecutionReferenceAuthority
+        from aiscc.workflow.models import GuardId
+
+        if request != self.request:
+            _deny("start participant request differs")
+        system = self.repo._system
+        facts = tuple(
+            system.issue(
+                guard_id=g,
+                satisfied=True,
+                reason="EXTERNAL_IDE_CURRENT_TASK_VERIFIED",
+                authority_ref="external-ide-start-permit:" + self.permit.fingerprint,
+                request=request,
+            )
+            for g in (GuardId.G_CONTRACT, GuardId.G_SCOPE, GuardId.G_RUNTIME_CONTEXT)
+        )
+        return (
+            *facts,
+            system.issue_from_execution_ref(
+                guard_id=GuardId.G_EXECUTION_STARTED,
+                execution_ref=self.ref,
+                verifier=ExecutionReferenceAuthority(),
+                request=request,
+            ),
+        )
+
+    async def prepare(self, session, request, current):
+        from aiscc.persistence.models import ExternalIdeExecutionStartRow
+
+        if request != self.request or current is None:
+            _deny("start current request missing")
+        _bind_ready(self.permit, current, current.state, current.state_version)
+        permit = await _load_start_permit(session, self.permit.value["permit_id"])
+        if permit.canonical_body != self.permit.canonical_body:
+            _deny("start permit changed")
+        if (
+            await session.get(
+                ExternalIdeExecutionStartRow, START_PREFIX + permit.value["permit_id"]
+            )
+            is not None
+        ):
+            _deny("start permit already consumed")
+        await self.repo._current(session, permit)
+        self.repo._fresh(permit, self.capability, self.task)
+
+    def after_evaluation(self, request):
+        self.close()
+
+    async def after_decision(self, session, request, evaluation, decision, current):
+        from aiscc.persistence.models import ExternalIdeExecutionStartRow
+        from aiscc.workflow.models import DecisionOutcome
+
+        if decision.outcome is not DecisionOutcome.ADMITTED:
+            _deny("P1-4 start denied; rollback")
+        # Recheck expiry immediately before append; owner locks are still held.
+        now = _now(self.repo._clock)
+        if (
+            not _timestamp(self.permit.value["issued_at"])
+            <= now
+            < _timestamp(self.permit.value["expires_at"])
+        ):
+            _deny("start expired before commit")
+        body = _start_body(self.permit, request, now.isoformat())
+        session.add(
+            ExternalIdeExecutionStartRow(
+                start_id=START_PREFIX + self.permit.value["permit_id"],
+                permit_id=self.permit.value["permit_id"],
+                work_run_id=request.work_run_id,
+                transition_request_id=request.transition_request_id,
+                producer_kind=PRODUCER,
+                canonical_body=body,
+                body_sha256=_hash(body),
+            )
+        )
+        await session.flush()

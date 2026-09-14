@@ -1010,3 +1010,30 @@ External submission is not Evidence admission, G_EVIDENCE, Human authority or Ju
 No generic executor registration, arbitrary command runner, remote callback, provider output
 fabrication, automatic commit, or deploy is authorized. This is completion ingress only;
 external IDE execution-start authority and actual golden execution are separate gates.
+
+
+## Human-accepted local external IDE execution start V1
+
+`AISCC-P1-5-EXTERNAL-IDE-EXECUTION-START-V1` (Human-accepted 1800 review)
+adds only `LOCAL_IDE_SELF_DOGFOOD_V1` READY-bound start authority. A private
+trusted P1-5 writer issues an immutable, expiring, one-time start permit after
+current TaskContract, exact READY/version, repository/base, inner Task hash and
+allowed/forbidden scope verification. Only a capability hash is persisted.
+
+The P1-5-owned ExternalIdeExecutionStartRef contains no fabricated provider attempt
+or provider/tool selector. Existing G_EXECUTION_STARTED delegates to P1-5 owner
+verification. A private P1-4 transaction participant rechecks authority under the
+existing WorkRun lock, then appends immutable start consumption only for ADMITTED.
+P1-4 remains the sole WorkRun/state mutation owner. Failure rolls back transition,
+consumption and projection together. Full request identity binds deterministic
+retry; a different request cannot reuse a consumed permit.
+
+Committed permit/start rows and P1-4 historical transition provenance reconstruct
+start authority after restart. Constructed models/manual start registration are
+not external authority. Start is not completion, Evidence, Human, Judgment or Cycle.
+RUNNING means the exact local execution session is authorized and open; it does not
+claim that editing or completion has happened. No governed source edit precedes RUNNING.
+
+The accepted 1721 completion lease/submission semantics remain unchanged. Completion
+leases still require RUNNING. No generic executor, shell runner, new guard/state,
+provider fabrication, automatic commit, network or golden execution is authorized.

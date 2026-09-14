@@ -299,6 +299,8 @@ class ExecutionReferenceAuthority:
         self._refs: dict[str, object] = {}
 
     def register_start(self, ref: ExecutionAttemptRef) -> ExecutionAttemptRef:
+        if type(ref) is not ExecutionAttemptRef:
+            raise ValueError("external start requires durable owner verification")
         if (
             ref.status is not ExecutionStatus.NOT_STARTED
             or ref.state is not WorkflowState.READY
@@ -336,6 +338,14 @@ class ExecutionReferenceAuthority:
         return ref
 
     def verify(self, ref: object, request: TransitionRequest, guard_id: GuardId) -> bool:
+        if guard_id is GuardId.G_EXECUTION_STARTED:
+            from aiscc.providers.external_ide import (
+                ExternalIdeExecutionStartRef,
+                verify_external_start_ref,
+            )
+
+            if type(ref) is ExternalIdeExecutionStartRef:
+                return verify_external_start_ref(ref, request)
         if guard_id is GuardId.G_EXECUTION_STARTED and isinstance(ref, ExecutionAttemptRef):
             return bool(
                 self._refs.get(ref.execution_attempt_id) is ref

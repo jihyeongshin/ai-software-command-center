@@ -1700,3 +1700,31 @@ class TaskContractBodyRow(Base):
     predecessor_version: Mapped[int | None] = mapped_column(BigInteger)
     predecessor_sha256: Mapped[str | None] = mapped_column(String(64))
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ExternalIdeExecutionStartPermitRow(Base):
+    __tablename__ = "external_ide_execution_start_permits"
+    permit_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    work_run_id: Mapped[str] = mapped_column(
+        ForeignKey("work_runs.work_run_id"), nullable=False, unique=True
+    )
+    producer_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class ExternalIdeExecutionStartRow(Base):
+    __tablename__ = "external_ide_execution_starts"
+    start_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    permit_id: Mapped[str] = mapped_column(
+        ForeignKey("external_ide_execution_start_permits.permit_id"), nullable=False, unique=True
+    )
+    work_run_id: Mapped[str] = mapped_column(
+        ForeignKey("work_runs.work_run_id"), nullable=False, unique=True
+    )
+    transition_request_id: Mapped[str] = mapped_column(
+        ForeignKey("transition_requests.transition_request_id"), nullable=False, unique=True
+    )
+    producer_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
