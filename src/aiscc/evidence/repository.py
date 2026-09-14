@@ -129,9 +129,7 @@ class PostgresEvidenceRepository:
         session_factory: async_sessionmaker[AsyncSession],
         *,
         durable_content_authority: P1_6DurableContentAuthority | None = None,
-        historical_content_access_authority: (
-            P1_6HistoricalContentAccessAuthority | None
-        ) = None,
+        historical_content_access_authority: (P1_6HistoricalContentAccessAuthority | None) = None,
     ) -> None:
         self._session_factory = session_factory
         self._durable_content_authority = durable_content_authority
@@ -142,6 +140,95 @@ class PostgresEvidenceRepository:
     ) -> bool:
         """Construction-time identity check; authority IDs/versions are not capabilities."""
         return authority is self._durable_content_authority
+
+    async def verify_requirement_definition_graph(
+        self,
+        session: AsyncSession,
+        *,
+        task_contract_id: str,
+        task_contract_version: str,
+        requirement_set_ref: str,
+        expected_requirement_set_fingerprint: str,
+        expected_checkpoints: tuple[tuple[EvidenceCheckpointRef, str], ...],
+    ) -> tuple[
+        EvidenceRequirementSet, tuple[EvidenceRequirement, ...], tuple[EvidenceCheckpoint, ...], int
+    ]:
+        """Read current durable definitions; never infer evidence satisfaction.
+
+        Equality claims do not grant authority. Reuses the historical definition
+        checker without constructing an attestation, evaluation, or WorkRun.
+        """
+        if not session.in_transaction():
+            raise EvidenceAuthorityConflictError("caller transaction required")
+        with session.no_autoflush:
+            await _lock(session, f"evidence-task:{task_contract_id}:{task_contract_version}")
+            await _lock(session, f"evidence-set:{requirement_set_ref}")
+            row = await session.get(
+                EvidenceRequirementSetRow, requirement_set_ref, populate_existing=True
+            )
+            expected = {ref.serialized(): fp for ref, fp in expected_checkpoints}
+            if row is None or not expected or len(expected) != len(expected_checkpoints):
+                raise EvidenceAuthorityConflictError("definition identity missing or duplicated")
+            set_value = _set_from_row(row)
+            if (
+                row.task_contract_id != task_contract_id
+                or row.task_contract_version != task_contract_version
+                or row.fingerprint != expected_requirement_set_fingerprint
+                or set(expected) != set(set_value.ordered_checkpoint_refs)
+            ):
+                raise EvidenceAuthorityConflictError("expected definition binding differs")
+            all_checkpoints = tuple(
+                await session.scalars(
+                    select(EvidenceCheckpointRow).where(
+                        EvidenceCheckpointRow.requirement_set_ref == requirement_set_ref
+                    )
+                )
+            )
+            cp_rows = {x.checkpoint_ref: x for x in all_checkpoints}
+            if set(cp_rows) != set(expected) or len(cp_rows) != len(all_checkpoints):
+                raise HistoricalEvidenceProvenanceError("checkpoint membership differs")
+            definitions: tuple[EvidenceRequirement, ...] = ()
+            checkpoints: list[EvidenceCheckpoint] = []
+            for ref in set_value.ordered_checkpoint_refs:
+                cp = _checkpoint_from_row(cp_rows[ref])
+                actual_cp, actual_set, actual_requirements = await _definition_authority_graph(
+                    session,
+                    checkpoint_ref=ref,
+                    task_contract_id=task_contract_id,
+                    task_contract_version=task_contract_version,
+                    source_state=cp.source_state,
+                    target_state=cp.target_state,
+                    transition_purpose_id=cp.transition_purpose_id,
+                    transition_purpose_version=cp.transition_purpose_version,
+                    requirement_set_id=set_value.requirement_set_id,
+                    requirement_set_version=set_value.requirement_set_version,
+                )
+                if actual_cp.fingerprint != expected[ref] or actual_set != set_value:
+                    raise EvidenceAuthorityConflictError("checkpoint/set fingerprint differs")
+                if definitions and definitions != actual_requirements:
+                    raise HistoricalEvidenceProvenanceError("definition graph changed")
+                definitions = actual_requirements
+                checkpoints.append(actual_cp)
+            for obj, ref in [
+                (set_value, requirement_set_ref),
+                *((x, x.ref.serialized()) for x in definitions),
+                *((x, x.ref.serialized()) for x in checkpoints),
+            ]:
+                if obj.revoked_at is not None or await _has_invalidating_event(session, ref):
+                    raise EvidenceAuthorityConflictError("definition graph is not current")
+                scope = await _authority_subject_scope(session, ref)
+                if scope is None or scope[1:4] != (task_contract_id, task_contract_version, None):
+                    raise HistoricalEvidenceProvenanceError("definition owner scope differs")
+            for requirement in definitions:
+                if not set(requirement.applicable_checkpoint_refs) <= set(expected):
+                    raise HistoricalEvidenceProvenanceError("unbound checkpoint applicability")
+            revision = await _current_authority_revision(
+                session,
+                task_contract_id=task_contract_id,
+                task_contract_version=task_contract_version,
+                work_run_id=None,
+            )
+            return set_value, definitions, tuple(checkpoints), revision
 
     async def register_authority(
         self,
@@ -294,8 +381,7 @@ class PostgresEvidenceRepository:
             if prepared_durable_content is not None:
                 await _lock(
                     session,
-                    "evidence-content:"
-                    + prepared_durable_content.content.content_identity_key,
+                    "evidence-content:" + prepared_durable_content.content.content_identity_key,
                 )
             await _lock(
                 session,
@@ -369,8 +455,7 @@ class PostgresEvidenceRepository:
                 requirement is not None
                 and requirement.fingerprint_schema
                 is RequirementFingerprintSchema.V2_DURABLE_CONTENT
-                and requirement.durable_content_requirement
-                is DurableContentRequirement.REQUIRED
+                and requirement.durable_content_requirement is DurableContentRequirement.REQUIRED
             )
             if prepared_durable_content is not None and not durable_required:
                 raise DurableContentError(
@@ -703,9 +788,7 @@ class PostgresEvidenceRepository:
             metadata = await _verify_historical_content_in_session(
                 session,
                 admitted.content_ref,
-                expected_payload_fingerprint=(
-                    binding.durable_content_payload_fingerprint
-                ),
+                expected_payload_fingerprint=(binding.durable_content_payload_fingerprint),
             )
             if not _historical_content_access_allowed(
                 metadata.content,
@@ -716,9 +799,7 @@ class PostgresEvidenceRepository:
                     DurableContentErrorCode.ACCESS_DENIED,
                     "consumer grant does not authorize exact historical bytes",
                 )
-            return VerifiedHistoricalContent(
-                metadata, bytes(metadata.content.canonical_body_bytes)
-            )
+            return VerifiedHistoricalContent(metadata, bytes(metadata.content.canonical_body_bytes))
 
     async def require_p1_8_structured_source_binding(
         self, candidate_id: str
@@ -1108,9 +1189,7 @@ class PostgresEvidenceRepository:
             requirement_row = requirement_rows[requirement.ref.serialized()]
             if requirement_row.payload.get(
                 "revoked_at"
-            ) is not None or await _has_invalidating_event(
-                session, requirement.ref.serialized()
-            ):
+            ) is not None or await _has_invalidating_event(session, requirement.ref.serialized()):
                 return None
         expected_full_root = canonical_hash(
             [(item.ref.serialized(), item.fingerprint) for item in requirements]
@@ -1228,10 +1307,9 @@ class PostgresEvidenceRepository:
             outcome,
             current_time,
         )
-        if (
-            recomputed.evaluation_id != value.evaluation_id
-            or _set_evaluation_payload(recomputed) != _set_evaluation_payload(value)
-        ):
+        if recomputed.evaluation_id != value.evaluation_id or _set_evaluation_payload(
+            recomputed
+        ) != _set_evaluation_payload(value):
             return None
         return value
 
@@ -1366,9 +1444,7 @@ async def verify_historical_set_evaluation_provenance(
     try:
         parsed_ref = EvidenceSetEvaluationRef.parse(serialized_ref)
     except ValueError as exc:
-        raise HistoricalEvidenceProvenanceError(
-            "evidence set evaluation ref is malformed"
-        ) from exc
+        raise HistoricalEvidenceProvenanceError("evidence set evaluation ref is malformed") from exc
     row = await session.get(EvidenceSetEvaluationRow, parsed_ref.evaluation_id)
     if row is None:
         raise HistoricalEvidenceProvenanceError(
@@ -1659,7 +1735,33 @@ async def _historical_authority_graph(
     session: AsyncSession,
     value: EvidenceSetSatisfactionAttestation,
 ) -> tuple[EvidenceCheckpoint, EvidenceRequirementSet, tuple[EvidenceRequirement, ...]]:
-    checkpoint_ref = value.checkpoint_ref.serialized()
+    return await _definition_authority_graph(
+        session,
+        checkpoint_ref=value.checkpoint_ref.serialized(),
+        task_contract_id=value.task_contract_id,
+        task_contract_version=value.task_contract_version,
+        source_state=value.source_state,
+        target_state=value.target_state,
+        transition_purpose_id=value.transition_purpose_id,
+        transition_purpose_version=value.transition_purpose_version,
+        requirement_set_id=value.requirement_set_id,
+        requirement_set_version=value.requirement_set_version,
+    )
+
+
+async def _definition_authority_graph(
+    session: AsyncSession,
+    *,
+    checkpoint_ref: str,
+    task_contract_id: str,
+    task_contract_version: str,
+    source_state: WorkflowState,
+    target_state: WorkflowState | None,
+    transition_purpose_id: str | None,
+    transition_purpose_version: str | None,
+    requirement_set_id: str,
+    requirement_set_version: str,
+) -> tuple[EvidenceCheckpoint, EvidenceRequirementSet, tuple[EvidenceRequirement, ...]]:
     checkpoint_row = await session.get(EvidenceCheckpointRow, checkpoint_ref)
     if checkpoint_row is None:
         raise HistoricalEvidenceProvenanceError(
@@ -1694,12 +1796,12 @@ async def _historical_authority_graph(
     if (
         checkpoint.ref.serialized() != checkpoint_row.checkpoint_ref
         or checkpoint.ref.serialized() != checkpoint_ref
-        or checkpoint.task_contract_id != value.task_contract_id
-        or checkpoint.task_contract_version != value.task_contract_version
-        or checkpoint.source_state is not value.source_state
-        or checkpoint.target_state is not value.target_state
-        or checkpoint.transition_purpose_id != value.transition_purpose_id
-        or checkpoint.transition_purpose_version != value.transition_purpose_version
+        or checkpoint.task_contract_id != task_contract_id
+        or checkpoint.task_contract_version != task_contract_version
+        or checkpoint.source_state is not source_state
+        or checkpoint.target_state is not target_state
+        or checkpoint.transition_purpose_id != transition_purpose_id
+        or checkpoint.transition_purpose_version != transition_purpose_version
         or checkpoint.fingerprint != checkpoint_row.fingerprint
         or checkpoint.fingerprint != canonical_hash(_checkpoint_payload(checkpoint))
         or _aware(checkpoint_row.issued_at) != checkpoint.issued_at
@@ -1708,7 +1810,7 @@ async def _historical_authority_graph(
             "historical evidence checkpoint immutable authority disagrees"
         )
 
-    expected_set_ref = _set_ref(value.requirement_set_id, value.requirement_set_version)
+    expected_set_ref = _set_ref(requirement_set_id, requirement_set_version)
     if (
         checkpoint_row.requirement_set_ref != expected_set_ref
         or _set_ref(checkpoint.requirement_set_id, checkpoint.requirement_set_version)
@@ -1758,8 +1860,8 @@ async def _historical_authority_graph(
             requirement_set.requirement_set_version,
         )
         != expected_set_ref
-        or requirement_set.task_contract_id != value.task_contract_id
-        or requirement_set.task_contract_version != value.task_contract_version
+        or requirement_set.task_contract_id != task_contract_id
+        or requirement_set.task_contract_version != task_contract_version
         or requirement_set.semantic_owner is not EvidenceSemanticOwner.P1_6_EVIDENCE
         or checkpoint_ref not in requirement_set.ordered_checkpoint_refs
         or len(requirement_set.ordered_requirement_refs)
@@ -1850,10 +1952,10 @@ async def _historical_authority_graph(
         if (
             requirement.ref.serialized() != requirement_ref
             or requirement_row.requirement_set_ref != expected_set_ref
-            or requirement.task_contract_id != value.task_contract_id
-            or requirement.task_contract_version != value.task_contract_version
-            or requirement.requirement_set_id != value.requirement_set_id
-            or requirement.requirement_set_version != value.requirement_set_version
+            or requirement.task_contract_id != task_contract_id
+            or requirement.task_contract_version != task_contract_version
+            or requirement.requirement_set_id != requirement_set_id
+            or requirement.requirement_set_version != requirement_set_version
             or requirement.semantic_owner is not EvidenceSemanticOwner.P1_6_EVIDENCE
             or requirement.obligation is not expected_obligations[requirement.profile]
             or requirement_row.profile != requirement.profile.value
@@ -3063,8 +3165,7 @@ async def _persist_durable_content_and_binding(
             "candidate EvidenceContentRef differs from the prepared durable object",
         )
     if (
-        requirement.fingerprint_schema
-        is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
+        requirement.fingerprint_schema is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
         or requirement.durable_content_requirement is not DurableContentRequirement.REQUIRED
         or requirement.durable_content_policy_ref is None
         or requirement.durable_content_policy_fingerprint is None
@@ -3144,9 +3245,7 @@ async def _persist_durable_content_and_binding(
     binding = replace(
         binding, binding_fingerprint=canonical_hash(_durable_binding_payload(binding))
     )
-    existing_binding = await session.get(
-        EvidenceCandidateContentBindingRow, candidate.candidate_id
-    )
+    existing_binding = await session.get(EvidenceCandidateContentBindingRow, candidate.candidate_id)
     if existing_binding is None:
         session.add(_durable_binding_row(binding))
         await session.flush()
@@ -3255,8 +3354,7 @@ async def _verify_durable_binding_in_session(
             member.requirement_ref: member
             for member in await session.scalars(
                 select(EvidenceRequirementRow).where(
-                    EvidenceRequirementRow.requirement_set_ref
-                    == binding.requirement_set_ref
+                    EvidenceRequirementRow.requirement_set_ref == binding.requirement_set_ref
                 )
             )
         }
@@ -3274,14 +3372,11 @@ async def _verify_durable_binding_in_session(
     )
     if (
         any(
-            not _historical_requirement_payload_shape_valid(
-                member_rows[member.ref.serialized()]
-            )
+            not _historical_requirement_payload_shape_valid(member_rows[member.ref.serialized()])
             or member.fingerprint != canonical_hash(_requirement_payload(member))
             for member in members
         )
-        or
-        expected_root != requirement_set.requirement_root_hash
+        or expected_root != requirement_set.requirement_root_hash
         or set_row.fingerprint != canonical_hash(_set_payload(requirement_set))
     ):
         raise DurableContentError(
@@ -3295,8 +3390,7 @@ async def _verify_durable_binding_in_session(
         expected_payload_fingerprint=binding.durable_content_payload_fingerprint,
     )
     if (
-        requirement.fingerprint_schema
-        is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
+        requirement.fingerprint_schema is not RequirementFingerprintSchema.V2_DURABLE_CONTENT
         or requirement.durable_content_requirement is not DurableContentRequirement.REQUIRED
         or requirement.ref.serialized() != binding.requirement_ref
         or requirement.fingerprint != binding.requirement_fingerprint
@@ -3390,7 +3484,7 @@ async def _current_authority_revision(
     *,
     task_contract_id: str,
     task_contract_version: str,
-    work_run_id: str,
+    work_run_id: str | None,
 ) -> int:
     return int(
         await session.scalar(
@@ -3537,9 +3631,7 @@ def _requirement_row(value: EvidenceRequirement) -> EvidenceRequirementRow:
         "evidence_type_version": value.evidence_type_version,
         "allowed_issuer_types": sorted(item.value for item in value.allowed_issuer_types),
         "allowed_issuer_ids": sorted(value.allowed_issuer_ids),
-        "allowed_human_categories": sorted(
-            item.value for item in value.allowed_human_categories
-        ),
+        "allowed_human_categories": sorted(item.value for item in value.allowed_human_categories),
         "allowed_content_kinds": sorted(item.value for item in value.allowed_content_kinds),
         "schema_id": value.schema_id,
         "schema_version": value.schema_version,
@@ -3563,9 +3655,7 @@ def _requirement_row(value: EvidenceRequirement) -> EvidenceRequirementRow:
                 "fingerprint_schema": value.fingerprint_schema.value,
                 "durable_content_requirement": value.durable_content_requirement.value,
                 "durable_content_policy_ref": value.durable_content_policy_ref,
-                "durable_content_policy_fingerprint": (
-                    value.durable_content_policy_fingerprint
-                ),
+                "durable_content_policy_fingerprint": (value.durable_content_policy_fingerprint),
             }
         )
     return EvidenceRequirementRow(
@@ -4397,9 +4487,7 @@ def _set_evaluation_from_row(row: EvidenceSetEvaluationRow) -> EvidenceSetEvalua
             str(payload["requirement_set_id"]),
             str(payload["requirement_set_version"]),
             row.full_requirement_root_hash,
-            tuple(
-                str(item) for item in _items(payload["ordered_applicable_requirement_refs"])
-            ),
+            tuple(str(item) for item in _items(payload["ordered_applicable_requirement_refs"])),
             row.checkpoint_subset_root_hash,
             results,
             row.admitted_ref_root_hash,

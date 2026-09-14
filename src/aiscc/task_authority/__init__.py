@@ -4,6 +4,12 @@ The live writer, repository implementation, and capability binding are deliberat
 re-exported from this package boundary.
 """
 
+from aiscc.task_authority.contracts import (
+    IssuedTaskContractV1,
+    TaskContractBodyV1,
+    TaskContractError,
+    VerifiedTaskContractBindingV1,
+)
 from aiscc.task_authority.models import (
     AuthorityEventKind,
     CurrentProjectionDisposition,
@@ -26,6 +32,10 @@ from aiscc.task_authority.ports import (
 )
 
 __all__ = [
+    "IssuedTaskContractV1",
+    "TaskContractBodyV1",
+    "TaskContractError",
+    "VerifiedTaskContractBindingV1",
     "AuthorityEventKind",
     "CurrentProjectionDisposition",
     "ExternalTaskAuthorityError",

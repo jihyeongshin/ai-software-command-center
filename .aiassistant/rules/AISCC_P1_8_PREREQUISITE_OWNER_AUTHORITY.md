@@ -518,3 +518,12 @@ PUBLIC_BOUNDED_LIVE = NOT_RELEASED
 ```
 
 Human acceptance is necessary but does not implement prerequisites or resume runtime.
+
+
+## 13. TaskContract Durable Body V1 adoption (20260914_1302)
+
+The Human-accepted 0319 + 0812 + 0902 + 0940 Outcome A + 1212 chain is adopted in [AISCC_TASKCONTRACT_DURABLE_BODY_AUTHORITY.md](AISCC_TASKCONTRACT_DURABLE_BODY_AUTHORITY.md). It adds one append-only complete-body table under the existing EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY and retains the existing TaskConstraintRefV1 envelope, validators, authority fingerprints and certified event-prefix semantics. It does not revise the historical status snapshots above.
+
+V1 issuance supports only owner-current open-cycle-derived-task-issuance. Operational recovery remains valid in P1-8 with its source WorkRun lock, but V1 rejects it before that lock or issuance writes with TASKCONTRACT_V1_UNSUPPORTED_NEXT_ACTION_SOURCE. Issuer/revoker have no WorkRun locks; READY takes target WorkRun then contract family and same-transaction owner verification. P1-6 definition/currentness verification is not evidence satisfaction. Human/Judgment binding is immutable owner-consumable configuration; existing P1-7 owners retain registration, authentication, result, fingerprint and currentness authority. NONE/null template metadata grants no authority.
+
+Existing P1-4 owns READY and later transitions. RuntimeMode remains OWNER_SELF_DOGFOOD; AISCC_SELF_DOGFOOD is Cycle provenance only. No new state machine, source kind, generic planner, template registry, Human/Judgment owner, legacy body repair, golden execution or P2-4 closure is authorized by this adoption.

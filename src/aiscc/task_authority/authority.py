@@ -38,6 +38,29 @@ class _ExternalTaskAuthorityWriter:
     def __reduce__(self) -> NoReturn:
         raise TypeError("external Task-authority capability cannot be serialized")
 
+    def configure_task_contracts(self, **configuration) -> None:
+        self.__repository._configure_task_contracts(self.__capability, **configuration)
+
+    async def issue_task_contract(self, *, body, expected_current_body_sha256, issued_at):
+        return await self.__repository._issue_task_contract(
+            self.__capability,
+            body=body,
+            expected_current_body_sha256=expected_current_body_sha256,
+            issued_at=issued_at,
+        )
+
+    async def revoke_task_contract(
+        self, *, project_id, contract_id, expected_version, expected_body_sha256, effective_at
+    ):
+        return await self.__repository._revoke_task_contract(
+            self.__capability,
+            project_id=project_id,
+            contract_id=contract_id,
+            expected_version=expected_version,
+            expected_body_sha256=expected_body_sha256,
+            effective_at=effective_at,
+        )
+
     async def issue_task_constraint(
         self,
         *,

@@ -49,7 +49,10 @@ from aiscc.persistence.models import (
     TransitionRequestRow,
     WorkRunRow,
 )
-from aiscc.persistence.repository import verify_historical_transition_provenance
+from aiscc.persistence.repository import (
+    acquire_work_run_transaction_lock,
+    verify_historical_transition_provenance,
+)
 from aiscc.task_authority.models import ExternalTaskAuthorityError, NextActionPriorityClass
 from aiscc.task_authority.ports import ExternalTaskAuthorityVerifierPort
 
@@ -914,6 +917,156 @@ class PostgresNextActionRepository:
                 projection.reason = "EXTERNAL_CONTEXT_CURRENT_WITHDRAWN"
                 projection.updated_at = event.effective_at
 
+    async def verify_current_selection(
+        self,
+        session: AsyncSession,
+        *,
+        selection_id: str,
+        expected_project_id: str,
+        expected_project_revision: int,
+        expected_selection_fingerprint: str,
+        expected_candidate: TaskIssuanceCandidate | None = None,
+        expected_action_ref: ActionRef,
+        expected_descriptor_fingerprint: str,
+        allowed_selection_modes: frozenset[NextActionSelectionMode] | None = None,
+    ) -> tuple[NextActionSelection, TaskIssuanceCandidate, NextActionDescriptor]:
+        """Verify existing owner authority without changing rows or the caller transaction.
+
+        Expected values are equality claims, never authority. All locks survive until
+        the caller completes its transaction. Autoflush is disabled for this read.
+        """
+        if not session.in_transaction():
+            raise NextActionError(
+                NextActionErrorCode.AUTHORITY_DENIED, "caller transaction required"
+            )
+        with session.no_autoflush:
+            row = await session.get(NextActionSelectionRow, selection_id, populate_existing=True)
+            if row is None or row.project_id != expected_project_id:
+                raise NextActionError(
+                    NextActionErrorCode.IDENTITY_CONFLICT, "selection identity differs"
+                )
+            evaluation = await session.get(NextActionEvaluationRow, row.evaluation_id)
+            if evaluation is None:
+                raise NextActionError(
+                    NextActionErrorCode.HISTORICAL_CORRUPTION, "evaluation absent"
+                )
+            if allowed_selection_modes is not None and evaluation.payload.get("mode") not in {
+                mode.value for mode in allowed_selection_modes
+            }:
+                # Caller capability restriction; never changes global P1-8 mode semantics.
+                # In particular deny before replay/currentness can touch a recovery source run.
+                raise NextActionError(NextActionErrorCode.NOT_SUPPORTED, "caller source capability")
+            descriptor = self._descriptors.get(row.action_ref)
+            if descriptor is None or not self._policy_authority.recognizes_descriptor(descriptor):
+                raise NextActionError(
+                    NextActionErrorCode.DESCRIPTOR_NOT_CURRENT, "descriptor not recognized"
+                )
+            # Policy invalidation takes owner locks before projection row locks.
+            for ref in sorted(
+                (
+                    self._eligibility_policy.policy_ref,
+                    self._selection_policy.policy_ref,
+                    row.action_ref,
+                )
+            ):
+                await _lock(session, f"p1-8-next-action-owner:{ref}")
+            # Memory invalidation takes view locks before selection projection locks.
+            memory_lineages: set[str] = set()
+            for entry_id in sorted(row.payload.get("memory_refs", [])):
+                entry = await session.get(ProjectMemoryEntryRow, entry_id)
+                if entry is None:
+                    raise NextActionError(NextActionErrorCode.NON_CURRENT_MEMORY, "memory absent")
+                memory_lineages.add(entry.memory_lineage_key)
+            for lineage in sorted(memory_lineages):
+                await _lock(session, f"p1-8-memory-lineage:{lineage}")
+                await session.get(
+                    ProjectMemoryViewRow,
+                    lineage,
+                    with_for_update=True,
+                    populate_existing=True,
+                )
+            await _lock(session, f"p1-8-next-action-project:{expected_project_id}")
+            projection = await session.get(
+                NextActionProjectionRow,
+                expected_project_id,
+                with_for_update=True,
+                populate_existing=True,
+            )
+            folded = await _fold_selection_projection(session, expected_project_id)
+            if (
+                projection is None
+                or (
+                    projection.selection_id,
+                    projection.project_revision,
+                    projection.latest_event_sequence,
+                    projection.state,
+                    projection.reason,
+                    projection.updated_at,
+                )
+                != folded
+            ):
+                raise NextActionError(
+                    NextActionErrorCode.HISTORICAL_CORRUPTION, "projection differs from owner fold"
+                )
+            if (
+                folded[0] != selection_id
+                or folded[1] != expected_project_revision
+                or folded[3] != "CURRENT"
+            ):
+                raise NextActionError(
+                    NextActionErrorCode.IDENTITY_CONFLICT, "selection no longer current"
+                )
+            await self._require_current_policy(
+                session,
+                self._eligibility_policy.policy_ref,
+                self._eligibility_policy.fingerprint,
+                "ELIGIBILITY",
+            )
+            await self._require_current_policy(
+                session,
+                self._selection_policy.policy_ref,
+                self._selection_policy.fingerprint,
+                "SELECTION",
+            )
+            await self._require_current_subject(session, row.action_ref, "DESCRIPTOR")
+            selection, candidate = await self._replay_pair(session, row, caller_transaction=True)
+            if (
+                selection.fingerprint != expected_selection_fingerprint
+                or (expected_candidate is not None and candidate != expected_candidate)
+                or selection.action_ref != expected_action_ref
+                or descriptor.fingerprint != expected_descriptor_fingerprint
+            ):
+                raise NextActionError(
+                    NextActionErrorCode.IDENTITY_CONFLICT, "expected lineage differs"
+                )
+            evaluation = await session.get(NextActionEvaluationRow, row.evaluation_id)
+            if evaluation is None:
+                raise NextActionError(
+                    NextActionErrorCode.HISTORICAL_CORRUPTION, "evaluation absent"
+                )
+            if evaluation.payload.get("mode") == NextActionSelectionMode.CYCLE_DERIVED.value:
+                current = await self._require_current_memory(
+                    session, expected_project_id, selection.memory_refs, caller_transaction=True
+                )
+                if (
+                    current.context_ref != row.external_context_ref
+                    or current.context_fingerprint != row.external_context_fingerprint
+                ):
+                    raise NextActionError(
+                        NextActionErrorCode.PRIORITY_SOURCE_NOT_ENROLLED, "source lineage differs"
+                    )
+            else:
+                source_run_id = evaluation.payload.get("operational_work_run_id")
+                if not isinstance(source_run_id, str):
+                    raise NextActionError(
+                        NextActionErrorCode.RECOVERY_AUTHORITY_REQUIRED, "source run absent"
+                    )
+                await acquire_work_run_transaction_lock(session, source_run_id)
+                await self._require_operational_recovery(
+                    session, expected_project_id, source_run_id
+                )
+            return selection, candidate, descriptor
+
     async def replay(self, selection_id: str) -> tuple[NextActionSelection, TaskIssuanceCandidate]:
         async with self._session_factory() as session:
             row = await session.get(NextActionSelectionRow, selection_id)
@@ -924,50 +1077,14 @@ class PostgresNextActionRepository:
     async def rebuild_projection(self, project_id: str) -> tuple[str | None, int]:
         async with self._session_factory() as session, session.begin():
             await _lock(session, f"p1-8-next-action-project:{project_id}")
-            events = tuple(
-                await session.scalars(
-                    select(NextActionAuthorityEventRow)
-                    .where(NextActionAuthorityEventRow.project_id == project_id)
-                    .order_by(NextActionAuthorityEventRow.event_sequence)
-                )
-            )
-            revision = 0
-            selection_id: str | None = None
-            state = "WITHDRAWN"
-            reason = "NO_CURRENT_SELECTION"
-            latest = 0
-            updated_at: datetime | None = None
-            for event in events:
-                if event.prior_revision != revision or event.new_revision != revision + 1:
-                    raise NextActionError(
-                        NextActionErrorCode.HISTORICAL_CORRUPTION,
-                        "NextAction authority event gap or duplicate",
-                    )
-                if await session.get(NextActionSelectionRow, event.selection_id) is None:
-                    raise NextActionError(
-                        NextActionErrorCode.HISTORICAL_CORRUPTION,
-                        "NextAction event selection absent",
-                    )
-                revision = event.new_revision
-                if event.event_kind == "SELECTED":
-                    selection_id = event.selection_id
-                    state = "CURRENT"
-                    reason = "SELECTED_CURRENT"
-                elif event.event_kind == "WITHDRAWN":
-                    selection_id = None
-                    state = "WITHDRAWN"
-                    reason = "OWNER_AUTHORITY_CURRENT_WITHDRAWN"
-                else:
-                    raise NextActionError(
-                        NextActionErrorCode.HISTORICAL_CORRUPTION,
-                        "unknown NextAction authority event kind",
-                    )
-                latest = event.event_sequence
-                updated_at = event.created_at
-            if updated_at is None:
-                raise NextActionError(
-                    NextActionErrorCode.HISTORICAL_CORRUPTION, "no selection history"
-                )
+            (
+                selection_id,
+                revision,
+                latest,
+                state,
+                reason,
+                updated_at,
+            ) = await _fold_selection_projection(session, project_id)
             projection = await session.get(NextActionProjectionRow, project_id)
             if projection is None:
                 session.add(
@@ -1027,7 +1144,12 @@ class PostgresNextActionRepository:
             raise NextActionError(code, f"{subject_kind} is not current")
 
     async def _require_current_memory(
-        self, session: AsyncSession, project_id: str, entry_ids: tuple[str, ...]
+        self,
+        session: AsyncSession,
+        project_id: str,
+        entry_ids: tuple[str, ...],
+        *,
+        caller_transaction: bool = False,
     ) -> _ResolvedContextSelection:
         if not entry_ids:
             raise NextActionError(
@@ -1107,7 +1229,9 @@ class PostgresNextActionRepository:
                 NextActionErrorCode.HISTORICAL_CORRUPTION,
                 "NEXT_ACTION_CONTEXT Memory/owner locator differs",
             )
-        latest = await self._task_authority_verifier.latest_snapshot()
+        latest = await self._task_authority_verifier.latest_snapshot(
+            **({"session": session} if caller_transaction else {})
+        )
         try:
             fold = await self._task_authority_verifier.verify_next_action_context(
                 context_ref=str(content["context_ref"]),
@@ -1120,6 +1244,7 @@ class PostgresNextActionRepository:
                 snapshot_fingerprint=latest.snapshot_fingerprint,
                 owner_event_high_watermark=latest.owner_event_high_watermark,
                 require_current=True,
+                **({"session": session} if caller_transaction else {}),
             )
         except (ExternalTaskAuthorityError, ValueError) as exc:
             raise NextActionError(
@@ -1254,6 +1379,8 @@ class PostgresNextActionRepository:
         row: NextActionSelectionRow,
         evaluation: NextActionEvaluationRow,
         descriptor: NextActionDescriptorRow,
+        *,
+        caller_transaction: bool = False,
     ) -> None:
         raw_refs = evaluation.payload.get("authoritative_input_refs")
         if not isinstance(raw_refs, list):
@@ -1360,6 +1487,7 @@ class PostgresNextActionRepository:
                     snapshot_fingerprint=str(row.external_context_snapshot_fingerprint),
                     owner_event_high_watermark=int(row.external_context_event_high_watermark or 0),
                     require_current=False,
+                    **({"session": session} if caller_transaction else {}),
                 )
             except (ExternalTaskAuthorityError, KeyError, TypeError, ValueError) as exc:
                 raise NextActionError(
@@ -1433,7 +1561,11 @@ class PostgresNextActionRepository:
             )
 
     async def _replay_pair(
-        self, session: AsyncSession, row: NextActionSelectionRow
+        self,
+        session: AsyncSession,
+        row: NextActionSelectionRow,
+        *,
+        caller_transaction: bool = False,
     ) -> tuple[NextActionSelection, TaskIssuanceCandidate]:
         evaluation = await session.get(NextActionEvaluationRow, row.evaluation_id)
         proposal = await session.scalar(
@@ -1595,7 +1727,9 @@ class PostgresNextActionRepository:
                 NextActionErrorCode.HISTORICAL_CORRUPTION,
                 "descriptor immutable authority payload differs",
             )
-        await self._verify_authoritative_inputs_as_of(session, row, evaluation, descriptor)
+        await self._verify_authoritative_inputs_as_of(
+            session, row, evaluation, descriptor, caller_transaction=caller_transaction
+        )
         selection = _selection_from_row(row)
         if selection.fingerprint != row.fingerprint:
             raise NextActionError(
@@ -1814,3 +1948,52 @@ def _selection_from_row(row: NextActionSelectionRow) -> NextActionSelection:
         row.external_context_event_high_watermark,
         row.memory_authority_event_high_watermark,
     )
+
+
+async def _fold_selection_projection(
+    session: AsyncSession, project_id: str
+) -> tuple[str | None, int, int, str, str, datetime]:
+    events = tuple(
+        await session.scalars(
+            select(NextActionAuthorityEventRow)
+            .where(NextActionAuthorityEventRow.project_id == project_id)
+            .order_by(NextActionAuthorityEventRow.event_sequence)
+        )
+    )
+    revision = 0
+    selection_id: str | None = None
+    state = "WITHDRAWN"
+    reason = "NO_CURRENT_SELECTION"
+    latest = 0
+    updated_at: datetime | None = None
+    for event in events:
+        if event.prior_revision != revision or event.new_revision != revision + 1:
+            raise NextActionError(
+                NextActionErrorCode.HISTORICAL_CORRUPTION,
+                "NextAction authority event gap or duplicate",
+            )
+        if await session.get(NextActionSelectionRow, event.selection_id) is None:
+            raise NextActionError(
+                NextActionErrorCode.HISTORICAL_CORRUPTION,
+                "NextAction event selection absent",
+            )
+        revision = event.new_revision
+        if event.event_kind == "SELECTED":
+            selection_id = event.selection_id
+            state = "CURRENT"
+            reason = "SELECTED_CURRENT"
+        elif event.event_kind == "WITHDRAWN":
+            selection_id = None
+            state = "WITHDRAWN"
+            reason = "OWNER_AUTHORITY_CURRENT_WITHDRAWN"
+        else:
+            raise NextActionError(
+                NextActionErrorCode.HISTORICAL_CORRUPTION,
+                "unknown NextAction authority event kind",
+            )
+        latest = event.event_sequence
+        updated_at = event.created_at
+    if updated_at is None:
+        raise NextActionError(NextActionErrorCode.HISTORICAL_CORRUPTION, "no selection history")
+    assert updated_at is not None
+    return selection_id, revision, latest, state, reason, updated_at

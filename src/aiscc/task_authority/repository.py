@@ -18,6 +18,19 @@ from aiscc.persistence.models import (
     TaskConstraintCurrentRow,
     TaskConstraintOwnerSnapshotRow,
     TaskConstraintRefRow,
+    TaskContractBodyRow,
+)
+from aiscc.task_authority.contracts import (
+    SCHEMA,
+    SUPPORTED_ACTION_ID,
+    UNSUPPORTED_SOURCE,
+    IssuedTaskContractV1,
+    TaskContractBodyV1,
+    TaskContractError,
+    VerifiedTaskContractBindingV1,
+    action_claim,
+    candidate_fingerprint,
+    plain,
 )
 from aiscc.task_authority.models import (
     AUTHORITY_REVISION,
@@ -63,6 +76,7 @@ class PostgresExternalTaskAuthorityRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self.__writer_capability: object | None = None
+        self.__contract_composition = None
 
     def _bind_writer_capability(self, capability: object) -> None:
         if self.__writer_capability is not None or capability is None:
@@ -73,11 +87,552 @@ class PostgresExternalTaskAuthorityRepository:
         self.__writer_capability = capability
 
     def _require_capability(self, capability: object) -> None:
-        if capability is not self.__writer_capability:
+        if self.__writer_capability is None or capability is not self.__writer_capability:
             raise ExternalTaskAuthorityError(
                 ExternalTaskAuthorityErrorCode.CAPABILITY_DENIED,
                 "external Task-authority writer capability denied",
             )
+
+    def _configure_task_contracts(
+        self,
+        capability,
+        *,
+        project_id,
+        repository_binding,
+        next_action_repository,
+        evidence_repository,
+        required_authority_refs=(),
+        human_roles_by_selector=None,
+    ):
+        from pathlib import Path
+        from types import MappingProxyType
+
+        from aiscc.evidence.repository import PostgresEvidenceRepository
+        from aiscc.next_action.repository import PostgresNextActionRepository
+
+        self._require_capability(capability)
+        if self.__contract_composition is not None:
+            raise TaskContractError("TaskContract composition already bound")
+        if not isinstance(next_action_repository, PostgresNextActionRepository) or not isinstance(
+            evidence_repository, PostgresEvidenceRepository
+        ):
+            raise TaskContractError("existing concrete owners required")
+        if set(repository_binding) != {"repository_id", "repository_root", "base_commit"}:
+            raise TaskContractError("repository enrollment differs")
+        if not Path(repository_binding["repository_root"]).is_absolute():
+            raise TaskContractError("absolute server-enrolled root required")
+        self.__contract_composition = (
+            project_id,
+            MappingProxyType(dict(repository_binding)),
+            next_action_repository,
+            evidence_repository,
+            tuple(required_authority_refs),
+            MappingProxyType(
+                {
+                    k: frozenset(v)
+                    for k, v in (
+                        human_roles_by_selector
+                        or {
+                            "reviewers-v1": frozenset({"reviewer"}),
+                            "reviewers-v2": frozenset({"reviewer"}),
+                        }
+                    ).items()
+                }
+            ),
+        )
+
+    def _contract_composition(self):
+        if self.__contract_composition is None:
+            raise TaskContractError("TaskContract composition not enrolled")
+        return self.__contract_composition
+
+    async def _contract_family(self, session, project_id, contract_id):
+        await _lock(session, "task-contract-family:" + canonical_sha256([project_id, contract_id]))
+        rows = tuple(
+            await session.scalars(
+                select(TaskContractBodyRow)
+                .where(
+                    TaskContractBodyRow.project_id == project_id,
+                    TaskContractBodyRow.contract_id == contract_id,
+                )
+                .order_by(TaskContractBodyRow.contract_version)
+                .execution_options(populate_existing=True)
+            )
+        )
+        previous = None
+        for index, row in enumerate(rows, 1):
+            body = TaskContractBodyV1.from_bytes(bytes(row.canonical_body))
+            v = body.value
+            expected_predecessor = (
+                None
+                if previous is None
+                else {"contract_version": index - 1, "body_sha256": previous.body_sha256}
+            )
+            if (
+                row.contract_version != index
+                or v["contract_version"] != index
+                or v["project_id"] != project_id
+                or v["contract_id"] != contract_id
+                or v["task_id"] != row.task_id
+                or body.body_ref != row.body_ref
+                or body.body_sha256 != row.body_sha256
+                or row.body_schema_id != SCHEMA
+                or plain(v["predecessor"]) != expected_predecessor
+                or row.predecessor_version != (index - 1 if index > 1 else None)
+                or row.predecessor_sha256 != (previous.body_sha256 if previous else None)
+                or (previous and v["task_id"] != previous.value["task_id"])
+            ):
+                raise TaskContractError("AUTHORITY_CORRUPTION: body family projection")
+            previous = body
+        return rows
+
+    async def _contract_constraint_locks(self, session, rows, additional_refs=()):
+        keys = set()
+        for ref in [*(r.constraint_ref for r in rows), *(r[0] for r in additional_refs)]:
+            row = await session.get(TaskConstraintRefRow, ref)
+            if row is None:
+                raise TaskContractError("AUTHORITY_CORRUPTION: constraint absent")
+            keys.add(_constraint_from_row(row).logical_key)
+        for key in sorted(keys):
+            await _lock(session, f"external-task-authority:constraint:{key}")
+
+    async def _contract_row_receipt(self, session, row):
+        body = TaskContractBodyV1.from_bytes(bytes(row.canonical_body))
+        refrow = await session.get(TaskConstraintRefRow, row.constraint_ref)
+        eventrow = await session.get(TaskConstraintAuthorityEventRow, row.issuance_event_ref)
+        if refrow is None or eventrow is None:
+            raise TaskContractError("AUTHORITY_CORRUPTION: body envelope absent")
+        ref, event = _constraint_from_row(refrow), _constraint_event_from_row(eventrow)
+        v = body.value
+        if (
+            ref.constraint_payload_ref != body.body_ref
+            or ref.constraint_payload_fingerprint != body.body_sha256
+            or ref.constraint_schema_id != SCHEMA
+            or ref.constraint_schema_version != "v1"
+            or ref.scope
+            != TaskConstraintScopeV1(
+                TaskConstraintScopeKind.TASK_CONTRACT,
+                v["project_id"],
+                v["contract_id"],
+                "v" + str(v["contract_version"]),
+            )
+            or ref.logical_constraint_id
+            != "tc-body-" + canonical_sha256([v["project_id"], v["contract_id"]])
+            or ref.constraint_ref_id != "tc-body-" + body.body_sha256
+            or event.event_kind is not AuthorityEventKind.ISSUED
+            or event.constraint_ref != ref.constraint_ref
+            or event.constraint_fingerprint != ref.constraint_fingerprint
+            or event.event_id != "tc-issued-" + body.body_sha256
+            or ref.issued_at != row.issued_at
+            or event.effective_at != row.issued_at
+        ):
+            raise TaskContractError("AUTHORITY_CORRUPTION: body/ref/event binding")
+        snapshot_row = await session.get(
+            TaskConstraintOwnerSnapshotRow,
+            "task-constraint-owner-snapshot:v1:tc-issued-" + body.body_sha256,
+        )
+        if snapshot_row is None:
+            raise TaskContractError("AUTHORITY_CORRUPTION: original body snapshot absent")
+        snapshot = await _verify_snapshot(session, snapshot_row)
+        await self.verify_task_constraint(
+            constraint_ref=ref.constraint_ref,
+            constraint_fingerprint=ref.constraint_fingerprint,
+            snapshot_ref=snapshot.snapshot_ref,
+            snapshot_fingerprint=snapshot.snapshot_fingerprint,
+            owner_event_high_watermark=snapshot.owner_event_high_watermark,
+            require_current=False,
+            session=session,
+        )
+        return IssuedTaskContractV1(
+            body,
+            ref.constraint_ref,
+            ref.constraint_fingerprint,
+            event.event_ref,
+            snapshot.snapshot_ref,
+            snapshot.snapshot_fingerprint,
+            snapshot.owner_event_high_watermark,
+        )
+
+    async def _verify_contract_current_projection(self, session, rows):
+        latest = await self.latest_snapshot(session=session)
+        await _require_latest_snapshot(session, latest)
+        current = False
+        for index, row in enumerate(rows):
+            receipt = await self._contract_row_receipt(session, row)
+            refrow = await session.get(TaskConstraintRefRow, receipt.constraint_ref)
+            ref = _constraint_from_row(refrow)
+            fold = await self.verify_task_constraint(
+                constraint_ref=ref.constraint_ref,
+                constraint_fingerprint=ref.constraint_fingerprint,
+                snapshot_ref=latest.snapshot_ref,
+                snapshot_fingerprint=latest.snapshot_fingerprint,
+                owner_event_high_watermark=latest.owner_event_high_watermark,
+                require_current=False,
+                session=session,
+            )
+            events = await _constraint_events(
+                session, ref.logical_key, latest.owner_event_high_watermark
+            )
+            projection = await session.get(
+                TaskConstraintCurrentRow, ref.logical_key, populate_existing=True
+            )
+            current = fold.current is not None and fold.current.constraint_ref == ref.constraint_ref
+            if (
+                projection is None
+                or projection.current_constraint_ref != (ref.constraint_ref if current else None)
+                or projection.terminal_revoked != ("false" if current else "true")
+                or projection.effective_sequence != events[-1].effective_sequence
+                or projection.latest_event_sequence != events[-1].event_sequence
+                or projection.updated_at != events[-1].effective_at
+                or (index < len(rows) - 1 and current)
+            ):
+                raise TaskContractError("AUTHORITY_CORRUPTION: contract current projection")
+        return current
+
+    async def _verify_contract_inputs(self, session, body):
+        from pathlib import Path
+
+        from aiscc.evidence.models import EvidenceCheckpointRef, EvidenceRequirementProfile
+        from aiscc.next_action.models import (
+            NextActionError,
+            NextActionErrorCode,
+            NextActionSelectionMode,
+        )
+
+        project, repository, next_actions, evidence, required_refs, selectors = (
+            self._contract_composition()
+        )
+        v = body.value
+        if v["project_id"] != project or plain(v["repository_binding"]) != dict(repository):
+            raise TaskContractError("repository/project/base binding differs")
+        # Resolve only exact enrolled scope paths; never discover a repository/root.
+        root = Path(repository["repository_root"]).resolve()
+        for path in (*v["allowed_paths"], *v["forbidden_paths"]):
+            target = root / (path[:-3] if path.endswith("/**") else path)
+            if not target.resolve().is_relative_to(root):
+                raise TaskContractError("scope symlink/reparse escape")
+        source = v["source_next_action"]
+        action = action_claim(source["action_ref"])
+        if action.action_id != SUPPORTED_ACTION_ID:
+            raise TaskContractError(UNSUPPORTED_SOURCE)
+        try:
+            selected, candidate, descriptor = await next_actions.verify_current_selection(
+                session,
+                selection_id=source["selection_id"],
+                expected_project_id=project,
+                expected_project_revision=source["project_revision"],
+                expected_selection_fingerprint=source["selection_fingerprint"],
+                expected_action_ref=action,
+                expected_descriptor_fingerprint=source["descriptor_fingerprint"],
+                allowed_selection_modes=frozenset({NextActionSelectionMode.CYCLE_DERIVED}),
+            )
+        except NextActionError as exc:
+            if exc.code is NextActionErrorCode.NOT_SUPPORTED:
+                raise TaskContractError(UNSUPPORTED_SOURCE) from exc
+            raise
+        if (
+            selected.selection_version != source["selection_version"]
+            or candidate.candidate_id != source["issuance_candidate_id"]
+            or candidate_fingerprint(candidate) != source["issuance_candidate_fingerprint"]
+            or descriptor.task_issuance_owner != "EXTERNAL_COMMAND_CENTER_TASK_AUTHORITY"
+        ):
+            raise TaskContractError("source candidate/descriptor differs")
+        context = source["external_context"]
+        if context is None or (
+            context["context_ref"],
+            context["context_fingerprint"],
+            context["snapshot_ref"],
+            context["snapshot_fingerprint"],
+            context["owner_event_high_watermark"],
+        ) != (
+            selected.external_context_ref,
+            selected.external_context_fingerprint,
+            selected.external_context_snapshot_ref,
+            selected.external_context_snapshot_fingerprint,
+            selected.external_context_event_high_watermark,
+        ):
+            raise TaskContractError("source context differs")
+        await self.verify_next_action_context(
+            **plain(context), require_current=False, session=session
+        )
+        supplied = tuple((x["ref"], x["fingerprint"]) for x in v["authority_refs"])
+        if supplied != required_refs:
+            raise TaskContractError("required independent authority set differs")
+        latest = await self.latest_snapshot(session=session)
+        for ref, fp in supplied:
+            row = await session.get(TaskConstraintRefRow, ref)
+            value = _constraint_from_row(row) if row else None
+            if (
+                value is None
+                or value.constraint_payload_ref == body.body_ref
+                or value.scope.project_id != project
+                or value.scope.scope_kind is TaskConstraintScopeKind.WORK_RUN
+                or (
+                    value.scope.scope_kind is TaskConstraintScopeKind.TASK_CONTRACT
+                    and (
+                        value.scope.task_contract_id != v["contract_id"]
+                        or value.scope.task_contract_version != "v" + str(v["contract_version"])
+                    )
+                )
+            ):
+                raise TaskContractError("independent authority scope/self-reference")
+            await self.verify_task_constraint(
+                constraint_ref=ref,
+                constraint_fingerprint=fp,
+                snapshot_ref=latest.snapshot_ref,
+                snapshot_fingerprint=latest.snapshot_fingerprint,
+                owner_event_high_watermark=latest.owner_event_high_watermark,
+                require_current=True,
+                session=session,
+            )
+        eb = v["evidence_binding"]
+        checkpoints = []
+        for item in eb["checkpoints"]:
+            # Owner reference serialization is validated against owner-returned graph below.
+            ref_id, version = item["ref"].rsplit("@", 1)
+            checkpoints.append((EvidenceCheckpointRef(ref_id, version), item["fingerprint"]))
+        result = await evidence.verify_requirement_definition_graph(
+            session,
+            task_contract_id=v["contract_id"],
+            task_contract_version="v" + str(v["contract_version"]),
+            requirement_set_ref=eb["requirement_set_ref"],
+            expected_requirement_set_fingerprint=eb["requirement_set_fingerprint"],
+            expected_checkpoints=tuple(checkpoints),
+        )
+        if v["human_binding"]["kind"] == "REQUIRED":
+            if v["human_binding"]["owner_selector_fingerprint"] not in selectors:
+                raise TaskContractError("Human selector not enrolled")
+        elif any(req.profile is EvidenceRequirementProfile.HUMAN_OWNED for req in result[1]):
+            raise TaskContractError("NOT_REQUIRED conflicts with Human-owned requirement")
+        from aiscc.workflow.matrix import TRANSITION_MATRIX
+
+        declared_uses = {
+            (p["source_state"], p["target_state"]) for p in v["judgment_binding"]["policies"]
+        }
+        for cp in result[2]:
+            if (
+                cp.target_state is not None
+                and any(
+                    g.value.startswith("G_JUDGMENT_")
+                    for g in TRANSITION_MATRIX.get((cp.source_state, cp.target_state), ())
+                )
+                and (cp.source_state.value, cp.target_state.value) not in declared_uses
+            ):
+                raise TaskContractError("incomplete Judgment checkpoint-use coverage")
+        for policy in v["judgment_binding"]["policies"]:
+            cp = next(
+                (
+                    cp
+                    for cp in result[2]
+                    if cp.ref.serialized() == policy["evidence_checkpoint_ref"]
+                ),
+                None,
+            )
+            if policy["evidence_checkpoint_ref"] is not None and (
+                cp is None
+                or cp.source_state.value != policy["source_state"]
+                or cp.target_state is None
+                or cp.target_state.value != policy["target_state"]
+            ):
+                raise TaskContractError("Judgment checkpoint applicability differs")
+        return result
+
+    async def _issue_task_contract(
+        self, capability, *, body, expected_current_body_sha256, issued_at
+    ):
+        self._require_capability(capability)
+        if not isinstance(body, TaskContractBodyV1):
+            raise TaskContractError("typed immutable body required")
+        body = TaskContractBodyV1.from_bytes(body.canonical_body)
+        v = body.value
+        predecessor = v["predecessor"]
+        if expected_current_body_sha256 != (predecessor["body_sha256"] if predecessor else None):
+            raise TaskContractError("expected predecessor differs")
+        async with self._session_factory() as session, session.begin():
+            rows = await self._contract_family(session, v["project_id"], v["contract_id"])
+            for row in rows:
+                if row.contract_version == v["contract_version"]:
+                    if bytes(row.canonical_body) != body.canonical_body:
+                        raise TaskContractError("same-version body differs")
+                    return await self._contract_row_receipt(session, row)
+            if v["contract_version"] != len(rows) + 1 or (
+                rows and rows[-1].body_sha256 != expected_current_body_sha256
+            ):
+                raise TaskContractError("contract version/predecessor differs")
+            if rows and rows[-1].task_id != v["task_id"]:
+                raise TaskContractError("family Task identity differs")
+            _, _, _, _, required_refs, _ = self._contract_composition()
+            await self._contract_constraint_locks(session, rows, required_refs)
+            # Existing snapshot certification takes its lock before the counter row.
+            await _lock(session, "external-task-authority:snapshot")
+            await self._verify_contract_inputs(session, body)
+            if rows and not await self._verify_contract_current_projection(session, rows):
+                raise TaskContractError("latest revoked family cannot issue again")
+            expected_ref = "task-constraint:v1:tc-body-" + body.body_sha256
+            if await session.get(TaskConstraintRefRow, expected_ref) is not None:
+                raise TaskContractError("AUTHORITY_CORRUPTION: orphan body reference")
+            if rows:
+                await self._revoke_task_constraint(
+                    capability,
+                    current_constraint_ref=rows[-1].constraint_ref,
+                    event_id="tc-replaced-" + body.body_sha256,
+                    effective_at=issued_at,
+                    session=session,
+                )
+            ref, event = await self._issue_task_constraint(
+                capability,
+                constraint_ref_id="tc-body-" + body.body_sha256,
+                logical_constraint_id="tc-body-"
+                + canonical_sha256([v["project_id"], v["contract_id"]]),
+                scope=TaskConstraintScopeV1(
+                    TaskConstraintScopeKind.TASK_CONTRACT,
+                    v["project_id"],
+                    v["contract_id"],
+                    "v" + str(v["contract_version"]),
+                ),
+                constraint_schema_id=SCHEMA,
+                constraint_schema_version="v1",
+                constraint_payload_ref=body.body_ref,
+                constraint_payload_fingerprint=body.body_sha256,
+                event_id="tc-issued-" + body.body_sha256,
+                issued_at=issued_at,
+                session=session,
+            )
+            await session.flush()
+            row = TaskContractBodyRow(
+                body_ref=body.body_ref,
+                body_schema_id=SCHEMA,
+                body_sha256=body.body_sha256,
+                project_id=v["project_id"],
+                contract_id=v["contract_id"],
+                task_id=v["task_id"],
+                contract_version=v["contract_version"],
+                canonical_body=body.canonical_body,
+                constraint_ref=ref.constraint_ref,
+                issuance_event_ref=event.event_ref,
+                predecessor_version=predecessor["contract_version"] if predecessor else None,
+                predecessor_sha256=expected_current_body_sha256,
+                issued_at=ref.issued_at,
+            )
+            session.add(row)
+            await session.flush()
+            await self._certify_snapshot(
+                capability,
+                snapshot_id="tc-issued-" + body.body_sha256,
+                issued_at=issued_at,
+                session=session,
+            )
+            await session.flush()
+            return await self._contract_row_receipt(session, row)
+
+    async def get_task_contract(self, project_id, contract_id, version, *, session=None):
+        if session is None:
+            async with self._session_factory() as owned, owned.begin():
+                return await self.get_task_contract(project_id, contract_id, version, session=owned)
+        if not session.in_transaction():
+            raise TaskContractError("caller transaction required")
+        with session.no_autoflush:
+            rows = await self._contract_family(session, project_id, contract_id)
+            result = None
+            for row in rows:
+                receipt = await self._contract_row_receipt(session, row)
+                if row.contract_version == version:
+                    result = receipt
+            return result
+
+    async def verify_task_contract(
+        self,
+        binding,
+        *,
+        require_current,
+        expected_repository_binding,
+        expected_next_action_ref,
+        session=None,
+    ):
+        if session is None:
+            async with self._session_factory() as owned, owned.begin():
+                return await self.verify_task_contract(
+                    binding,
+                    require_current=require_current,
+                    expected_repository_binding=expected_repository_binding,
+                    expected_next_action_ref=expected_next_action_ref,
+                    session=owned,
+                )
+        if not session.in_transaction() or not isinstance(binding, IssuedTaskContractV1):
+            raise TaskContractError("caller transaction and issued value required")
+        with session.no_autoflush:
+            body = TaskContractBodyV1.from_bytes(binding.body.canonical_body)
+            v = body.value
+            if (
+                plain(v["repository_binding"]) != dict(expected_repository_binding)
+                or v["source_next_action"]["action_ref"] != expected_next_action_ref
+            ):
+                raise TaskContractError("expected repository/action differs")
+            rows = await self._contract_family(session, v["project_id"], v["contract_id"])
+            row = next((r for r in rows if r.contract_version == v["contract_version"]), None)
+            if row is None or await self._contract_row_receipt(session, row) != binding:
+                raise TaskContractError("AUTHORITY_CORRUPTION: issued receipt differs")
+            # Verify every predecessor's original immutable authority chain.
+            for other in rows:
+                await self._contract_row_receipt(session, other)
+            if require_current:
+                _, _, _, _, required_refs, _ = self._contract_composition()
+                await self._contract_constraint_locks(session, rows, required_refs)
+                await self._verify_contract_inputs(session, body)
+                if rows[
+                    -1
+                ].body_ref != body.body_ref or not await self._verify_contract_current_projection(
+                    session, rows
+                ):
+                    raise TaskContractError("TaskContract not current")
+            return VerifiedTaskContractBindingV1(binding, require_current)
+
+    async def _revoke_task_contract(
+        self,
+        capability,
+        *,
+        project_id,
+        contract_id,
+        expected_version,
+        expected_body_sha256,
+        effective_at,
+    ):
+        self._require_capability(capability)
+        async with self._session_factory() as session, session.begin():
+            rows = await self._contract_family(session, project_id, contract_id)
+            if (
+                not rows
+                or rows[-1].contract_version != expected_version
+                or rows[-1].body_sha256 != expected_body_sha256
+            ):
+                raise TaskContractError("revoke exact latest body differs")
+            await self._contract_constraint_locks(session, rows)
+            await _lock(session, "external-task-authority:snapshot")
+            await _lock(session, "external-task-authority:global-sequence")
+            receipt = await self._contract_row_receipt(session, rows[-1])
+            event_id = "tc-revoked-" + expected_body_sha256
+            existing = await session.get(
+                TaskConstraintAuthorityEventRow, "task-constraint-event:v1:" + event_id
+            )
+            if existing is not None:
+                event = _constraint_event_from_row(existing)
+                if event.constraint_ref != receipt.constraint_ref:
+                    raise TaskContractError("revoke replay differs")
+                return event
+            if not await self._verify_contract_current_projection(session, rows):
+                raise TaskContractError("latest body not current")
+            event = await self._revoke_task_constraint(
+                capability,
+                current_constraint_ref=receipt.constraint_ref,
+                event_id=event_id,
+                effective_at=effective_at,
+                session=session,
+            )
+            await session.flush()
+            await self._certify_snapshot(
+                capability, snapshot_id=event_id, issued_at=effective_at, session=session
+            )
+            return event
 
     async def _issue_task_constraint(
         self,
@@ -92,81 +647,96 @@ class PostgresExternalTaskAuthorityRepository:
         constraint_payload_fingerprint: str,
         event_id: str,
         issued_at: datetime,
+        session: AsyncSession | None = None,
     ) -> tuple[TaskConstraintRefV1, TaskConstraintAuthorityEventV1]:
         self._require_capability(capability)
         constraint_ref = f"task-constraint:v1:{constraint_ref_id}"
         event_ref = f"task-constraint-event:v1:{event_id}"
-        async with self._session_factory() as session, session.begin():
-            await _lock(session, f"external-task-authority:constraint:{logical_constraint_id}")
-            existing = await session.get(TaskConstraintRefRow, constraint_ref)
-            if existing is not None:
-                event_row = await session.get(TaskConstraintAuthorityEventRow, event_ref)
-                value = _constraint_from_row(existing)
-                if (
-                    event_row is None
-                    or value.logical_constraint_id != logical_constraint_id
-                    or value.scope != scope
-                    or value.constraint_schema_id != constraint_schema_id
-                    or value.constraint_schema_version != constraint_schema_version
-                    or value.constraint_payload_ref != constraint_payload_ref
-                    or value.constraint_payload_fingerprint != constraint_payload_fingerprint
-                ):
-                    _identity_conflict("TaskConstraint issue replay differs")
-                return value, _constraint_event_from_row(event_row)
-            logical_key = canonical_sha256(
-                {"logical_constraint_id": logical_constraint_id, "scope": scope.payload()}
+        if session is None:
+            async with self._session_factory() as owned_session, owned_session.begin():
+                return await self._issue_task_constraint(
+                    capability,
+                    constraint_ref_id=constraint_ref_id,
+                    logical_constraint_id=logical_constraint_id,
+                    scope=scope,
+                    constraint_schema_id=constraint_schema_id,
+                    constraint_schema_version=constraint_schema_version,
+                    constraint_payload_ref=constraint_payload_ref,
+                    constraint_payload_fingerprint=constraint_payload_fingerprint,
+                    event_id=event_id,
+                    issued_at=issued_at,
+                    session=owned_session,
+                )
+        if not session.in_transaction():
+            _authority_conflict("caller transaction required")
+        await _lock(session, f"external-task-authority:constraint:{logical_constraint_id}")
+        existing = await session.get(TaskConstraintRefRow, constraint_ref)
+        if existing is not None:
+            event_row = await session.get(TaskConstraintAuthorityEventRow, event_ref)
+            value = _constraint_from_row(existing)
+            if (
+                event_row is None
+                or value.logical_constraint_id != logical_constraint_id
+                or value.scope != scope
+                or value.constraint_schema_id != constraint_schema_id
+                or value.constraint_schema_version != constraint_schema_version
+                or value.constraint_payload_ref != constraint_payload_ref
+                or value.constraint_payload_fingerprint != constraint_payload_fingerprint
+            ):
+                _identity_conflict("TaskConstraint issue replay differs")
+            return value, _constraint_event_from_row(event_row)
+        logical_key = canonical_sha256(
+            {"logical_constraint_id": logical_constraint_id, "scope": scope.payload()}
+        )
+        projection = await session.get(TaskConstraintCurrentRow, logical_key, with_for_update=True)
+        if projection is not None:
+            _authority_conflict("TaskConstraint logical key already has an origin")
+        object_sequence, event_sequence = await self._reserve_sequences(
+            session, object_count=1, event_count=1
+        )
+        value = _new_constraint(
+            constraint_ref_id=constraint_ref_id,
+            logical_constraint_id=logical_constraint_id,
+            scope=scope,
+            constraint_schema_id=constraint_schema_id,
+            constraint_schema_version=constraint_schema_version,
+            constraint_payload_ref=constraint_payload_ref,
+            constraint_payload_fingerprint=constraint_payload_fingerprint,
+            issued_at=issued_at,
+            issuance_sequence=object_sequence,
+        )
+        event = _new_constraint_event(
+            event_id=event_id,
+            event_kind=AuthorityEventKind.ISSUED,
+            target=value,
+            replacement=None,
+            event_sequence=event_sequence,
+            effective_sequence=1,
+            effective_at=issued_at,
+        )
+        await self._ensure_issuer_binding(session, issued_at)
+        session.add(_constraint_row(value))
+        session.add(
+            _registry_row(
+                event_sequence,
+                event.event_ref,
+                event.event_fingerprint,
+                "TASK_CONSTRAINT",
+                issued_at,
             )
-            projection = await session.get(
-                TaskConstraintCurrentRow, logical_key, with_for_update=True
-            )
-            if projection is not None:
-                _authority_conflict("TaskConstraint logical key already has an origin")
-            object_sequence, event_sequence = await self._reserve_sequences(
-                session, object_count=1, event_count=1
-            )
-            value = _new_constraint(
-                constraint_ref_id=constraint_ref_id,
-                logical_constraint_id=logical_constraint_id,
-                scope=scope,
-                constraint_schema_id=constraint_schema_id,
-                constraint_schema_version=constraint_schema_version,
-                constraint_payload_ref=constraint_payload_ref,
-                constraint_payload_fingerprint=constraint_payload_fingerprint,
-                issued_at=issued_at,
-                issuance_sequence=object_sequence,
-            )
-            event = _new_constraint_event(
-                event_id=event_id,
-                event_kind=AuthorityEventKind.ISSUED,
-                target=value,
-                replacement=None,
-                event_sequence=event_sequence,
+        )
+        session.add(_constraint_event_row(event, logical_key))
+        session.add(
+            TaskConstraintCurrentRow(
+                logical_key=logical_key,
+                current_constraint_ref=value.constraint_ref,
+                terminal_revoked="false",
                 effective_sequence=1,
-                effective_at=issued_at,
+                latest_event_sequence=event_sequence,
+                updated_at=issued_at,
             )
-            await self._ensure_issuer_binding(session, issued_at)
-            session.add(_constraint_row(value))
-            session.add(
-                _registry_row(
-                    event_sequence,
-                    event.event_ref,
-                    event.event_fingerprint,
-                    "TASK_CONSTRAINT",
-                    issued_at,
-                )
-            )
-            session.add(_constraint_event_row(event, logical_key))
-            session.add(
-                TaskConstraintCurrentRow(
-                    logical_key=logical_key,
-                    current_constraint_ref=value.constraint_ref,
-                    terminal_revoked="false",
-                    effective_sequence=1,
-                    latest_event_sequence=event_sequence,
-                    updated_at=issued_at,
-                )
-            )
-            return value, event
+        )
+        return value, event
 
     async def _supersede_task_constraint(
         self,
@@ -253,59 +823,68 @@ class PostgresExternalTaskAuthorityRepository:
         current_constraint_ref: str,
         event_id: str,
         effective_at: datetime,
+        session: AsyncSession | None = None,
     ) -> TaskConstraintAuthorityEventV1:
         self._require_capability(capability)
-        async with self._session_factory() as session, session.begin():
-            current_row = await session.get(TaskConstraintRefRow, current_constraint_ref)
-            if current_row is None:
-                _authority_conflict("TaskConstraint revoke target is absent")
-            current = _constraint_from_row(current_row)
-            await _lock(session, f"external-task-authority:constraint:{current.logical_key}")
-            event_ref = f"task-constraint-event:v1:{event_id}"
-            existing = await session.get(TaskConstraintAuthorityEventRow, event_ref)
-            if existing is not None:
-                event = _constraint_event_from_row(existing)
-                if event.constraint_ref != current_constraint_ref:
-                    _identity_conflict("TaskConstraint revoke replay differs")
-                return event
-            projection = await session.get(
-                TaskConstraintCurrentRow, current.logical_key, with_for_update=True
-            )
-            if (
-                projection is None
-                or projection.current_constraint_ref != current.constraint_ref
-                or projection.terminal_revoked == "true"
-            ):
-                _authority_conflict("TaskConstraint revoke target is not exact current")
-            _, event_sequence = await self._reserve_sequences(
-                session, object_count=0, event_count=1
-            )
-            effective_sequence = projection.effective_sequence + 1
-            event = _new_constraint_event(
-                event_id=event_id,
-                event_kind=AuthorityEventKind.REVOKED,
-                target=current,
-                replacement=None,
-                event_sequence=event_sequence,
-                effective_sequence=effective_sequence,
-                effective_at=effective_at,
-            )
-            session.add(
-                _registry_row(
-                    event_sequence,
-                    event.event_ref,
-                    event.event_fingerprint,
-                    "TASK_CONSTRAINT",
-                    effective_at,
+        if session is None:
+            async with self._session_factory() as owned_session, owned_session.begin():
+                return await self._revoke_task_constraint(
+                    capability,
+                    current_constraint_ref=current_constraint_ref,
+                    event_id=event_id,
+                    effective_at=effective_at,
+                    session=owned_session,
                 )
-            )
-            session.add(_constraint_event_row(event, current.logical_key))
-            projection.current_constraint_ref = None
-            projection.terminal_revoked = "true"
-            projection.effective_sequence = effective_sequence
-            projection.latest_event_sequence = event_sequence
-            projection.updated_at = effective_at
+        if not session.in_transaction():
+            _authority_conflict("caller transaction required")
+        current_row = await session.get(TaskConstraintRefRow, current_constraint_ref)
+        if current_row is None:
+            _authority_conflict("TaskConstraint revoke target is absent")
+        current = _constraint_from_row(current_row)
+        await _lock(session, f"external-task-authority:constraint:{current.logical_key}")
+        event_ref = f"task-constraint-event:v1:{event_id}"
+        existing = await session.get(TaskConstraintAuthorityEventRow, event_ref)
+        if existing is not None:
+            event = _constraint_event_from_row(existing)
+            if event.constraint_ref != current_constraint_ref:
+                _identity_conflict("TaskConstraint revoke replay differs")
             return event
+        projection = await session.get(
+            TaskConstraintCurrentRow, current.logical_key, with_for_update=True
+        )
+        if (
+            projection is None
+            or projection.current_constraint_ref != current.constraint_ref
+            or projection.terminal_revoked == "true"
+        ):
+            _authority_conflict("TaskConstraint revoke target is not exact current")
+        _, event_sequence = await self._reserve_sequences(session, object_count=0, event_count=1)
+        effective_sequence = projection.effective_sequence + 1
+        event = _new_constraint_event(
+            event_id=event_id,
+            event_kind=AuthorityEventKind.REVOKED,
+            target=current,
+            replacement=None,
+            event_sequence=event_sequence,
+            effective_sequence=effective_sequence,
+            effective_at=effective_at,
+        )
+        session.add(
+            _registry_row(
+                event_sequence,
+                event.event_ref,
+                event.event_fingerprint,
+                "TASK_CONSTRAINT",
+                effective_at,
+            )
+        )
+        session.add(_constraint_event_row(event, current.logical_key))
+        projection.current_constraint_ref = None
+        projection.terminal_revoked = "true"
+        projection.effective_sequence = effective_sequence
+        projection.latest_event_sequence = event_sequence
+        projection.updated_at = effective_at
+        return event
 
     async def _issue_next_action_context(
         self,
@@ -543,39 +1122,46 @@ class PostgresExternalTaskAuthorityRepository:
         *,
         snapshot_id: str,
         issued_at: datetime,
+        session: AsyncSession | None = None,
     ) -> TaskConstraintOwnerSnapshotV1:
         self._require_capability(capability)
         snapshot_ref = f"task-constraint-owner-snapshot:v1:{snapshot_id}"
-        async with self._session_factory() as session, session.begin():
-            await _lock(session, "external-task-authority:snapshot")
-            existing = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
-            if existing is not None:
-                return _snapshot_from_row(existing)
-            counter = await self._counter(session)
-            high_watermark = counter.event_sequence
-            pairs = await _registry_pairs(session, high_watermark)
-            snapshot = _new_snapshot(
-                snapshot_ref=snapshot_ref,
-                high_watermark=high_watermark,
-                prefix_root=ordered_event_prefix_root(pairs),
-                issued_at=issued_at,
-            )
-            await self._ensure_issuer_binding(session, issued_at)
-            payload = snapshot.fingerprint_payload() | {
-                "snapshot_fingerprint": snapshot.snapshot_fingerprint
-            }
-            session.add(
-                TaskConstraintOwnerSnapshotRow(
-                    snapshot_ref=snapshot.snapshot_ref,
-                    snapshot_fingerprint=snapshot.snapshot_fingerprint,
-                    owner_event_high_watermark=snapshot.owner_event_high_watermark,
-                    ordered_event_prefix_root=snapshot.ordered_event_prefix_root,
-                    issuer_binding_fingerprint=_ISSUER_BINDING_FINGERPRINT,
-                    payload=payload,
-                    issued_at=snapshot.issued_at,
+        if session is None:
+            async with self._session_factory() as owned_session, owned_session.begin():
+                return await self._certify_snapshot(
+                    capability, snapshot_id=snapshot_id, issued_at=issued_at, session=owned_session
                 )
+        if not session.in_transaction():
+            _authority_conflict("caller transaction required")
+        await _lock(session, "external-task-authority:snapshot")
+        existing = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
+        if existing is not None:
+            return _snapshot_from_row(existing)
+        counter = await self._counter(session)
+        high_watermark = counter.event_sequence
+        pairs = await _registry_pairs(session, high_watermark)
+        snapshot = _new_snapshot(
+            snapshot_ref=snapshot_ref,
+            high_watermark=high_watermark,
+            prefix_root=ordered_event_prefix_root(pairs),
+            issued_at=issued_at,
+        )
+        await self._ensure_issuer_binding(session, issued_at)
+        payload = snapshot.fingerprint_payload() | {
+            "snapshot_fingerprint": snapshot.snapshot_fingerprint
+        }
+        session.add(
+            TaskConstraintOwnerSnapshotRow(
+                snapshot_ref=snapshot.snapshot_ref,
+                snapshot_fingerprint=snapshot.snapshot_fingerprint,
+                owner_event_high_watermark=snapshot.owner_event_high_watermark,
+                ordered_event_prefix_root=snapshot.ordered_event_prefix_root,
+                issuer_binding_fingerprint=_ISSUER_BINDING_FINGERPRINT,
+                payload=payload,
+                issued_at=snapshot.issued_at,
             )
-            return snapshot
+        )
+        return snapshot
 
     async def get_task_constraint(self, constraint_ref: str) -> TaskConstraintRefV1 | None:
         async with self._session_factory() as session:
@@ -601,16 +1187,20 @@ class PostgresExternalTaskAuthorityRepository:
             await _verify_binding(session, row.issuer_binding_fingerprint)
             return _context_event_from_row(row)
 
-    async def latest_snapshot(self) -> TaskConstraintOwnerSnapshotV1:
-        async with self._session_factory() as session:
-            row = await session.scalar(
-                select(TaskConstraintOwnerSnapshotRow).order_by(
-                    TaskConstraintOwnerSnapshotRow.owner_event_high_watermark.desc()
-                )
+    async def latest_snapshot(
+        self, *, session: AsyncSession | None = None
+    ) -> TaskConstraintOwnerSnapshotV1:
+        if session is None:
+            async with self._session_factory() as owned_session:
+                return await self.latest_snapshot(session=owned_session)
+        row = await session.scalar(
+            select(TaskConstraintOwnerSnapshotRow).order_by(
+                TaskConstraintOwnerSnapshotRow.owner_event_high_watermark.desc()
             )
-            if row is None:
-                _history_corrupt("certified external Task-authority snapshot is absent")
-            return await _verify_snapshot(session, row)
+        )
+        if row is None:
+            _history_corrupt("certified external Task-authority snapshot is absent")
+        return await _verify_snapshot(session, row)
 
     async def verify_task_constraint(
         self,
@@ -621,40 +1211,49 @@ class PostgresExternalTaskAuthorityRepository:
         snapshot_fingerprint: str,
         owner_event_high_watermark: int,
         require_current: bool,
+        session: AsyncSession | None = None,
     ) -> TaskConstraintFoldResult:
-        async with self._session_factory() as session:
-            row = await session.get(TaskConstraintRefRow, constraint_ref)
-            snapshot_row = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
-            if row is None or snapshot_row is None:
-                _history_corrupt("TaskConstraint object/snapshot is absent")
-            value = _constraint_from_row(row)
-            snapshot = await _verify_snapshot(session, snapshot_row)
-            if (
-                value.constraint_fingerprint != constraint_fingerprint
-                or snapshot.snapshot_fingerprint != snapshot_fingerprint
-                or snapshot.owner_event_high_watermark != owner_event_high_watermark
-            ):
-                _history_corrupt("TaskConstraint object/snapshot identity differs")
-            result = await _fold_constraints(session, value.logical_key, snapshot)
-            history = await _constraint_events(
-                session, value.logical_key, owner_event_high_watermark
-            )
-            introduced_refs = {
-                ref
-                for event in history
-                for ref in (event.constraint_ref, event.replacement_constraint_ref)
-                if ref is not None
-            }
-            if value.constraint_ref not in introduced_refs:
-                _history_corrupt("TaskConstraint ref was not introduced by the certified prefix")
-            if require_current:
-                await _require_latest_snapshot(session, snapshot)
-                if result.current is None or result.current.constraint_ref != constraint_ref:
-                    raise ExternalTaskAuthorityError(
-                        ExternalTaskAuthorityErrorCode.NOT_CURRENT,
-                        "TaskConstraint is not current at latest certified H",
-                    )
-            return result
+        if session is None:
+            async with self._session_factory() as owned_session:
+                return await self.verify_task_constraint(
+                    constraint_ref=constraint_ref,
+                    constraint_fingerprint=constraint_fingerprint,
+                    snapshot_ref=snapshot_ref,
+                    snapshot_fingerprint=snapshot_fingerprint,
+                    owner_event_high_watermark=owner_event_high_watermark,
+                    require_current=require_current,
+                    session=owned_session,
+                )
+        row = await session.get(TaskConstraintRefRow, constraint_ref)
+        snapshot_row = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
+        if row is None or snapshot_row is None:
+            _history_corrupt("TaskConstraint object/snapshot is absent")
+        value = _constraint_from_row(row)
+        snapshot = await _verify_snapshot(session, snapshot_row)
+        if (
+            value.constraint_fingerprint != constraint_fingerprint
+            or snapshot.snapshot_fingerprint != snapshot_fingerprint
+            or snapshot.owner_event_high_watermark != owner_event_high_watermark
+        ):
+            _history_corrupt("TaskConstraint object/snapshot identity differs")
+        result = await _fold_constraints(session, value.logical_key, snapshot)
+        history = await _constraint_events(session, value.logical_key, owner_event_high_watermark)
+        introduced_refs = {
+            ref
+            for event in history
+            for ref in (event.constraint_ref, event.replacement_constraint_ref)
+            if ref is not None
+        }
+        if value.constraint_ref not in introduced_refs:
+            _history_corrupt("TaskConstraint ref was not introduced by the certified prefix")
+        if require_current:
+            await _require_latest_snapshot(session, snapshot)
+            if result.current is None or result.current.constraint_ref != constraint_ref:
+                raise ExternalTaskAuthorityError(
+                    ExternalTaskAuthorityErrorCode.NOT_CURRENT,
+                    "TaskConstraint is not current at latest certified H",
+                )
+        return result
 
     async def verify_next_action_context(
         self,
@@ -667,43 +1266,57 @@ class PostgresExternalTaskAuthorityRepository:
         snapshot_fingerprint: str,
         owner_event_high_watermark: int,
         require_current: bool,
+        session: AsyncSession | None = None,
     ) -> NextActionContextFoldResult:
-        async with self._session_factory() as session:
-            row = await session.get(NextActionContextRefRow, context_ref)
-            intro_row = await session.get(
-                NextActionContextAuthorityEventRow, introduction_event_ref
-            )
-            snapshot_row = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
-            if row is None or intro_row is None or snapshot_row is None:
-                _history_corrupt("NextActionContext object/event/snapshot is absent")
-            value = _context_from_row(row)
-            introduction = _context_event_from_row(intro_row)
-            snapshot = await _verify_snapshot(session, snapshot_row)
-            introduced = (
-                introduction.event_kind is AuthorityEventKind.ISSUED
-                and introduction.context_ref == context_ref
-            ) or (
-                introduction.event_kind is AuthorityEventKind.SUPERSEDED
-                and introduction.replacement_context_ref == context_ref
-            )
-            if (
-                value.fingerprint != context_fingerprint
-                or introduction.event_fingerprint != introduction_event_fingerprint
-                or not introduced
-                or snapshot.snapshot_fingerprint != snapshot_fingerprint
-                or snapshot.owner_event_high_watermark != owner_event_high_watermark
-                or introduction.event_sequence > owner_event_high_watermark
-            ):
-                _history_corrupt("NextActionContext original authority graph differs")
-            result = await _fold_contexts(session, value.logical_key, snapshot)
-            if require_current:
-                await _require_latest_snapshot(session, snapshot)
-                if result.current is None or result.current.context_ref != context_ref:
-                    raise ExternalTaskAuthorityError(
-                        ExternalTaskAuthorityErrorCode.NOT_CURRENT,
-                        "NextActionContext is not current at latest certified H",
-                    )
-            return result
+        if session is None:
+            async with self._session_factory() as owned_session:
+                return await self.verify_next_action_context(
+                    context_ref=context_ref,
+                    context_fingerprint=context_fingerprint,
+                    introduction_event_ref=introduction_event_ref,
+                    introduction_event_fingerprint=introduction_event_fingerprint,
+                    snapshot_ref=snapshot_ref,
+                    snapshot_fingerprint=snapshot_fingerprint,
+                    owner_event_high_watermark=owner_event_high_watermark,
+                    require_current=require_current,
+                    session=owned_session,
+                )
+        row = await session.get(NextActionContextRefRow, context_ref)
+        if require_current and row is not None:
+            await _lock(session, f"external-task-authority:context:{row.logical_key}")
+            await _lock(session, "external-task-authority:global-sequence")
+        intro_row = await session.get(NextActionContextAuthorityEventRow, introduction_event_ref)
+        snapshot_row = await session.get(TaskConstraintOwnerSnapshotRow, snapshot_ref)
+        if row is None or intro_row is None or snapshot_row is None:
+            _history_corrupt("NextActionContext object/event/snapshot is absent")
+        value = _context_from_row(row)
+        introduction = _context_event_from_row(intro_row)
+        snapshot = await _verify_snapshot(session, snapshot_row)
+        introduced = (
+            introduction.event_kind is AuthorityEventKind.ISSUED
+            and introduction.context_ref == context_ref
+        ) or (
+            introduction.event_kind is AuthorityEventKind.SUPERSEDED
+            and introduction.replacement_context_ref == context_ref
+        )
+        if (
+            value.fingerprint != context_fingerprint
+            or introduction.event_fingerprint != introduction_event_fingerprint
+            or not introduced
+            or snapshot.snapshot_fingerprint != snapshot_fingerprint
+            or snapshot.owner_event_high_watermark != owner_event_high_watermark
+            or introduction.event_sequence > owner_event_high_watermark
+        ):
+            _history_corrupt("NextActionContext original authority graph differs")
+        result = await _fold_contexts(session, value.logical_key, snapshot)
+        if require_current:
+            await _require_latest_snapshot(session, snapshot)
+            if result.current is None or result.current.context_ref != context_ref:
+                raise ExternalTaskAuthorityError(
+                    ExternalTaskAuthorityErrorCode.NOT_CURRENT,
+                    "NextActionContext is not current at latest certified H",
+                )
+        return result
 
     async def _counter(self, session: AsyncSession) -> ExternalTaskAuthorityCounterRow:
         counter = await session.get(

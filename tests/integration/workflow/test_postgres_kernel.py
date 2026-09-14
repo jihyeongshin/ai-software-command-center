@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from collections.abc import Coroutine
 from typing import Any
@@ -25,6 +26,8 @@ from aiscc.persistence.repository import (
     acquire_work_run_transaction_lock,
     verify_historical_transition_provenance,
 )
+from aiscc.providers.authority import ExecutionReferenceAuthority
+from aiscc.providers.models import ExecutionStatus, ExecutionSubmissionRef
 from aiscc.workflow.evaluator import TransitionEvaluator
 from aiscc.workflow.guards import (
     GUARD_OWNER_POLICY,
@@ -179,6 +182,34 @@ class TestFutureOwnerAuthority:
         )
 
 
+def execution_submission_fact(
+    authority: P1_4GuardAuthority, request: TransitionRequest
+) -> TrustedGuardFact:
+    # Synthetic producer-owned ref; the real P1-5 verifier and P1-4 issuer perform the handoff.
+    producer = ExecutionReferenceAuthority()
+    identity = hashlib.sha256(request.transition_request_id.encode("utf-8")).hexdigest()
+    submission = producer.register_submission(
+        ExecutionSubmissionRef(
+            submission_id="fixture-submission-" + identity,
+            execution_attempt_id="fixture-attempt-" + identity,
+            work_run_id=request.work_run_id,
+            task_contract_id=request.task_contract_id,
+            task_contract_version=request.task_contract_version,
+            state=request.observed_state,
+            state_version=request.observed_state_version,
+            status=ExecutionStatus.EXECUTOR_COMPLETED,
+            event_range_hash=identity,
+            issuer_ref=producer.issuer_ref,
+        )
+    )
+    return authority.issue_from_execution_ref(
+        guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+        execution_ref=submission,
+        verifier=producer,
+        request=request,
+    )
+
+
 class TestGuardAuthority:
     __test__ = False
 
@@ -198,6 +229,8 @@ class TestGuardAuthority:
         return tuple(self._future.values())
 
     def issue(self, guard_id: GuardId, transition_request: TransitionRequest) -> TrustedGuardFact:
+        if guard_id is GuardId.G_EXECUTOR_SUBMISSION:
+            return execution_submission_fact(self.system, transition_request)
         owner = GUARD_OWNER_POLICY[guard_id]
         if owner is GuardSemanticOwner.P1_4_SYSTEM:
             return self.system.issue(
@@ -264,7 +297,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "20260901_0008"
+            assert revision == "20260914_0009"
         finally:
             await engine.dispose()
 

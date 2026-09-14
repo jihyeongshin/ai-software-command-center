@@ -171,9 +171,7 @@ async def add_recovery_fact(sessions: Any, project_id: str, label: str) -> str:
 async def operational_parameters(sessions: Any, run_id: str) -> dict[str, object]:
     async with sessions() as session:
         blocker = await session.scalar(
-            select(P1_4BlockerProvenanceRow).where(
-                P1_4BlockerProvenanceRow.work_run_id == run_id
-            )
+            select(P1_4BlockerProvenanceRow).where(P1_4BlockerProvenanceRow.work_run_id == run_id)
         )
     assert blocker is not None
     return {
@@ -545,9 +543,7 @@ def test_memory_current_historical_invalidation_and_restart_rebuild(
                     work_run_id=f"run-{label}",
                     terminal_state_version=5,
                     terminal_epoch_key=canonical_hash(["terminal-epoch", label]),
-                    terminal_epoch_payload_fingerprint=canonical_hash(
-                        ["terminal-payload", label]
-                    ),
+                    terminal_epoch_payload_fingerprint=canonical_hash(["terminal-payload", label]),
                     source_owner_event_high_watermark=0,
                     memory_policy_event_high_watermark=0,
                     task_constraint_ref=None,
@@ -668,8 +664,8 @@ def test_memory_current_historical_invalidation_and_restart_rebuild(
             memory_row.content_fingerprint = content_fingerprint
 
         action_authority = default_next_action_policy_authority()
-        eligibility, selection_policy, fixed_descriptors = (
-            action_authority.issue_policy_catalog_v1(now=NOW)
+        eligibility, selection_policy, fixed_descriptors = action_authority.issue_policy_catalog_v1(
+            now=NOW
         )
         descriptor = action_authority.issue_context_bound_descriptor(
             context=context,
@@ -766,5 +762,534 @@ def test_memory_current_historical_invalidation_and_restart_rebuild(
         restarted = PostgresProjectMemoryRepository(sessions, policy)
         assert await restarted.rebuild_projection(project_id) == ()
         await engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+def test_current_selection_verifier_uses_caller_transaction_without_writes(
+    database_url: str,
+) -> None:
+    from dataclasses import replace
+
+    from sqlalchemy import event
+
+    async def scenario() -> None:
+        label = uuid4().hex
+        project = f"verifier-{label}"
+        engine, repository, descriptor, _ = configured_repository(database_url, label)
+        sessions = create_session_factory(engine)
+        source_run = await add_recovery_fact(sessions, project, label)
+        parameters = await operational_parameters(sessions, source_run)
+        await repository.enroll_configured_authority(NOW)
+        selected, candidate = await repository.select(
+            selection_id=f"verify-selection-{label}",
+            project_id=project,
+            expected_project_revision=0,
+            mode=NextActionSelectionMode.OPERATIONAL_RECOVERY,
+            proposals=(
+                NextActionProposal(
+                    f"verify-proposal-{label}",
+                    project,
+                    descriptor.action_ref,
+                    parameters,
+                    "bounded",
+                ),
+            ),
+            operational_work_run_id=source_run,
+            now=NOW,
+        )
+        args = dict(
+            selection_id=selected.selection_id,
+            expected_project_id=project,
+            expected_project_revision=selected.project_revision,
+            expected_selection_fingerprint=selected.fingerprint,
+            expected_candidate=candidate,
+            expected_action_ref=descriptor.action_ref,
+            expected_descriptor_fingerprint=descriptor.fingerprint,
+        )
+        statements: list[str] = []
+
+        def capture(
+            conn: Any, cursor: Any, statement: str, parameters: Any, context: Any, executemany: bool
+        ) -> None:
+            statements.append(statement)
+
+        event.listen(engine.sync_engine, "before_cursor_execute", capture)
+        try:
+            async with sessions() as session, session.begin():
+                transaction = session.get_transaction()
+                statements.clear()
+                actual = await repository.verify_current_selection(session, **args)
+                assert actual == (selected, candidate, descriptor)
+                assert session.get_transaction() is transaction and session.in_transaction()
+                bad = dict(args, expected_candidate=replace(candidate, candidate_id="wrong"))
+                with pytest.raises(NextActionError):
+                    await repository.verify_current_selection(session, **bad)
+                with pytest.raises(NextActionError):
+                    await repository.verify_current_selection(
+                        session, **dict(args, expected_project_revision=99)
+                    )
+                assert not any(
+                    x.lstrip()
+                    .upper()
+                    .startswith(("INSERT", "UPDATE", "DELETE", "COMMIT", "ROLLBACK"))
+                    for x in statements
+                )
+            async with sessions() as session:
+                with pytest.raises(NextActionError):
+                    await repository.verify_current_selection(session, **args)
+        finally:
+            event.remove(engine.sync_engine, "before_cursor_execute", capture)
+            await engine.dispose()
+
+    run(scenario())
+
+
+async def cycle_selection_fixture(
+    database_url: str, project_id: str | None = None
+) -> dict[str, Any]:
+    label = uuid4().hex
+    project_id = project_id or f"memory-project-{label}"
+    task_id = f"task-{label}"
+    cycle_id = f"memory-cycle-{label}"
+    request_id = f"memory-request-{label}"
+    evaluation_id = f"memory-evaluation-{label}"
+    decision_id = f"memory-decision-{label}"
+    entry_id = canonical_hash(["entry", label])
+    engine = create_engine(database_url)
+    sessions = create_session_factory(engine)
+    external_repository = PostgresExternalTaskAuthorityRepository(sessions)
+    external_writer = _bind_repository_once(external_repository)
+    context, context_introduction = await external_writer.issue_next_action_context(
+        context_ref_id=f"context-{label}",
+        context_logical_local_id=f"planning-{label}",
+        project_id=project_id,
+        task_contract_id=task_id,
+        task_contract_version="v1",
+        context_slot_id="primary",
+        priority_class=NextActionPriorityClass.ACCEPTED_CORE_CRITICAL_PATH,
+        critical_path_ordinal=3,
+        event_id=f"context-issued-{label}",
+        issued_at=NOW,
+    )
+    context_snapshot = await external_writer.certify_snapshot(
+        snapshot_id=f"context-snapshot-{label}", issued_at=NOW
+    )
+    context_content = {
+        "context_ref": context.context_ref,
+        "context_fingerprint": context.fingerprint,
+        "context_logical_id": context.context_logical_id,
+        "project_id": context.project_id,
+        "task_contract_id": context.task_contract_id,
+        "task_contract_version": context.task_contract_version,
+        "context_slot_id": context.context_slot_id,
+        "priority_class": context.priority_class.value,
+        "critical_path_ordinal": context.critical_path_ordinal,
+    }
+    subject_key = context.context_logical_id
+    applicability_key = f"task-contract/{project_id}/{task_id}@v1"
+    semantic_slot = "next-action-context/P1_8_NEXT_ACTION_CONTEXT_RESULT_V1/primary"
+    policy = default_memory_policy(NOW)
+    lineage = memory_lineage_key(
+        project_id=project_id,
+        category=MemoryCategory.NEXT_ACTION_CONTEXT,
+        subject_key=subject_key,
+        applicability_key=applicability_key,
+        semantic_slot=semantic_slot,
+    )
+    content_fingerprint = memory_content_fingerprint(
+        category=MemoryCategory.NEXT_ACTION_CONTEXT,
+        authority_mode=MemoryAuthorityMode.STRUCTURED_RESULT_ATTESTED,
+        policy_ref=policy.serialized_ref,
+        normalized_derived_content=context_content,
+    )
+    async with sessions() as session, session.begin():
+        session.add(
+            CycleAdmissionRequestRow(
+                request_id=request_id,
+                request_version="v1",
+                request_fingerprint=canonical_hash(["request", label]),
+                cycle_id=cycle_id,
+                cycle_fingerprint=canonical_hash(["cycle", label]),
+                project_id=project_id,
+                work_run_id=f"run-{label}",
+                terminal_state_version=5,
+                payload={},
+                requested_at=NOW,
+            )
+        )
+        await session.flush()
+        session.add(
+            CycleEvaluationRow(
+                evaluation_id=evaluation_id,
+                request_id=request_id,
+                evaluation_fingerprint=canonical_hash(["evaluation", label]),
+                outcome="ACCEPTED",
+                payload={},
+                evaluated_at=NOW,
+            )
+        )
+        await session.flush()
+        session.add(
+            CycleAdmissionDecisionRow(
+                decision_id=decision_id,
+                evaluation_id=evaluation_id,
+                request_id=request_id,
+                decision_fingerprint=canonical_hash(["decision", label]),
+                outcome="ADMITTED",
+                reason="TEST_AUTHORITY_FIXTURE",
+                payload={},
+                decided_at=NOW,
+            )
+        )
+        await session.flush()
+        session.add(
+            AdmittedCycleRow(
+                cycle_id=cycle_id,
+                cycle_version="v1",
+                serialized_ref=f"p1-8-cycle:v1:{cycle_id}",
+                cycle_fingerprint=canonical_hash(["cycle", label]),
+                request_id=request_id,
+                decision_id=decision_id,
+                project_id=project_id,
+                work_run_id=f"run-{label}",
+                terminal_state_version=5,
+                terminal_epoch_key=canonical_hash(["terminal-epoch", label]),
+                terminal_epoch_payload_fingerprint=canonical_hash(["terminal-payload", label]),
+                source_owner_event_high_watermark=0,
+                memory_policy_event_high_watermark=0,
+                task_constraint_ref=None,
+                task_constraint_fingerprint=None,
+                task_constraint_snapshot_ref=None,
+                task_constraint_snapshot_fingerprint=None,
+                task_constraint_event_high_watermark=None,
+                payload={},
+                admitted_at=NOW,
+            )
+        )
+        await session.flush()
+        session.add(
+            ProjectMemoryEntryRow(
+                entry_id=entry_id,
+                memory_lineage_key=lineage,
+                project_id=project_id,
+                cycle_id=cycle_id,
+                declaration_ordinal=1,
+                category=MemoryCategory.NEXT_ACTION_CONTEXT.value,
+                content_fingerprint=content_fingerprint,
+                policy_ref=policy.serialized_ref,
+                policy_fingerprint=policy.fingerprint,
+                source_ref=context_introduction.event_ref,
+                external_context_ref=context.context_ref,
+                privacy=PrivacyClassification.INTERNAL.value,
+                payload={
+                    "applicability_key": applicability_key,
+                    "authority_mode": "STRUCTURED_RESULT_ATTESTED",
+                    "normalized_content": context_content,
+                    "semantic_slot": semantic_slot,
+                    "subject_key": subject_key,
+                },
+                created_at=NOW,
+            )
+        )
+        await session.flush()
+        session.add(
+            CycleMemoryReferenceRow(
+                reference_id=canonical_hash(["context-reference", label]),
+                cycle_id=cycle_id,
+                entry_id=entry_id,
+                declaration_ordinal=1,
+                content_fingerprint=content_fingerprint,
+                provenance={
+                    "context_ref": context.context_ref,
+                    "context_fingerprint": context.fingerprint,
+                    "context_introduction_event_ref": context_introduction.event_ref,
+                    "context_introduction_event_fingerprint": (
+                        context_introduction.event_fingerprint
+                    ),
+                    "context_snapshot_ref": context_snapshot.snapshot_ref,
+                    "context_snapshot_fingerprint": context_snapshot.snapshot_fingerprint,
+                    "context_authority_event_high_watermark": (
+                        context_snapshot.owner_event_high_watermark
+                    ),
+                },
+                created_at=NOW,
+            )
+        )
+        session.add(
+            ProjectMemoryAuthorityEventRow(
+                event_id=f"memory-current-{label}",
+                memory_lineage_key=lineage,
+                subject_entry_id=entry_id,
+                replacement_entry_id="NONE",
+                event_kind="CURRENT",
+                prior_revision=0,
+                new_revision=1,
+                authority_ref=context.context_ref,
+                reason="ADMITTED_CURRENT",
+                payload={},
+                created_at=NOW,
+            )
+        )
+        await session.flush()
+        event = await session.scalar(
+            select(ProjectMemoryAuthorityEventRow).where(
+                ProjectMemoryAuthorityEventRow.event_id == f"memory-current-{label}"
+            )
+        )
+        assert event is not None
+        session.add(
+            ProjectMemoryViewRow(
+                memory_lineage_key=lineage,
+                project_id=project_id,
+                current_entry_id=entry_id,
+                state="CURRENT",
+                reason="ADMITTED_CURRENT",
+                authority_revision=1,
+                latest_event_sequence=event.event_sequence,
+                updated_at=NOW,
+            )
+        )
+    action_authority = default_next_action_policy_authority()
+    eligibility, selection_policy, fixed_descriptors = action_authority.issue_policy_catalog_v1(
+        now=NOW
+    )
+    descriptor = action_authority.issue_context_bound_descriptor(
+        context=context,
+        issuance_event_sequence=context_introduction.event_sequence,
+    )
+    actions = PostgresNextActionRepository(
+        sessions,
+        eligibility_policy=eligibility,
+        selection_policy=selection_policy,
+        descriptors=(*fixed_descriptors, descriptor),
+        policy_authority=action_authority,
+        task_authority_verifier=external_repository,
+    )
+    await actions.enroll_configured_authority(NOW)
+    async with sessions() as session:
+        memory_high_watermark = int(
+            await session.scalar(select(func.max(ProjectMemoryAuthorityEventRow.event_sequence)))
+            or 0
+        )
+    parameters = {
+        "source_cycle_id": cycle_id,
+        "memory_entry_refs": [entry_id],
+        "next_action_context_ref": context.context_ref,
+        "next_action_context_fingerprint": context.fingerprint,
+        "memory_authority_event_high_watermark": memory_high_watermark,
+    }
+    cycle_selection, candidate = await actions.select(
+        selection_id=f"cycle-derived-{label}",
+        project_id=project_id,
+        expected_project_revision=0,
+        mode=NextActionSelectionMode.CYCLE_DERIVED,
+        proposals=(
+            NextActionProposal(
+                f"cycle-proposal-{label}",
+                project_id,
+                descriptor.action_ref,
+                parameters,
+                "current memory context",
+            ),
+        ),
+        memory_entry_ids=(entry_id,),
+        now=NOW,
+    )
+    return dict(
+        engine=engine,
+        sessions=sessions,
+        actions=actions,
+        descriptor=descriptor,
+        selected=cycle_selection,
+        candidate=candidate,
+        external_repository=external_repository,
+        external_writer=external_writer,
+        context=context,
+        action_authority=action_authority,
+        project_id=project_id,
+        entry_id=entry_id,
+        parameters=parameters,
+        context_introduction=context_introduction,
+    )
+
+
+def selection_claims(fixture: dict[str, Any]) -> dict[str, Any]:
+    selected, candidate, descriptor = (fixture[k] for k in ("selected", "candidate", "descriptor"))
+    return dict(
+        selection_id=selected.selection_id,
+        expected_project_id=selected.project_id,
+        expected_project_revision=selected.project_revision,
+        expected_selection_fingerprint=selected.fingerprint,
+        expected_candidate=candidate,
+        expected_action_ref=descriptor.action_ref,
+        expected_descriptor_fingerprint=descriptor.fingerprint,
+    )
+
+
+@pytest.mark.postgres
+def test_cycle_current_verifier_same_session_currentness_and_invalidation(
+    database_url: str, monkeypatch
+):
+    from dataclasses import replace
+
+    from sqlalchemy import event
+
+    async def scenario():
+        f = await cycle_selection_fixture(database_url)
+        engine, sessions, actions = (f[k] for k in ("engine", "sessions", "actions"))
+        args = selection_claims(f)
+
+        def no_session():
+            raise AssertionError("owner verifier opened a new session")
+
+        monkeypatch.setattr(actions, "_session_factory", no_session)
+        monkeypatch.setattr(f["external_repository"], "_session_factory", no_session)
+        statements, lock_keys = [], []
+
+        def capture(conn, cursor, statement, parameters, context, many):
+            statements.append(statement.strip().split()[0].upper())
+            if "pg_advisory" in statement:
+                lock_keys.extend(str(v) for v in parameters)
+
+        event.listen(engine.sync_engine, "before_cursor_execute", capture)
+        try:
+            async with sessions() as session, session.begin():
+                tx = session.get_transaction()
+                assert await actions.verify_current_selection(session, **args) == (
+                    f["selected"],
+                    f["candidate"],
+                    f["descriptor"],
+                )
+                for change in [
+                    dict(selection_id="missing"),
+                    dict(expected_project_revision=99),
+                    dict(expected_selection_fingerprint="0" * 64),
+                    dict(expected_descriptor_fingerprint="0" * 64),
+                    dict(expected_candidate=replace(f["candidate"], candidate_id="wrong")),
+                ]:
+                    with pytest.raises(NextActionError):
+                        await actions.verify_current_selection(session, **(args | change))
+                assert session.get_transaction() is tx
+            assert not set(statements) & {"INSERT", "UPDATE", "DELETE", "COMMIT", "ROLLBACK"}
+            assert not any(k.startswith("run:") for k in lock_keys)
+            event.remove(engine.sync_engine, "before_cursor_execute", capture)
+            monkeypatch.undo()
+            async with sessions() as session, session.begin():
+                await actions.verify_current_selection(session, **args)
+                invalidate = asyncio.create_task(
+                    f["external_writer"].revoke_next_action_context(
+                        current_context_ref=f["context"].context_ref,
+                        event_id="revoke-" + uuid4().hex,
+                        effective_at=NOW + timedelta(seconds=1),
+                    )
+                )
+                await asyncio.sleep(0.05)
+                assert not invalidate.done()
+            await asyncio.wait_for(invalidate, 5)
+            await f["external_writer"].certify_snapshot(
+                snapshot_id="after-revoke-" + uuid4().hex, issued_at=NOW + timedelta(seconds=1)
+            )
+            assert await actions.replay(f["selected"].selection_id)
+            async with sessions() as session, session.begin():
+                with pytest.raises(NextActionError):
+                    await actions.verify_current_selection(session, **args)
+        finally:
+            if event.contains(engine.sync_engine, "before_cursor_execute", capture):
+                event.remove(engine.sync_engine, "before_cursor_execute", capture)
+            await engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+@pytest.mark.parametrize("invalid", ["POLICY", "DESCRIPTOR", "PROJECTION"])
+def test_cycle_current_verifier_rejects_owner_event_or_projection_corruption(database_url, invalid):
+    from sqlalchemy import event
+
+    from aiscc.persistence.models import NextActionOwnerEventRow
+
+    async def scenario():
+        f = await cycle_selection_fixture(database_url)
+        engine, sessions, actions = (f[k] for k in ("engine", "sessions", "actions"))
+        try:
+            async with sessions() as session:
+                await session.begin()
+                if invalid == "PROJECTION":
+                    row = await session.get(NextActionProjectionRow, f["project_id"])
+                    row.state = "WITHDRAWN"
+                else:
+                    subject = f["descriptor"]
+                    if invalid == "POLICY":
+                        subject = f["action_authority"].issue_policy_catalog_v1(now=NOW)[0]
+                    value = f["action_authority"].invalidate(subject, event_kind="REVOKED", now=NOW)
+                    # Transaction-local fault injection of an owner-issued invalidation.
+                    # It must deny even before the current projection is reconciled.
+                    session.add(
+                        NextActionOwnerEventRow(
+                            event_id=value.event_id,
+                            subject_ref=value.subject_ref,
+                            subject_kind=value.subject_kind,
+                            event_kind=value.event_kind,
+                            replacement_ref=value.replacement_ref,
+                            payload={"disposition": value.disposition.value},
+                            created_at=value.created_at,
+                        )
+                    )
+                await session.flush()
+                statements = []
+
+                def capture(conn, cursor, statement, parameters, context, many):
+                    statements.append(statement.strip().split()[0].upper())
+
+                event.listen(engine.sync_engine, "before_cursor_execute", capture)
+                try:
+                    with pytest.raises(NextActionError):
+                        await actions.verify_current_selection(session, **selection_claims(f))
+                    assert not set(statements) & {
+                        "INSERT",
+                        "UPDATE",
+                        "DELETE",
+                        "COMMIT",
+                        "ROLLBACK",
+                    }
+                finally:
+                    event.remove(engine.sync_engine, "before_cursor_execute", capture)
+                    await session.rollback()
+            assert await actions.replay(f["selected"].selection_id)
+        finally:
+            await engine.dispose()
+
+    run(scenario())
+
+
+@pytest.mark.postgres
+def test_cycle_descriptor_supersession_serializes_current_verification(database_url):
+    async def scenario():
+        f = await cycle_selection_fixture(database_url)
+        try:
+            value = f["action_authority"].invalidate(
+                f["descriptor"],
+                event_kind="SUPERSEDED",
+                replacement_ref="owner-replacement",
+                now=NOW + timedelta(seconds=1),
+            )
+            async with f["sessions"]() as session, session.begin():
+                await f["actions"].verify_current_selection(session, **selection_claims(f))
+                writer = asyncio.create_task(
+                    f["actions"].apply_owner_event(
+                        value, expected_project_revisions={f["project_id"]: 1}
+                    )
+                )
+                await asyncio.sleep(0.05)
+                assert not writer.done()
+            await asyncio.wait_for(writer, 5)
+            assert await f["actions"].replay(f["selected"].selection_id)
+            async with f["sessions"]() as session, session.begin():
+                with pytest.raises(NextActionError):
+                    await f["actions"].verify_current_selection(session, **selection_claims(f))
+        finally:
+            await f["engine"].dispose()
 
     run(scenario())

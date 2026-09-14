@@ -1485,9 +1485,7 @@ class TaskConstraintCurrentRow(Base):
 
 class TaskConstraintOwnerSnapshotRow(Base):
     __tablename__ = "task_constraint_owner_snapshots"
-    __table_args__ = (
-        Index("ix_task_constraint_owner_snapshots_h", "owner_event_high_watermark"),
-    )
+    __table_args__ = (Index("ix_task_constraint_owner_snapshots_h", "owner_event_high_watermark"),)
 
     snapshot_ref: Mapped[str] = mapped_column(String(288), primary_key=True)
     snapshot_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
@@ -1629,3 +1627,53 @@ class P1_4BlockerProjectionRow(Base):
     blocked_epoch: Mapped[int] = mapped_column(Integer, nullable=False)
     authority_revision: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TaskContractBodyRow(Base):
+    __tablename__ = "task_contract_bodies"
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id", "contract_id", "contract_version", name="uq_task_contract_body_version"
+        ),
+        UniqueConstraint("constraint_ref", name="uq_task_contract_body_constraint"),
+        UniqueConstraint("issuance_event_ref", name="uq_task_contract_body_event"),
+        CheckConstraint(
+            "contract_version BETWEEN 1 AND 9007199254740991", name="ck_task_contract_version"
+        ),
+        CheckConstraint(
+            "octet_length(canonical_body) BETWEEN 1 AND 1048576", name="ck_task_contract_body_size"
+        ),
+        CheckConstraint("body_sha256 ~ '^[0-9a-f]{64}$'", name="ck_task_contract_body_hash"),
+        CheckConstraint(
+            "body_ref ~ '^task-contract-body:v1:sha256:[0-9a-f]{64}$'",
+            name="ck_task_contract_body_ref",
+        ),
+        CheckConstraint(
+            "body_schema_id = 'AISCC-TASKCONTRACT-BODY-V1'", name="ck_task_contract_body_schema"
+        ),
+        CheckConstraint(
+            "(contract_version = 1 AND predecessor_version IS NULL "
+            "AND predecessor_sha256 IS NULL) OR (contract_version > 1 "
+            "AND predecessor_version IS NOT NULL AND predecessor_sha256 IS NOT NULL "
+            "AND predecessor_version = contract_version - 1 "
+            "AND predecessor_sha256 ~ '^[0-9a-f]{64}$')",
+            name="ck_task_contract_predecessor",
+        ),
+    )
+    body_ref: Mapped[str] = mapped_column(String(93), primary_key=True)
+    body_schema_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    contract_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(96), nullable=False)
+    contract_version: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    constraint_ref: Mapped[str] = mapped_column(
+        ForeignKey("task_constraint_refs.constraint_ref"), nullable=False
+    )
+    issuance_event_ref: Mapped[str] = mapped_column(
+        ForeignKey("task_constraint_authority_events.event_ref"), nullable=False
+    )
+    predecessor_version: Mapped[int | None] = mapped_column(BigInteger)
+    predecessor_sha256: Mapped[str | None] = mapped_column(String(64))
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

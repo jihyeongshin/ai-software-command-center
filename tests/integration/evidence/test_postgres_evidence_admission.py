@@ -123,6 +123,8 @@ from aiscc.persistence.models import (
     ExecutionOutputRefRow,
     WorkRunRow,
 )
+from aiscc.providers.authority import ExecutionReferenceAuthority
+from aiscc.providers.models import ExecutionStatus, ExecutionSubmissionRef
 from aiscc.task_authority.authority import _bind_repository_once
 from aiscc.task_authority.models import TaskConstraintScopeKind, TaskConstraintScopeV1
 from aiscc.task_authority.repository import PostgresExternalTaskAuthorityRepository
@@ -189,6 +191,34 @@ class FutureAuthority:
         )
 
 
+def execution_submission_fact(
+    authority: P1_4GuardAuthority, request: TransitionRequest
+) -> TrustedGuardFact:
+    # Synthetic producer-owned ref; the real P1-5 verifier and P1-4 issuer perform the handoff.
+    producer = ExecutionReferenceAuthority()
+    identity = hashlib.sha256(request.transition_request_id.encode("utf-8")).hexdigest()
+    submission = producer.register_submission(
+        ExecutionSubmissionRef(
+            submission_id="fixture-submission-" + identity,
+            execution_attempt_id="fixture-attempt-" + identity,
+            work_run_id=request.work_run_id,
+            task_contract_id=request.task_contract_id,
+            task_contract_version=request.task_contract_version,
+            state=request.observed_state,
+            state_version=request.observed_state_version,
+            status=ExecutionStatus.EXECUTOR_COMPLETED,
+            event_range_hash=identity,
+            issuer_ref=producer.issuer_ref,
+        )
+    )
+    return authority.issue_from_execution_ref(
+        guard_id=GuardId.G_EXECUTOR_SUBMISSION,
+        execution_ref=submission,
+        verifier=producer,
+        request=request,
+    )
+
+
 class WorkflowAuthorities:
     def __init__(self) -> None:
         self.system = P1_4GuardAuthority()
@@ -203,6 +233,9 @@ class WorkflowAuthorities:
         required = TRANSITION_MATRIX[(request.observed_state, request.target_state)]
         result: list[TrustedGuardFact] = []
         for guard in sorted(required, key=str):
+            if guard is GuardId.G_EXECUTOR_SUBMISSION:
+                result.append(execution_submission_fact(self.system, request))
+                continue
             owner = GUARD_OWNER_POLICY[guard]
             if owner is GuardSemanticOwner.P1_4_SYSTEM:
                 result.append(
