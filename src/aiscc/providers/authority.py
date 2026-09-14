@@ -310,6 +310,10 @@ class ExecutionReferenceAuthority:
         return ref
 
     def register_submission(self, ref: ExecutionSubmissionRef) -> ExecutionSubmissionRef:
+        if ref.issuer_ref == "AISCC_P1_5_LOCAL_IDE_SELF_DOGFOOD_V1" or ref.submission_id.startswith(
+            "external-ide-submission:"
+        ):
+            raise ValueError("external IDE authority requires durable owner verification")
         if (
             ref.status is not ExecutionStatus.EXECUTOR_COMPLETED
             or ref.state is not WorkflowState.RUNNING
@@ -318,6 +322,16 @@ class ExecutionReferenceAuthority:
             or any(character not in "0123456789abcdef" for character in ref.event_range_hash)
         ):
             raise ValueError("submission ref requires EXECUTOR_COMPLETED attempt")
+        self._refs[ref.submission_id] = ref
+        return ref
+
+    def resolve_external_submission(self, verified) -> ExecutionSubmissionRef:
+        """Enroll only a committed, durable-owner verified external producer receipt."""
+        from aiscc.providers.external_ide import VerifiedExternalIdeExecutionSubmissionV1
+
+        if type(verified) is not VerifiedExternalIdeExecutionSubmissionV1:
+            raise ValueError("durable external owner receipt required")
+        ref = verified.common_ref
         self._refs[ref.submission_id] = ref
         return ref
 

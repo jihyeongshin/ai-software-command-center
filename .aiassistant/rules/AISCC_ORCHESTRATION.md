@@ -425,3 +425,26 @@ The Human-accepted 0319 + 0812 + 0902 + 0940 Outcome A + 1212 chain is adopted i
 V1 issuance supports only owner-current open-cycle-derived-task-issuance. Operational recovery remains valid in P1-8 with its source WorkRun lock, but V1 rejects it before that lock or issuance writes with TASKCONTRACT_V1_UNSUPPORTED_NEXT_ACTION_SOURCE. Issuer/revoker have no WorkRun locks; READY takes target WorkRun then contract family and same-transaction owner verification. P1-6 definition/currentness verification is not evidence satisfaction. Human/Judgment binding is immutable owner-consumable configuration; existing P1-7 owners retain registration, authentication, result, fingerprint and currentness authority. NONE/null template metadata grants no authority.
 
 Existing P1-4 owns READY and later transitions. RuntimeMode remains OWNER_SELF_DOGFOOD; AISCC_SELF_DOGFOOD is Cycle provenance only. No new state machine, source kind, generic planner, template registry, Human/Judgment owner, legacy body repair, golden execution or P2-4 closure is authorized by this adoption.
+
+
+## Human-accepted local external IDE completion ingress V1
+
+`AISCC-P1-5-EXTERNAL-IDE-EXECUTION-INGRESS-V1` recognizes only
+`LOCAL_IDE_SELF_DOGFOOD_V1` for local owner self-dogfood completion. Human acceptance:
+1653 external IDE ingress review, unchanged by the 1721 integration scope correction.
+
+The trusted control plane issues a bounded, immutable one-time lease only for an exact
+already-RUNNING WorkRun and current durable TaskContract. Repository/base, inner Task hash,
+allowed/forbidden paths, output expectations, expiry and capability hash are sealed in the lease.
+The raw capability is never durable. Completion uses direct read-only Git observation, exact
+current owner checks and one immutable submission per lease in the caller transaction.
+
+The external execution identity is the durable lease ID, not a fabricated provider attempt.
+Only committed durable-owner verification reconstructs the existing ExecutionSubmissionRef.
+P1-4 keeps its existing issuer-verified G_EXECUTOR_SUBMISSION. P1-6 authenticates the exact
+external producer for both live and historical consumption; provider-backed branches are unchanged.
+External submission is not Evidence admission, G_EVIDENCE, Human authority or Judgment.
+
+No generic executor registration, arbitrary command runner, remote callback, provider output
+fabrication, automatic commit, or deploy is authorized. This is completion ingress only;
+external IDE execution-start authority and actual golden execution are separate gates.

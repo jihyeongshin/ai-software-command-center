@@ -23,6 +23,29 @@ class Base(DeclarativeBase):
     pass
 
 
+class ExternalIdeExecutionLeaseRow(Base):
+    __tablename__ = "external_ide_execution_leases"
+    lease_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    work_run_id: Mapped[str] = mapped_column(
+        ForeignKey("work_runs.work_run_id"), unique=True, nullable=False
+    )
+    producer_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class ExternalIdeExecutionSubmissionRow(Base):
+    __tablename__ = "external_ide_execution_submissions"
+    submission_id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    lease_id: Mapped[str] = mapped_column(
+        ForeignKey("external_ide_execution_leases.lease_id"), unique=True, nullable=False
+    )
+    work_run_id: Mapped[str] = mapped_column(ForeignKey("work_runs.work_run_id"), nullable=False)
+    producer_kind: Mapped[str] = mapped_column(String(64), nullable=False)
+    canonical_body: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    body_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class WorkRunRow(Base):
     __tablename__ = "work_runs"
     __table_args__ = (

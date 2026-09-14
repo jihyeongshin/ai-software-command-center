@@ -325,6 +325,10 @@ class P1_5EvidenceIssuerAuthority:
         return self._issuer_type
 
     def seed_candidate(self, candidate: EvidenceCandidate) -> EvidenceCandidate:
+        from aiscc.providers.external_ide import ISSUER
+
+        if candidate.issuer.owner_id == ISSUER:
+            raise ValueError("external IDE candidate requires durable pre-verification")
         if (
             candidate.issuer.owner_type is not self.issuer_type
             or candidate.issuer.owner_id != self.issuer_id
@@ -336,6 +340,22 @@ class P1_5EvidenceIssuerAuthority:
         value = replace(candidate, _issuer_token=self._token)
         return replace(value, candidate_fingerprint=candidate_fingerprint(value))
 
+    async def seed_external_candidate(self, candidate: EvidenceCandidate, repository):
+        from aiscc.providers.external_ide import ExternalIdeExecutionRepository
+
+        if (
+            type(repository) is not ExternalIdeExecutionRepository
+            or candidate.issuer.owner_type is not self.issuer_type
+            or candidate.issuer.owner_id != self.issuer_id
+            or candidate.issuer.owner_version != self.issuer_version
+        ):
+            raise ValueError("P1-5 durable external owner required")
+        verified = await repository.resolve(candidate.producer_attestation_ref)
+        if not external_candidate_matches(candidate, verified):
+            raise ValueError("external candidate producer binding differs")
+        value = replace(candidate, _issuer_token=self._token)
+        return replace(value, candidate_fingerprint=candidate_fingerprint(value))
+
     async def recognizes(self, candidate: EvidenceCandidate) -> bool:
         if (
             candidate._issuer_token is not self._token
@@ -344,6 +364,16 @@ class P1_5EvidenceIssuerAuthority:
             or not candidate.execution_attempt_id
         ):
             return False
+        from aiscc.providers.external_ide import ISSUER, ExternalIdeExecutionRepository
+
+        if candidate.issuer.owner_id == ISSUER:
+            if type(self._resolver) is not ExternalIdeExecutionRepository:
+                return False
+            try:
+                verified = await self._resolver.resolve(candidate.producer_attestation_ref)
+                return external_candidate_matches(candidate, verified)
+            except ValueError:
+                return False
         return await self._resolver.verify(
             ref_id=candidate.producer_attestation_ref,
             expected_kind=self._KIND[self.issuer_type],
@@ -351,6 +381,37 @@ class P1_5EvidenceIssuerAuthority:
             execution_attempt_id=candidate.execution_attempt_id,
             content_hash=candidate.content_ref.content_hash,
         )
+
+
+def external_candidate_matches(candidate, verified):
+    """Exact binding only; durable P1-5 verification must precede this comparison."""
+    from aiscc.providers.external_ide import ISSUER, VERSION
+
+    ref = verified.common_ref
+    return (
+        candidate.issuer.owner_type is EvidenceIssuerType.P1_5_EXECUTION_SUBMISSION
+        and candidate.issuer.owner_id == ISSUER
+        and candidate.issuer.owner_version == VERSION
+        and candidate.issuer.authority_ref == f"{ISSUER}@{VERSION}"
+        and candidate.producer_work_run_id == ref.work_run_id
+        and candidate.execution_attempt_id == ref.execution_attempt_id
+        and candidate.operation_id is None
+        and candidate.task_contract_id == ref.task_contract_id
+        and candidate.task_contract_version == ref.task_contract_version
+        and candidate.observed_state is ref.state
+        and candidate.observed_state_version == ref.state_version
+        and candidate.producer_attestation_ref == ref.submission_id
+        and candidate.content_ref.object_id == ref.submission_id
+        and candidate.content_ref.content_hash == ref.event_range_hash
+        and candidate.content_ref.content_kind.value == "P1_5_IMMUTABLE_PRODUCER_REF"
+        and candidate.content_ref.owner_id == ISSUER
+        and candidate.content_ref.owner_version == VERSION
+        and candidate.content_ref.object_version == VERSION
+        and candidate.content_ref.schema_id == "AISCC-EXTERNAL-IDE-SUBMISSION-V1"
+        and candidate.content_ref.schema_version == VERSION
+        and candidate.content_ref.canonicalization == "P1_5_IMMUTABLE_REF_EXACT_BYTES"
+        and candidate.content_ref.byte_count == len(verified.submission.canonical_body)
+    )
 
 
 def candidate_fingerprint(value: EvidenceCandidate) -> str:

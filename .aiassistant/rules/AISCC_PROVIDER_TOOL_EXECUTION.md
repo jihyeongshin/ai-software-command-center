@@ -987,3 +987,26 @@ provider configured: NO
 real provider call: NOT_EXECUTED
 public Live: NOT_RELEASED
 ```
+
+
+## Human-accepted local external IDE completion ingress V1
+
+`AISCC-P1-5-EXTERNAL-IDE-EXECUTION-INGRESS-V1` recognizes only
+`LOCAL_IDE_SELF_DOGFOOD_V1` for local owner self-dogfood completion. Human acceptance:
+1653 external IDE ingress review, unchanged by the 1721 integration scope correction.
+
+The trusted control plane issues a bounded, immutable one-time lease only for an exact
+already-RUNNING WorkRun and current durable TaskContract. Repository/base, inner Task hash,
+allowed/forbidden paths, output expectations, expiry and capability hash are sealed in the lease.
+The raw capability is never durable. Completion uses direct read-only Git observation, exact
+current owner checks and one immutable submission per lease in the caller transaction.
+
+The external execution identity is the durable lease ID, not a fabricated provider attempt.
+Only committed durable-owner verification reconstructs the existing ExecutionSubmissionRef.
+P1-4 keeps its existing issuer-verified G_EXECUTOR_SUBMISSION. P1-6 authenticates the exact
+external producer for both live and historical consumption; provider-backed branches are unchanged.
+External submission is not Evidence admission, G_EVIDENCE, Human authority or Judgment.
+
+No generic executor registration, arbitrary command runner, remote callback, provider output
+fabrication, automatic commit, or deploy is authorized. This is completion ingress only;
+external IDE execution-start authority and actual golden execution are separate gates.

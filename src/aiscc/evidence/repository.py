@@ -2605,6 +2605,40 @@ async def _verify_historical_candidate_producer(
 async def _verify_historical_p1_5_producer(
     session: AsyncSession, candidate: EvidenceCandidate
 ) -> None:
+    from aiscc.evidence.issuers import external_candidate_matches
+    from aiscc.persistence.models import ExternalIdeExecutionSubmissionRow
+    from aiscc.providers.external_ide import (
+        ISSUER,
+        PREFIX,
+        ExternalIdeAuthorityError,
+        verify_external_submission_in_session,
+    )
+
+    # Durable row lookup identifies the external branch. Caller labels cannot grant authority.
+    external = (
+        await session.get(ExternalIdeExecutionSubmissionRow, candidate.producer_attestation_ref)
+        if candidate.producer_attestation_ref
+        else None
+    )
+    if external is not None:
+        try:
+            verified = await verify_external_submission_in_session(
+                session, candidate.producer_attestation_ref
+            )
+            if not external_candidate_matches(candidate, verified):
+                raise ExternalIdeAuthorityError("external historical binding differs")
+        except (ValueError, KeyError, TypeError) as exc:
+            raise HistoricalEvidenceProvenanceError(
+                "historical external IDE producer authority disagrees"
+            ) from exc
+        return
+    if candidate.issuer.owner_id == ISSUER or (
+        isinstance(candidate.producer_attestation_ref, str)
+        and candidate.producer_attestation_ref.startswith(PREFIX)
+    ):
+        raise HistoricalEvidenceProvenanceError(
+            "historical external IDE submission missing", incomplete=True
+        )
     expected_kinds = {
         EvidenceIssuerType.P1_5_EXECUTION_SUBMISSION: "ExecutionSubmissionRef",
         EvidenceIssuerType.P1_5_AGENT_OUTPUT: "AgentOutputRef",
