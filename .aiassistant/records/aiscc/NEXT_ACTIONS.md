@@ -1,29 +1,66 @@
 # AISCC Next Actions
 
-## Current next action (20260914_0237)
+## Current next action (20260914_2338)
 
 ```text
-phase: P2-4
-title: Self-Dogfooding Cutover
+phase: P3 Entry
+title: P3-1 Comparative Evaluation
 status: NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE
+precondition: P2 actual self-dogfood golden accepted and canonical-state reconciliation persisted
 ```
 
-Scope: one actual AISCC self-dogfood golden cycle, explicit self-dogfood execution mode/provenance, and reuse of existing governance/runtime. No generic planner, autonomous loop, or public deployment. This reconciliation does not begin P2-4 implementation. S1-S4 minimum runtime proof and Replay capture are CLOSED; no additional scenario rerun/refinement is the next action. P3 remains NOT_STARTED.
+Next executable: P3-1 Comparative Evaluation. This reconciliation records P2 closure and P3 entry readiness; it does not execute any P3 work. Public release, deployment, documentation, comparative evaluation and competition submission remain future work.
 
-## Current canonical queue
+## Current canonical queue and completed P2 phases
 
 | Phase / boundary | Current status |
 | --- | --- |
 | P2-1 | ACCEPTED / CLOSED |
 | P2-2 | ACCEPTED / CLOSED |
 | P2-3 | ACCEPTED / CLOSED |
-| P2-4 | NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE |
-| P2 | IN_PROGRESS |
+| P2-4 | ACCEPTED / CLOSED |
+| P2 | ACCEPTED / CLOSED |
+| P3 | NOT_STARTED / ENTRY_READY |
 | Recorded Replay | CANONICAL / PERSISTED |
+| Public Replay deployment | NOT_COMPLETED |
 | Public Bounded Live | NOT_RELEASED |
 | public release | NOT_COMPLETED / PENDING |
 | public deployment | NOT_COMPLETED |
-| P3 | NOT_STARTED |
+| comparative evaluation | NOT_COMPLETED |
+| public docs | NOT_COMPLETED |
+| competition submission | NOT_COMPLETED |
+
+P2-1 Command Center Web UI, P2-2 Synthetic Demo Repository, P2-3 Canonical Scenario Pack + Recorded Replay, and P2-4 Self-Dogfooding Cutover are ACCEPTED / CLOSED. P2 is ACCEPTED / CLOSED. P3 is NOT_STARTED / ENTRY_READY.
+
+### Future queue
+
+| Phase | Title | Status |
+| --- | --- | --- |
+| P3-1 | Comparative Evaluation | NOT_STARTED / ENTRY_READY / NEXT_EXECUTABLE |
+| P3-2 | Public Repository Documentation | NOT_STARTED |
+| P3-3 | Public Release and Competition Submission | NOT_STARTED |
+
+Recorded Replay remains CANONICAL / PERSISTED. Public Replay deployment retains the existing NOT_COMPLETED public-deployment status; accepted Replay artifacts do not imply a public release. The accepted AISCC-COMPETITION-PUBLIC-RUNTIME-V1 decision remains a project boundary, not a deployed fact or completed submission.
+
+Authority: [2338 Browser-accepted Cycle](cycles/20260914_2338_aiscc-p2-4-first-actual-self-dogfood-golden-cycle-browser-accepted-state-reconciliation-entry-1.cycle.md) and [2338 final Browser Judgment](../../reports/aiscc/20260914_2338_aiscc-p2-4-first-actual-self-dogfood-golden-cycle-final-browser-acceptance-1.md), persisted in Governance Commit A `8aba4b65fd547d36983aacac305e3ac297a9bae3`. The accepted runtime evidence is REUSED_ACCEPTED; this reconciliation does not rerun the golden cycle.
+
+### P2-4 terminal evidence
+
+| Accepted fact | Value |
+| --- | --- |
+| actual self-dogfood golden | ACCEPTED |
+| golden result commit | `ea34a0e08912d6259c74d0cb50ade9c9b9dba77e` |
+| golden target | `docs/AISCC_SELF_DOGFOOD_GOLDEN_CYCLE.md` |
+| golden target SHA-256 | `7890b048be5e7c4a1c679c388b0d05267a63445a2c3558b88fce3fd8f518b368` |
+| golden provenance root | `b0be0299344375a74d9b9bdc7e7149aa949d98098e0a76bf9f81b13e86834e50` |
+| terminal WorkRun | ACCEPTED / v4 |
+| Judgment | ACCEPTED / SYSTEM_DETERMINISTIC |
+| first real Cycle | `aiscc-golden-retry3-cycle-1` |
+| resulting NextAction | CYCLE_DERIVED / open-cycle-derived-task-issuance / CURRENT |
+
+Accepted owner chain: SELF_DOGFOOD_GENESIS → TaskContract → SelfDogfoodTaskSpec → READY → RUNNING → clean completion lease → exact governed edit → authenticated external submission → P1-6 SATISFIED → deterministic Judgment ACCEPTED → WorkRun ACCEPTED → first real Cycle → result commit → CYCLE_DERIVED steady state. Genesis is permanently non-current after the first real Cycle. The resulting operational NextAction is distinct from the roadmap's next executable P3-1 phase.
+
+Failed 2216/2301 lineages remain historical and were not reused as actual golden authority. No provider, LLM or network was required for this local golden. Public Bounded Live remains separate / NOT_RELEASED; P3 work remains separate / NOT_STARTED.
 
 ### Accepted P2-3 entry evidence
 
@@ -40,9 +77,9 @@ The sanitized, read-only Recorded Run Replay describes previously executed workf
 
 Non-blocking historical limitations: generic legacy P1-6 literal-offset fingerprint compatibility is DEFERRED; historical v1 authority remains preserved. Stranded historical S3 v7 is preserved / not reused. The 0036 lineage remains terminal / closed for reuse. The 0205 path-basis omission and 0224 predecessor-count transcription were Command Center contract defects, not product/Replay defects; original Task/result bytes remain preserved. Verified 0205 aggregate is 25 EXECUTED_PASS / 1 EXECUTED_FAIL / 40 BLOCKED_REQUIRED_EVIDENCE (sole failed row CANONICAL_INDEX_HASH_EXACT); 0224 is 16 EXECUTED_PASS / 54 BLOCKED_REQUIRED_EVIDENCE. Neither is an active P2-3 blocker under corrected 0237 authority.
 
-## Historical snapshots (superseded by 0237 current authority)
+## Historical snapshots (superseded by 2338 current authority)
 
-All earlier sections below are preserved historical snapshots, including their former current/next-action wording. They do not define a current P2-3 status or authorize runtime work. The current status and next action are exclusively above this boundary.
+All earlier sections below are preserved historical snapshots, including their former current/next-action wording. They do not define current P2/P3 status or authorize runtime work. The current status and next action are exclusively above this boundary.
 
 ## Historical immediate P2-3 authority (20260913_1755)
 
