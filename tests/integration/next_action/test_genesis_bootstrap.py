@@ -264,7 +264,7 @@ def test_genesis_additive_migration_empty_and_nonempty_preservation(database_url
     asyncio.run(admin(f'CREATE DATABASE "{name}"'))
     try:
         assert migrate("upgrade", "head")[0] == 0
-        assert asyncio.run(snapshot())[:2] == ("20260914_0012", ())
+        assert asyncio.run(snapshot())[:2] == ("20260915_0013", ())
         assert migrate("downgrade", "20260914_0011")[0] == 0
         assert migrate("upgrade", "head")[0] == 0
 
