@@ -12,7 +12,7 @@
 - Actual platform submission timestamp: NOT_SHOWN.
 - Browser evidence received: 2026-09-15T15:27:46+09:00.
 
-Submitted title: AI Software Command Center ? AI ?? ??? ??? ???? ????? ???? ??.
+Submitted title: AI Software Command Center — AI 개발 작업을 증거로 통제하는 소프트웨어 거버넌스 콘솔
 Accepted form copy is preserved in the 1525 Human Task lineage without re-authoring. Human-confirmed submission supersedes all historical NOT_SUBMITTED/final-submit-pending projections below. The form remains editable before the 2026-09-20 deadline and view-only afterward, as observed in Human UI. Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE. Comparative limitations and non-superiority boundaries remain unchanged. See AISCC_COMPETITION_FINAL_SUBMISSION_CONFIRMATION.md for evidence identities and operational obligations.
 
 

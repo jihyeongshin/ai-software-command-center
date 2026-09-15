@@ -15,7 +15,7 @@ Authority: the 1527 persistence Task records Human answers already accepted by B
 | Codex use | CONFIRMED: repository work, verification, Git commit |
 | Public runtime AI | CONFIRMED: Recorded Replay; no viewing-time LLM inference; Public Bounded Live not released |
 
-Human-provided model context: ChatGPT ? GPT-5.6 Sol; Codex ? GPT-5.6 Sol and GPT-6 Astra. Low / Medium / High describe reasoning/thinking effort, not model names. These are Human context, not a reconstructed per-call audit or a claim that the Wanted form required model/version disclosure.
+Human-provided model context: ChatGPT: GPT-5.6 Sol; Codex: GPT-5.6 Sol and GPT-6 Astra. Low / Medium / High describe reasoning/thinking effort, not model names. These are Human context, not a reconstructed per-call audit or a claim that the Wanted form required model/version disclosure.
 
 Actually submitted predefined tool tag: ChatGPT. Narrative disclosure: ChatGPT and Codex. Source repository publication is not a required submission field. Prior unresolved Human items below are retained as historical observations and superseded for this submitted scope. Optional Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE; new scope would require its own review.
 
