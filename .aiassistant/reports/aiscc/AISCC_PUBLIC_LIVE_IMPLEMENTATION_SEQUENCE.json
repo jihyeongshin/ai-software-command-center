@@ -1,0 +1,151 @@
+{
+  "status": "DESIGN_FROZEN_HUMAN_ACCEPTED",
+  "implementation_performed": false,
+  "scenario": {
+    "id": "stockroom-s1-normal",
+    "version": "1.0.0"
+  },
+  "rule": "Every task below requires separate explicit authorization. No deployment or Live enablement is authorized by this plan.",
+  "tasks": [
+    {
+      "id": "L0",
+      "title": "Human design acceptance completed",
+      "depends_on": [],
+      "owner": "Human",
+      "exit": [
+        "H1-H7 HUMAN_PROVIDED / ACCEPTED under 1646; H3 KST cutoff and H5 sessionStorage applied"
+      ],
+      "status": "COMPLETE / HUMAN_ACCEPTED"
+    },
+    {
+      "id": "L1",
+      "title": "Additive schema and repository transaction primitives",
+      "depends_on": [
+        "L0"
+      ],
+      "exit": [
+        "Separate DB/role plan implemented",
+        "Current migration head and exact fixture scope explicitly authorized",
+        "Constraint, permission, ledger conservation and rollback tests pass",
+        "Admission disabled by default"
+      ]
+    },
+    {
+      "id": "L2",
+      "title": "Atomic admission and durable reconciliation service",
+      "depends_on": [
+        "L1"
+      ],
+      "exit": [
+        "A1 I1 R1 M1 implemented behind verified transaction functions",
+        "Two-worker admission, double-settlement and crash tests pass",
+        "Unique outbox binds real production owner admission without nested owner locks",
+        "No dispatch before admission and marker commits"
+      ]
+    },
+    {
+      "id": "L3",
+      "title": "Public-only HTTP API composition",
+      "depends_on": [
+        "L2"
+      ],
+      "exit": [
+        "Exact POST/GET schema, CORS and capability projection",
+        "No owner routes, cancel, free-form input or raw errors",
+        "Shared read/flood limits proven",
+        "Admission still disabled"
+      ]
+    },
+    {
+      "id": "L4",
+      "title": "Real provider profile prerequisite",
+      "depends_on": [
+        "L0"
+      ],
+      "exit": [
+        "Separately authorized official model, Responses compatibility and pricing verification",
+        "Immutable conservative token/price envelope <= reservation",
+        "At most two total calls including retry",
+        "Unknown/missing usage truth preserved",
+        "Provider credentials isolated; no reliance on monthly budget alone"
+      ]
+    },
+    {
+      "id": "L5",
+      "title": "Deployment packaging, ingress and sandbox proof",
+      "depends_on": [
+        "L0"
+      ],
+      "exit": [
+        "Railway trusted peer and header overwrite contract demonstrated with spoof cases",
+        "Supervisor termination, no-send fencing and remote-unknown quarantine demonstrated",
+        "No public owner DB route or secret exposure",
+        "Tool/network/filesystem isolation and Replay independence proven",
+        "Actual paid resource/deployment actions require separate authorization"
+      ]
+    },
+    {
+      "id": "L6",
+      "title": "Integrated runtime and adversarial verification",
+      "depends_on": [
+        "L3",
+        "L4",
+        "L5"
+      ],
+      "exit": [
+        "All AISCC_PUBLIC_LIVE_SECURITY_TEST_MATRIX.json cases pass in authorized isolated environment",
+        "Real owner chain and synthetic corpus pin verified",
+        "Multi-replica restart and unknown-send limits proven",
+        "No global caps bypass and no Replay coupling"
+      ]
+    },
+    {
+      "id": "L7",
+      "title": "Frontend bounded Live integration candidate",
+      "depends_on": [
+        "L6"
+      ],
+      "exit": [
+        "Explicitly authorized frontend-only scope",
+        "Single scenario UI and sessionStorage token UX; same-tab refresh preserved; initial lost 201 has no recovery",
+        "Replay works without API",
+        "No enablement before Human release acceptance"
+      ]
+    },
+    {
+      "id": "L8",
+      "title": "Human release decision and separately authorized activation",
+      "depends_on": [
+        "L7"
+      ],
+      "owner": "Human",
+      "exit": [
+        "All release prerequisites accepted",
+        "Budget, resources, origin and campaign configuration verified",
+        "Explicit enablement authorization or Replay-only retained"
+      ]
+    }
+  ],
+  "parallel_possible_after_L0": [
+    "L1",
+    "L4",
+    "L5"
+  ],
+  "serial_chain": [
+    "L1",
+    "L2",
+    "L3",
+    "L6",
+    "L7",
+    "L8"
+  ],
+  "integration_join": {
+    "task": "L6",
+    "requires": [
+      "L3",
+      "L4",
+      "L5"
+    ]
+  },
+  "fallback": "Any unresolved release prerequisite retains Replay-only; frozen design does not imply Live implementation readiness."
+}

@@ -1,5 +1,19 @@
 # AISCC Next Actions
 
+## Current sequence (20260915_1646)
+
+Public Live prerequisite design is HUMAN_ACCEPTED / FROZEN; Live implementation is NOT_STARTED. P3-3 remains SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW and competition submission COMPLETED. Public Replay remains DEPLOYED / VERIFIED / HUMAN_ACCEPTED; Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+
+Next eligible implementation candidates, each requiring a separate Task:
+
+- L1: additive schema/repository transaction primitives.
+- L4: real provider profile prerequisite.
+- L5: Railway ingress/sandbox/deployment proof.
+
+L0 is COMPLETE / HUMAN_ACCEPTED. Preserve L2 blocked on L1; L3 blocked on L2; L6 blocked on L3+L4+L5; L7 blocked on L6; L8 Human release decision after L7. L1/L4/L5 may proceed independently after separate authorization. No resource creation, deployment or Live enablement is authorized here.
+
+Authority: [1646 Cycle](cycles/20260915_1646_aiscc-p3-3-public-live-human-acceptance-final-design-freeze-entry-1.cycle.md) and [implementation sequence](../../reports/aiscc/AISCC_PUBLIC_LIVE_IMPLEMENTATION_SEQUENCE.json). Frozen scope is stockroom-s1-normal / 1.0.0. This queue supersedes the historical queues below; accepted submission/edit-window and Replay obligations remain unchanged.
+
 ## Current sequence (20260915_1527)
 
 P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW. Human final submission is COMPLETED and is no longer a pending execution action.

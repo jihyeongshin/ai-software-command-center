@@ -1,5 +1,18 @@
 # AISCC Current State Summary
 
+## Current authority (20260915_1646)
+
+- Competition submission: COMPLETED / HUMAN_PROVIDED.
+- P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW.
+- Static Replay: DEPLOYED / VERIFIED / HUMAN_ACCEPTED; https://aiscc-replay.pages.dev.
+- Public Bounded Live: NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+- Public Live prerequisite design: HUMAN_ACCEPTED / FROZEN.
+- Live implementation: NOT_STARTED.
+- Frozen scenario: stockroom-s1-normal / 1.0.0.
+- Next eligible candidates: L1 schema/repository primitives, L4 provider profile prerequisite, L5 Railway ingress/sandbox/deployment proof; separate Tasks required.
+
+Authority: [1646 Human decision](cycles/20260915_1646_aiscc-p3-3-public-live-human-acceptance-final-design-freeze-entry-1.cycle.md) and [frozen Human decisions](../../reports/aiscc/AISCC_PUBLIC_LIVE_HUMAN_DECISIONS.md). H3 keeps UTC daily accounting and closes campaign at 2026-10-18T00:00:00+09:00 exclusive (2026-10-17T15:00:00Z). H5 uses sessionStorage for 256-bit/24h read capability, retaining same-tab refresh; lost initial 201 has no recovery. This projection supersedes historical status/queues below only; it does not claim implementation, deployment proof or Live readiness.
+
 ## Current authority (20260915_1527)
 
 - Competition final submission: HUMAN_PROVIDED / COMPLETED.

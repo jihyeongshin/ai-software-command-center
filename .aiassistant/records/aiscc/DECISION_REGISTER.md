@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-PREREQUISITE-DESIGN-V1
+
+- decision_status: HUMAN_PROVIDED / HUMAN_ACCEPTED / FROZEN under the [1646 Cycle](cycles/20260915_1646_aiscc-p3-3-public-live-human-acceptance-final-design-freeze-entry-1.cycle.md).
+- implementation_status: NOT_STARTED; Public Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+- scope: stockroom-s1-normal / 1.0.0 only; atomic public admission, durable idempotency, no free-form input or public cancel.
+- accepted caps: client 3/hour and 10/day; global 20/day and concurrency 2; integer micro-USD reserve 200000/run, day budget 4000000, campaign budget 15000000.
+- H3: UTC daily ledger; campaign cutoff 2026-10-18T00:00:00+09:00 exclusive = 2026-10-17T15:00:00Z.
+- H4: IPv4 /32 and IPv6 /64 pseudonymous HMAC bucket, no raw IP storage/logging; NAT sharing and accepted retention preserved.
+- H5: 256-bit read capability, 24h expiry, sessionStorage, same-tab refresh retained; no URL/cookie/localStorage. Tab/session close loses capability; initial 201 never received has no recovery or automatic replacement run.
+- H6/H7: unknown-provider quarantine, no automatic resend/refund/slot reclaim; separate public Live DB/credentials and least privilege.
+- authority: [Human decisions](../../reports/aiscc/AISCC_PUBLIC_LIVE_HUMAN_DECISIONS.md). H1/H2/H4/H6/H7 ACCEPT; H3/H5 ACCEPT_BROWSER_RECOMMENDATION.
+- Remaining ingress/provider/isolation/closure/abuse/migration/release proof is not an unresolved Human design choice. No deployment/resource authority is inferred.
+- Current phase: P3-3 SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW; submission COMPLETED; Replay DEPLOYED / VERIFIED / HUMAN_ACCEPTED. Historical phase projections below are superseded; their accepted decisions remain preserved.
+
 ## Current release projection (20260915_1047)
 
 P3-2 is ACCEPTED / PERSISTED / CLOSED under the 1009 Cycle. P3-3 is ACTIVE. The historical phase projections below are superseded by the 1047 current records; their accepted decisions remain preserved.

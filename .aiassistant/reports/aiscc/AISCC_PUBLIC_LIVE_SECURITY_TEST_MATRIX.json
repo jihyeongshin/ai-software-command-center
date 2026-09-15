@@ -1,0 +1,267 @@
+{
+  "status": "DESIGN_FROZEN_HUMAN_ACCEPTED",
+  "executed": false,
+  "harness": "Future authorized disposable PostgreSQL, deterministic injected DB clock through a test-only clock boundary, two independent connections/worker processes with barriers, explicit crash points and synthetic provider transport. No real provider or production DB required for deterministic cases. Test fixtures never replace actual release authority.",
+  "universal_assertions": [
+    "No dispatch before admission and marker commit",
+    "Day and campaign balances conserve and remain nonnegative",
+    "At most two occupied or suspect slots",
+    "At most two marked provider ordinals per run",
+    "No raw IP, read capability, key or secret in logs",
+    "Replay remains independent"
+  ],
+  "cases": [
+    {
+      "id": "T01",
+      "contract": "I1",
+      "setup": "Same key, bucket and payload; first admission committed",
+      "action": "Repeat at +599s",
+      "expect": "202 same run receipt; one rate event, reserve and outbox; no token reissue"
+    },
+    {
+      "id": "T02",
+      "contract": "I1",
+      "setup": "Existing key",
+      "action": "Change payload digest under same bucket",
+      "expect": "409; all balances/counters unchanged"
+    },
+    {
+      "id": "T03",
+      "contract": "I1",
+      "setup": "Existing key",
+      "action": "Repeat at +600s and campaign+1 day; run cleanup job",
+      "expect": "410; tombstone retained through end+30d or unresolved liability; no fresh admission"
+    },
+    {
+      "id": "T04",
+      "contract": "A1",
+      "setup": "Two DB connections paused before control lock, same key",
+      "action": "Release both barriers",
+      "expect": "One 201 and one 202; one run/reserve/outbox; provider ordinal unique"
+    },
+    {
+      "id": "T05",
+      "contract": "R1",
+      "setup": "Three prior admitted starts within rolling hour; completed slots",
+      "action": "Fourth at +3599s then exactly oldest+3600s",
+      "expect": "429 then eligible subject to other caps; rejected event not counted"
+    },
+    {
+      "id": "T06",
+      "contract": "R1",
+      "setup": "Ten same-client starts spread over UTC day, hour capacity available",
+      "action": "Eleventh",
+      "expect": "429 CLIENT_RATE_LIMIT; no reserve"
+    },
+    {
+      "id": "T07",
+      "contract": "A1",
+      "setup": "Twenty global starts across clients, reserve capacity otherwise sufficient",
+      "action": "Twenty-first",
+      "expect": "429 GLOBAL_DAY_LIMIT; no side effects"
+    },
+    {
+      "id": "T08",
+      "contract": "M1",
+      "setup": "Two occupied slots",
+      "action": "Third admission, then expire one heartbeat",
+      "expect": "503 both times; expired slot SUSPECT, not free"
+    },
+    {
+      "id": "T09",
+      "contract": "M1",
+      "setup": "Exactly 200000 available in day and campaign; slots free; rates available",
+      "action": "Two workers reserve concurrently with distinct keys",
+      "expect": "One admitted; one budget denial; never negative or double reserve"
+    },
+    {
+      "id": "T10",
+      "contract": "A1",
+      "setup": "Crash at each write in uncommitted admission transaction",
+      "action": "Restart and retry same key",
+      "expect": "Rollback all partial rows; one eventual admission; zero precommit sends"
+    },
+    {
+      "id": "T11",
+      "contract": "M1",
+      "setup": "Admission committed, no marker; crash worker",
+      "action": "Recover same outbox before deadline with no-send proof",
+      "expect": "One owner binding and execution; no new rate or reserve"
+    },
+    {
+      "id": "T12",
+      "contract": "I1",
+      "setup": "Crash just after dispatch marker commit before send",
+      "action": "Restart worker",
+      "expect": "UNKNOWN_OUTCOME; ordinal not resent; committed maximum retained"
+    },
+    {
+      "id": "T13",
+      "contract": "M1",
+      "setup": "Provider accepted request but response lost",
+      "action": "Timeout/restart and request retry",
+      "expect": "No automatic second paid call; slot quarantined until closure proof; conservative charge"
+    },
+    {
+      "id": "T14",
+      "contract": "M1",
+      "setup": "Known closed run ready to settle",
+      "action": "Two workers settle concurrently; replay settlement",
+      "expect": "One SETTLE event; both ledgers change once; identical repeats no-op; conflicting settlement rejected"
+    },
+    {
+      "id": "T15",
+      "contract": "M1",
+      "setup": "Run admitted 23:59:59 UTC",
+      "action": "Dispatch/settle next day; admit new run next day",
+      "expect": "Old reserve/cost belongs to old admission day; new day counters independent; campaign continuous"
+    },
+    {
+      "id": "T16",
+      "contract": "M1",
+      "setup": "Campaign available 199999; fresh day full",
+      "action": "Admit with exhausted campaign; separately use available budget just before, exactly at and after 2026-10-17T15:00:00Z (2026-10-18T00:00:00+09:00 exclusive)",
+      "expect": "Exhaustion denies across month rollover; before cutoff eligible subject to caps; at/after cutoff no new admission. UTC daily accounting remains unchanged."
+    },
+    {
+      "id": "T17",
+      "contract": "R1",
+      "setup": "Untrusted socket peer or trusted peer with comma XFF, Forwarded or conflicting X-Real-IP",
+      "action": "Send forged identity",
+      "expect": "503 IDENTITY_UNAVAILABLE or bounded invalid-request denial; no client authority or admission"
+    },
+    {
+      "id": "T18",
+      "contract": "R1",
+      "setup": "Equivalent compressed/expanded IPv6 in same /64 and IPv4-mapped IPv6",
+      "action": "Derive buckets",
+      "expect": "Same /64 shares bucket; mapped IPv4 equals native /32; zone IDs and ports rejected"
+    },
+    {
+      "id": "T19",
+      "contract": "R1",
+      "setup": "Missing trusted edge allowlist or missing overwrite proof/header",
+      "action": "POST",
+      "expect": "Fail closed; browser-generated client ID never substitutes"
+    },
+    {
+      "id": "T20",
+      "contract": "HTTP",
+      "setup": "Two runs with independent capabilities",
+      "action": "Read run B with token A, then ID only, expired token and unknown ID",
+      "expect": "Uniform 404; no cross-run status disclosure"
+    },
+    {
+      "id": "T21",
+      "contract": "HTTP",
+      "setup": "Valid request with wrong, null, duplicate or absent Origin",
+      "action": "POST/GET/preflight",
+      "expect": "403; no CORS reflection; no side effects"
+    },
+    {
+      "id": "T22",
+      "contract": "HTTP",
+      "setup": "Exact allowed Origin and preflight header subset",
+      "action": "OPTIONS then valid request",
+      "expect": "204 preflight without admission; exact ACAO, no credentials/wildcard, Vary Origin and no-store"
+    },
+    {
+      "id": "T23",
+      "contract": "A1",
+      "setup": "DB fails before transaction or commit acknowledgement lost",
+      "action": "Client retries same key after recovery",
+      "expect": "No premature dispatch; resolve committed identity or admit once if rollback; no fresh-key retry"
+    },
+    {
+      "id": "T24",
+      "contract": "FAILURE",
+      "setup": "Live DB/provider unavailable, budgets exhausted",
+      "action": "Fetch static Replay independently",
+      "expect": "Replay unchanged and available; no Live failure relabeled ACCEPTED Replay"
+    },
+    {
+      "id": "T25",
+      "contract": "M1",
+      "setup": "Paused old dispatcher with committed marker, lease expires and generation advances",
+      "action": "Attempt slot reclaim then resume old worker",
+      "expect": "No slot reuse without termination proof; at most two possible active effects"
+    },
+    {
+      "id": "T26",
+      "contract": "M1",
+      "setup": "Two known failed/finished provider calls",
+      "action": "Request third ordinal or retry under new ordinal",
+      "expect": "Denied; total paid calls includes retry and stays <=2"
+    },
+    {
+      "id": "T27",
+      "contract": "M1",
+      "setup": "Missing usage then late lower usage; separate above-bound usage case",
+      "action": "Settle and observe delayed evidence",
+      "expect": "Charge maximum once; late evidence appended without refund; above bound closes admission gate and preserves actual evidence"
+    },
+    {
+      "id": "T28",
+      "contract": "HTTP",
+      "setup": "Invalid UTF8, duplicate JSON keys, extra fields, >1024 bytes, multipart/upload, query and cancel route",
+      "action": "Request each case",
+      "expect": "Exact 400/413/415/404 contract; no provider or admission"
+    },
+    {
+      "id": "T29",
+      "contract": "I1",
+      "setup": "Initial successful 201 never received after admission commit",
+      "action": "Retry same key within replay window",
+      "expect": "202 receipt no capability; no recovery via IP/key; no automatic replacement run. This is not ordinary refresh after received 201."
+    },
+    {
+      "id": "T30",
+      "contract": "R1",
+      "setup": "Shared NAT clients and changed browser IDs; HMAC emergency rotation",
+      "action": "Attempt cap reset",
+      "expect": "Same IP bucket shares limits; browser ID ignored; rotation pauses rather than resets counters"
+    },
+    {
+      "id": "T31",
+      "contract": "DB",
+      "setup": "Runtime DB role",
+      "action": "Attempt direct DML, delete money journal or third slot, bypass control lock function",
+      "expect": "Permissions/constraints deny; owner DB credentials unavailable"
+    },
+    {
+      "id": "T32",
+      "contract": "FAILURE",
+      "setup": "Provider success without admitted evidence/Judgment",
+      "action": "Read status and attempt terminal projection",
+      "expect": "GOVERNANCE_PENDING; cannot report workflow ACCEPTED from provider result alone"
+    },
+    {
+      "id": "T33",
+      "contract": "HTTP",
+      "setup": "Valid read token, 30 reads within minute; malformed-token flood",
+      "action": "31st read and flood",
+      "expect": "429 for authorized read limit; shared ingress bounds unauthenticated traffic; no paid effects"
+    },
+    {
+      "id": "T34",
+      "contract": "A1",
+      "setup": "DB time moves backwards after control lock timestamp",
+      "action": "New admission",
+      "expect": "Gate fails closed; no rate-window reset"
+    },
+    {
+      "id": "T35",
+      "contract": "HTTP H5",
+      "setup": "Successful 201 received and capability written to same-tab sessionStorage",
+      "action": "Refresh same tab then GET with retained capability; compare independent new tab/session without capability and tab/session close",
+      "expect": "Same-tab refresh GET succeeds until 24h expiry; independent tab/session cannot recover and GET without capability returns 404; close loses token; no URL/cookie/localStorage persistence or capability logging"
+    }
+  ],
+  "release_only_evidence": [
+    "Actual Railway trusted peer/header overwrite/spoof verification",
+    "Actual supervisor and isolated tool/network/filesystem boundary",
+    "Separately authorized provider profile and cost envelope proof",
+    "Human integrated release acceptance; H1-H7 design choices already accepted"
+  ],
+  "non_substitution": "Designed cases are not executed tests; deterministic transport is not actual provider or deployed security proof."
+}
