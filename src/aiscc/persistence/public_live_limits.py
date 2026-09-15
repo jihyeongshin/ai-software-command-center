@@ -63,7 +63,7 @@ class PublicLiveLimits:
             async with self.repository.transaction() as tx:
                 result = LimitResult.parse(
                     await tx._call(
-                        "SELECT public_live_api.flood_consume(:c,:v,:s)",
+                        "SELECT public_live_api.flood_consume_retained(:c,:v,:s)",
                         {"c": campaign, "v": version, "s": source},
                     )
                 )
@@ -81,7 +81,9 @@ class PublicLiveLimits:
                 if not valid or tx.now >= datetime.fromisoformat(row["read_expires"]):
                     raise ReadNotFound("NOT_FOUND")
                 result = LimitResult.parse(
-                    await tx._call("SELECT public_live_api.read_consume(:r)", {"r": run_id})
+                    await tx._call(
+                        "SELECT public_live_api.read_consume_retained(:r)", {"r": run_id}
+                    )
                 )
                 projection = {
                     "state": row["state"],

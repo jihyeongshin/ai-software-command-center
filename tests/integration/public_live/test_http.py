@@ -180,7 +180,8 @@ def test_real_ingress_flood_composition_and_fail_closed(l2_url):
             assert (await call(a))["json"]["error"]["code"] == "LIVE_DISABLED"
             # Real PostgreSQL permission failure at mediated backend is safe and closed.
             await h.sql(
-                "REVOKE EXECUTE ON FUNCTION public_live_api.flood_consume(text,text,bytea) "
+                "REVOKE EXECUTE ON FUNCTION "
+                "public_live_api.flood_consume_retained(text,text,bytea) "
                 "FROM aiscc_public_live_runtime"
             )
             result = await call(b)

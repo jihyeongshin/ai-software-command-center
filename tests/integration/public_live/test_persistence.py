@@ -102,7 +102,8 @@ def test_initialization():
             ).scalars()
         )
         assert "public_live_shared_limit" in names
-        assert len(names) == 14
+        assert "public_live_limiter_maintenance" in names
+        assert len(names) == 15
 
     scenario(check)
 
@@ -492,7 +493,7 @@ def test_migration_paths_and_owner_preservation():
                     .all()
                 )
                 rev = await conn.scalar(text("SELECT version_num FROM alembic_version"))
-                if rev == "20260916_0015":
+                if rev == "20260916_0016":
                     assert (
                         await conn.execute(
                             text("SELECT enabled,active_campaign FROM public_control")
@@ -520,6 +521,6 @@ def test_migration_paths_and_owner_preservation():
                 assert rev == "20260914_0012"
             migrate(url, "head")
             after, rev = asyncio.run(snapshot(url))
-            assert rev == "20260916_0015" and after == before
+            assert rev == "20260916_0016" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))
