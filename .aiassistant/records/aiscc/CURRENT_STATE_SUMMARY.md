@@ -1,5 +1,20 @@
 # AISCC Current State Summary
 
+## Current authority (20260915_1527)
+
+- Competition final submission: HUMAN_PROVIDED / COMPLETED.
+- P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW (not CLOSED).
+- Production URL: https://aiscc-replay.pages.dev
+- Public Replay: DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED.
+- Public Bounded Live: NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+- Submission editing: AVAILABLE_UNTIL_2026-09-20_DEADLINE.
+- Post-deadline edit: FORBIDDEN.
+- Judging-window availability: ACTIVE_OBLIGATION.
+- Browser evidence received: 2026-09-15T15:27:46+09:00; actual platform submission timestamp: NOT_SHOWN.
+
+Authority: [1527 submission Cycle](cycles/20260915_1527_aiscc-p3-3-wanted-final-submission-human-confirmed-post-submit-window-entry-1.cycle.md). Human final submission and disclosure confirmations are admitted, not Executor-performed. The 1527 edit-window correction supersedes 1525 closure suggestions and all historical current projections below. Next scope selection is post-submission improvement/operations; Live is optional and not started.
+
+
 ## Current authority (20260915_1424)
 
 - P3-2: ACCEPTED / PERSISTED / CLOSED.

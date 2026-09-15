@@ -1,5 +1,25 @@
 # Public release disclosure register
 
+## Human-confirmed disclosure (20260915_1527)
+
+Authority: the 1527 persistence Task records Human answers already accepted by Browser. These are HUMAN_PROVIDED confirmations, not Executor legal judgments.
+
+| Item | Human confirmation |
+| --- | --- |
+| Project/source rights | CONFIRMED |
+| Synthetic scenario/Replay rights | CONFIRMED |
+| Third-party license/assets | CONFIRMED |
+| Company/customer/private exclusion | CONFIRMED |
+| Cloudflare hosting authorization/terms | CONFIRMED |
+| ChatGPT use | CONFIRMED: design, review, Task issuance, Judgment |
+| Codex use | CONFIRMED: repository work, verification, Git commit |
+| Public runtime AI | CONFIRMED: Recorded Replay; no viewing-time LLM inference; Public Bounded Live not released |
+
+Human-provided model context: ChatGPT ? GPT-5.6 Sol; Codex ? GPT-5.6 Sol and GPT-6 Astra. Low / Medium / High describe reasoning/thinking effort, not model names. These are Human context, not a reconstructed per-call audit or a claim that the Wanted form required model/version disclosure.
+
+Actually submitted predefined tool tag: ChatGPT. Narrative disclosure: ChatGPT and Codex. Source repository publication is not a required submission field. Prior unresolved Human items below are retained as historical observations and superseded for this submitted scope. Optional Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE; new scope would require its own review.
+
+
 ## Current 1047 static release scope
 
 Status: `IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING`; rights/tool roster confirmation remains `HUMAN_PENDING`.

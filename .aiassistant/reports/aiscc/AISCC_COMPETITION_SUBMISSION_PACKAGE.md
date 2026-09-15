@@ -1,5 +1,21 @@
 # Competition submission package
 
+## Current submitted package (20260915_1527)
+
+- submission_status: SUBMITTED
+- human_confirmation: COMPLETED
+- service_url: https://aiscc-replay.pages.dev
+- P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW
+- predefined tool tag: ChatGPT
+- narrative tools: ChatGPT, Codex
+- Source repository publication: not a required field in the Human-observed actual Wanted submission form.
+- Actual platform submission timestamp: NOT_SHOWN.
+- Browser evidence received: 2026-09-15T15:27:46+09:00.
+
+Submitted title: AI Software Command Center ? AI ?? ??? ??? ???? ????? ???? ??.
+Accepted form copy is preserved in the 1525 Human Task lineage without re-authoring. Human-confirmed submission supersedes all historical NOT_SUBMITTED/final-submit-pending projections below. The form remains editable before the 2026-09-20 deadline and view-only afterward, as observed in Human UI. Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE. Comparative limitations and non-superiority boundaries remain unchanged. See AISCC_COMPETITION_FINAL_SUBMISSION_CONFIRMATION.md for evidence identities and operational obligations.
+
+
 ## Current accepted service (20260915_1424)
 
 Package status: READY_FOR_HUMAN_DISCLOSURE_CONFIRMATION / NOT_SUBMITTED.

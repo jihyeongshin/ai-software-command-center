@@ -1,5 +1,18 @@
 # AISCC Next Actions
 
+## Current sequence (20260915_1527)
+
+P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW. Human final submission is COMPLETED and is no longer a pending execution action.
+
+1. Persist this final-submission confirmation under the 1527 Task.
+2. Select a bounded post-submission pre-deadline improvement scope, or preserve the submitted baseline.
+3. Preserve public Replay availability at https://aiscc-replay.pages.dev.
+4. If the public experience changes materially, re-verify/review it before the 2026-09-20 deadline.
+5. After the deadline, freeze the submitted experience and monitor availability through judging.
+
+Step 1 completes with this Task's verified commit. Public Bounded Live remains OPTIONAL / NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE; this queue does not start it. Post-deadline submitted-experience editing is forbidden. Following queues are historical, superseded by the 1527 submission acceptance and edit-window correction.
+
+
 ## Current sequence (20260915_1424)
 
 P3-3: ACTIVE / FINAL_SUBMISSION_PREP. Public Replay at https://aiscc-replay.pages.dev is DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED. Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.

@@ -1,5 +1,13 @@
 # P3-3 public release readiness
 
+## Current post-submission readiness (20260915_1527)
+
+Competition final submission: HUMAN_PROVIDED / COMPLETED. P3-3: SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW, not CLOSED.
+Public Replay remains DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED at https://aiscc-replay.pages.dev; technical R01/R02 and Human production QA remain resolved. Human rights/source/synthetic rights, license/assets, private-material exclusion, hosting terms and actual tool disclosures are CONFIRMED under the 1527 Task authority. Actual Wanted form review and Human final submit are complete; source repository publication is not a required submission field.
+
+Remaining work is operational: select any separately authorized pre-deadline improvement, preserve Replay, re-review materially changed submitted experience before 2026-09-20, then freeze and monitor availability through judging. Public Bounded Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE, an optional candidate only. No future uptime is claimed. Previous unresolved submission/disclosure projections below are historical and superseded by the admitted Human evidence; no independent legal finding or new QA was performed here.
+
+
 ## Current accepted public release (20260915_1424)
 
 Public Replay: DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED at https://aiscc-replay.pages.dev. Cloudflare Pages project aiscc-replay, Dashboard Direct Upload, source commit `d13d261eb976fc839e78ba0878080bea93ad5201`. P3-3 remains ACTIVE / FINAL_SUBMISSION_PREP.

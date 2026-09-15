@@ -1,6 +1,6 @@
 {
   "schema": "AISCC-P3-3-PUBLIC-RELEASE-MANIFEST-CANDIDATE-V1",
-  "status": "READY_FOR_HUMAN_DISCLOSURE_CONFIRMATION / NOT_SUBMITTED",
+  "status": "SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW",
   "freeze_complete": false,
   "human_review": "HUMAN_PROVIDED / ACCEPTED",
   "source_commit": "d13d261eb976fc839e78ba0878080bea93ad5201",
@@ -55,23 +55,15 @@
   ],
   "rollback_fallback_mode": "Future verified immutable Replay artifact; no hidden Live or owner DB fallback",
   "required_human_credentials_actions": [
-    "Project/source rights and release license confirmation",
-    "Final shipped scope and required third-party notices confirmation",
-    "Exact development AI tool/model/use roster confirmation",
-    "Applicable Cloudflare hosting terms confirmation",
-    "Final official schedule/form and public repository URL confirmation",
-    "Human final submission and confirmation persistence",
-    "Judging-window availability monitoring"
+    "Select any bounded pre-deadline improvement scope",
+    "Preserve public Replay availability",
+    "Re-review material changes before deadline",
+    "Freeze submitted experience after deadline and monitor judging availability"
   ],
-  "blocked_items": [
-    "Human rights/IP/license/notices and AI tool/model disclosure confirmation",
-    "Applicable hosting terms confirmation",
-    "Final official schedule/form re-verification",
-    "Human final competition submission"
-  ],
+  "blocked_items": [],
   "public_replay_deployment": "DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED",
   "public_bounded_live": "DISABLED_FOR_INITIAL_RELEASE",
-  "competition_final_submission": "NOT_COMPLETED",
+  "competition_final_submission": "HUMAN_PROVIDED / COMPLETED",
   "mandatory_stop": null,
   "deployment_decision_id": "AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1",
   "technical_prerequisites": {
@@ -93,5 +85,11 @@
   "public_verification": "PASSED",
   "human_public_qa": "ACCEPTED",
   "live": false,
-  "competition_submission": "NOT_COMPLETED"
+  "competition_submission": "COMPLETED_HUMAN_CONFIRMED",
+  "submission_confirmation_evidence_received_at": "2026-09-15T15:27:46+09:00",
+  "submission_platform_timestamp": null,
+  "submission_edit_window": "OPEN_UNTIL_2026-09-20_DEADLINE",
+  "post_deadline_submission_edit": "FORBIDDEN",
+  "judging_window_availability": "ACTIVE_OBLIGATION",
+  "human_disclosure": "CONFIRMED"
 }
