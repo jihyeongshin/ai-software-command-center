@@ -70,6 +70,8 @@ from aiscc.persistence.models import (
     ProjectMemoryViewRow,
     WorkRunRow,
 )
+from aiscc.providers.authority import ExecutionReferenceAuthority
+from aiscc.providers.models import ExecutionStatus, ExecutionSubmissionRef
 from aiscc.task_authority.authority import _bind_repository_once
 from aiscc.task_authority.models import TaskConstraintScopeKind, TaskConstraintScopeV1
 from aiscc.task_authority.repository import PostgresExternalTaskAuthorityRepository
@@ -156,6 +158,32 @@ class _GuardAuthority:
         return tuple(self._future.values())
 
     def issue(self, guard_id: GuardId, request_value: TransitionRequest) -> TrustedGuardFact:
+        if guard_id is GuardId.G_EXECUTOR_SUBMISSION:
+            # Match the workflow fixture's producer-owned ref and real verifier handoff.
+            producer = ExecutionReferenceAuthority()
+            identity = hashlib.sha256(
+                request_value.transition_request_id.encode("utf-8")
+            ).hexdigest()
+            submission = producer.register_submission(
+                ExecutionSubmissionRef(
+                    submission_id="fixture-submission-" + identity,
+                    execution_attempt_id="fixture-attempt-" + identity,
+                    work_run_id=request_value.work_run_id,
+                    task_contract_id=request_value.task_contract_id,
+                    task_contract_version=request_value.task_contract_version,
+                    state=request_value.observed_state,
+                    state_version=request_value.observed_state_version,
+                    status=ExecutionStatus.EXECUTOR_COMPLETED,
+                    event_range_hash=identity,
+                    issuer_ref=producer.issuer_ref,
+                )
+            )
+            return self.system.issue_from_execution_ref(
+                guard_id=guard_id,
+                execution_ref=submission,
+                verifier=producer,
+                request=request_value,
+            )
         owner = GUARD_OWNER_POLICY[guard_id]
         if owner is GuardSemanticOwner.P1_4_SYSTEM:
             return self.system.issue(
