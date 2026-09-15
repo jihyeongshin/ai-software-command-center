@@ -1,9 +1,9 @@
 {
   "schema": "AISCC-P3-3-PUBLIC-RELEASE-MANIFEST-CANDIDATE-V1",
-  "status": "IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING",
+  "status": "READY_FOR_HUMAN_DISCLOSURE_CONFIRMATION / NOT_SUBMITTED",
   "freeze_complete": false,
-  "human_review": "HUMAN_QA_PENDING",
-  "source_commit": "17fcd337a8bc1410e230a7c18195ac3d3006b417",
+  "human_review": "HUMAN_PROVIDED / ACCEPTED",
+  "source_commit": "d13d261eb976fc839e78ba0878080bea93ad5201",
   "branch": "main",
   "release_mode": "RECORDED_RUN_REPLAY",
   "public_surfaces": [
@@ -13,13 +13,13 @@
     "public/replay/assets/styles.css",
     "public/replay/data/REPLAY_CORPUS_INDEX.json"
   ],
-  "public_surfaces_status": "LOCAL_IMPLEMENTATION_VERIFIED / NOT_DEPLOYED",
+  "public_surfaces_status": "DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED",
   "required_build_commands": [
     "python scripts/build_public_replay.py",
     "python scripts/build_public_replay.py --check"
   ],
   "required_start_commands": [],
-  "command_status": "Static hosting needs no backend start command. Build/check locally verified. Cloudflare environment/settings require later verification.",
+  "command_status": "Persisted static build/check verified; deployed public bytes, health, application headers and 404 accepted. No backend start command.",
   "verified_local_command": {
     "command": "python -m http.server 8765 --bind 127.0.0.1 --directory public/replay",
     "scope": "Human local static review only; no public deployment"
@@ -27,7 +27,7 @@
   "deployment_targets": [
     "Cloudflare Pages"
   ],
-  "deployment_target_status": "ACCEPTED_DIRECTION / NOT_DEPLOYED",
+  "deployment_target_status": "READY_VERIFIED / DEPLOYED",
   "environment_variable_names": [],
   "environment_variable_scope": "None required by static Replay",
   "secret_names": [],
@@ -55,32 +55,43 @@
   ],
   "rollback_fallback_mode": "Future verified immutable Replay artifact; no hidden Live or owner DB fallback",
   "required_human_credentials_actions": [
-    "Visual/readability QA",
-    "Project ownership/rights/tool roster confirmation",
-    "Authorize exact persistence",
-    "Supply Cloudflare Pages account/project authorization at later deployment",
-    "Verify deployment settings/current provider workflow",
-    "Verify public availability and effective headers",
-    "Reverify official facts and perform final submission"
+    "Project/source rights and release license confirmation",
+    "Final shipped scope and required third-party notices confirmation",
+    "Exact development AI tool/model/use roster confirmation",
+    "Applicable Cloudflare hosting terms confirmation",
+    "Final official schedule/form and public repository URL confirmation",
+    "Human final submission and confirmation persistence",
+    "Judging-window availability monitoring"
   ],
   "blocked_items": [
-    "R03 Human rights/tool roster confirmation",
-    "Human visual QA",
-    "Authorized persistence/deployment/public verification pending"
+    "Human rights/IP/license/notices and AI tool/model disclosure confirmation",
+    "Applicable hosting terms confirmation",
+    "Final official schedule/form re-verification",
+    "Human final competition submission"
   ],
-  "public_replay_deployment": "NOT_COMPLETED",
-  "public_bounded_live": "NOT_RELEASED",
+  "public_replay_deployment": "DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED",
+  "public_bounded_live": "DISABLED_FOR_INITIAL_RELEASE",
   "competition_final_submission": "NOT_COMPLETED",
   "mandatory_stop": null,
   "deployment_decision_id": "AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1",
   "technical_prerequisites": {
-    "R01": "LOCAL_IMPLEMENTATION_VERIFIED",
-    "R02": "LOCAL_STATIC_ARTIFACT_VERIFIED; provider configuration and deployment pending"
+    "R01": "READY_VERIFIED / PUBLIC_REPLAY_SERVING",
+    "R02": "READY_VERIFIED / DEPLOYED / PUBLIC_VERIFICATION_PASSED"
   },
   "public_build_manifest": "public/replay/PUBLIC_REPLAY_BUILD_MANIFEST.json",
   "optional_live_direction": {
     "api_database": "Railway Hobby / Singapore",
     "llm": "separate OpenAI API Project",
     "status": "NOT_EXECUTED / OUT_OF_SCOPE"
-  }
+  },
+  "release_status": "DEPLOYED_PUBLIC_VERIFIED_HUMAN_ACCEPTED",
+  "platform": "Cloudflare Pages",
+  "project_name": "aiscc-replay",
+  "deployment_method": "Dashboard Direct Upload",
+  "production_url": "https://aiscc-replay.pages.dev",
+  "canonical_corpus_root_sha256": "a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e",
+  "public_verification": "PASSED",
+  "human_public_qa": "ACCEPTED",
+  "live": false,
+  "competition_submission": "NOT_COMPLETED"
 }

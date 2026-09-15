@@ -1,5 +1,18 @@
 # AISCC Next Actions
 
+## Current sequence (20260915_1424)
+
+P3-3: ACTIVE / FINAL_SUBMISSION_PREP. Public Replay at https://aiscc-replay.pages.dev is DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED. Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+
+1. This state reconciliation + Git persistence under the 1424 Task.
+2. Human final rights/IP/tool/model disclosure confirmation.
+3. Final competition schedule/form re-verification.
+4. Human final competition submission.
+5. Final submission confirmation persistence.
+6. Judging-window public Replay availability monitoring.
+
+After this Task's verified commit, step 1 is complete and step 2 is the next Human gate. No repeat Replay visual QA is required unless deployed/source bytes change. Competition submission is NOT_COMPLETED. The [1424 acceptance Cycle](cycles/20260915_1424_aiscc-p3-3-public-replay-production-human-acceptance-final-submission-entry-1.cycle.md) supersedes the following historical sequences.
+
 ## Current sequence (20260915_1225)
 
 P3-3 is ACTIVE. Local Recorded Replay implementation is HUMAN_PROVIDED / ACCEPTED / PERSISTENCE_PENDING under the [1225 Human QA Cycle](cycles/20260915_1225_aiscc-p3-3-public-replay-human-qa-accepted-persistence-entry-1.cycle.md).

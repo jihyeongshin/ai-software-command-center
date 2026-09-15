@@ -1,5 +1,23 @@
 # P3-3 public release readiness
 
+## Current accepted public release (20260915_1424)
+
+Public Replay: DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED at https://aiscc-replay.pages.dev. Cloudflare Pages project aiscc-replay, Dashboard Direct Upload, source commit `d13d261eb976fc839e78ba0878080bea93ad5201`. P3-3 remains ACTIVE / FINAL_SUBMISSION_PREP.
+
+| Boundary | Accepted readiness |
+| --- | --- |
+| R01 Recorded Replay serving | READY_VERIFIED |
+| R02 Cloudflare Pages deployment | READY_VERIFIED / DEPLOYED |
+| Public byte identity | READY_VERIFIED; ten exact comparisons |
+| Effective application headers | READY_VERIFIED |
+| Public 404 | READY_VERIFIED |
+| Human production QA | HUMAN_PROVIDED / ACCEPTED |
+| Public Bounded Live | OPTIONAL_DEFERRED / DISABLED_FOR_INITIAL_RELEASE / NOT_RELEASED |
+
+The 1424 Human acceptance lineage admits the 1358 Chromium-compatible verification and production QA. Earlier default-UA 1010 is diagnostic, not an application defect. R01/R02 are resolved; no code, redeployment or repeat visual QA is needed for unchanged bytes. All earlier technical blocker statements below retain historical meaning and are superseded by this section.
+
+Remaining gates are Human project/source rights and release license, final notices/shipped dependency scope, exact development AI tool/model/use roster, applicable Cloudflare terms and other unresolved disclosure-register confirmations, final official schedule/form re-verification, and Human final submit. Existing synthetic-corpus provenance and private-material exclusion policy are reused evidence, not a project-wide Human legal attestation. Optional Live terms remain deferred. No rights answer is inferred. Competition final submission is NOT_COMPLETED; availability monitoring remains a future obligation.
+
 ## Current 1047 implementation candidate
 
 Status: `IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING`. Source baseline `17fcd337a8bc1410e230a7c18195ac3d3006b417`; no new commit or public deployment.

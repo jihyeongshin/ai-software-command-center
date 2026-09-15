@@ -1,5 +1,21 @@
 # AISCC Current State Summary
 
+## Current authority (20260915_1424)
+
+- P3-2: ACCEPTED / PERSISTED / CLOSED.
+- P3-3: ACTIVE / FINAL_SUBMISSION_PREP.
+- Recorded Replay local implementation: HUMAN_PROVIDED / ACCEPTED / PERSISTED.
+- Public Replay deployment: DEPLOYED / PUBLIC_VERIFICATION_PASSED / HUMAN_ACCEPTED.
+- Production URL: https://aiscc-replay.pages.dev
+- Cloudflare project: aiscc-replay; deployment method: Dashboard Direct Upload.
+- Deployed source commit: `d13d261eb976fc839e78ba0878080bea93ad5201`.
+- Canonical corpus root: `a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e`.
+- Public Bounded Live: NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+- Competition final submission: NOT_COMPLETED.
+- Current next gate: Human rights/IP/tool/model disclosure confirmation.
+
+Authority: [1424 Human acceptance Cycle](cycles/20260915_1424_aiscc-p3-3-public-replay-production-human-acceptance-final-submission-entry-1.cycle.md). The default-UA Cloudflare 1010 was a verifier-client diagnostic; Chromium-compatible public verification and Human production QA passed. The non-clickable Recorded Run Replay badge is NON_DEFECT. No UI/code or redeployment rework is required. This section supersedes all following historical current-state projections; historical evidence remains preserved.
+
 ## Current authority (20260915_1225)
 
 - P3-3: ACTIVE.
