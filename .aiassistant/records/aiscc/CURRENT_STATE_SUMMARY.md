@@ -1,5 +1,44 @@
 # AISCC Current State Summary
 
+## Current authority (20260915_1225)
+
+- P3-3: ACTIVE.
+- Recorded Replay local implementation: HUMAN_PROVIDED / ACCEPTED / PERSISTENCE_PENDING.
+- Current action: Git persistence of accepted local Replay implementation under the 1225 Task.
+- Entering HEAD: `17fcd337a8bc1410e230a7c18195ac3d3006b417`.
+- Public Replay deployment: NOT_COMPLETED.
+- Public Bounded Live: NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.
+- P3-2: ACCEPTED / PERSISTED / CLOSED; competition submission: NOT_COMPLETED.
+
+Authority: [1225 Human QA acceptance Cycle](cycles/20260915_1225_aiscc-p3-3-public-replay-human-qa-accepted-persistence-entry-1.cycle.md). Human accepted the local implementation; no QA rerun or public-surface re-authoring is required. Browser must review persistence before a separately authorized Cloudflare Pages deployment. Public availability, effective headers and final submission are not proven by local QA or a local commit.
+
+All following phase/current-action snapshots retain their historical meaning. This 1225 section supersedes their current projection only; prior Cycle truth and accepted implementation bytes are preserved.
+
+## Current authority (20260915_1047)
+
+| Phase / boundary | Current status |
+| --- | --- |
+| P2 and P3-1 | ACCEPTED / CLOSED |
+| P3-2 | ACCEPTED / PERSISTED / CLOSED |
+| P3-3 | ACTIVE / PUBLIC_REPLAY_IMPLEMENTATION |
+| Current technical prerequisite | Public Replay serving/deployment prerequisite implementation; local implementation candidate passes, Human QA/persistence/deployment pending |
+| Baseline HEAD entering implementation | `17fcd337a8bc1410e230a7c18195ac3d3006b417` |
+| Static Replay surface | IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING |
+| Live initial release | DISABLED_FOR_INITIAL_RELEASE |
+| Replay deployment direction | Cloudflare Pages / NOT_DEPLOYED |
+| Recorded corpus | CANONICAL / PERSISTED; unchanged |
+| Public Replay deployment | NOT_COMPLETED |
+| Public Bounded Live | NOT_RELEASED |
+| Competition final submission | NOT_COMPLETED |
+
+Authority: [1009 P3-2 closure](cycles/20260915_1009_aiscc-p3-2-final-persistence-acceptance-p3-3-entry-authorization-1.cycle.md) and [1047 implementation entry](cycles/20260915_1047_aiscc-p3-3-readiness-blocked-public-replay-implementation-entry-1.cycle.md). Local build/HTTP evidence is an Executor candidate, not Human visual acceptance or deployed service evidence. The accepted deployment direction remains Cloudflare Pages; optional Railway Hobby / Singapore and separate OpenAI API Project are not executed.
+
+Next sequence: implementation → local/Human QA → persistence → Cloudflare Pages deployment → public availability verification → final competition submission. Rights/tool roster confirmation remains Human-owned. No commit or deployment occurred in 1047.
+
+## Historical projections before 1047
+
+All following earlier snapshots, including their former current/next-action headings, describe their issuance time. The 1047 section above exclusively owns the current phase projection.
+
 ## Current terminal authority (20260914_2338)
 
 | Phase / boundary | Current status |

@@ -1,0 +1,356 @@
+{
+  "agent_claim_vs_system_admission": {
+    "HumanResult_created": false,
+    "evidence_admission_outcomes": [],
+    "executor_claim_is_authority": false,
+    "summary": "Execution completion did not supply required admitted evidence; system returned HOLD_REWORK_REQUIRED.",
+    "system_admission_is_required": true
+  },
+  "blocker": {
+    "authority_revision": null,
+    "blocked_epoch": null,
+    "blocker_kind": null,
+    "presence": "NONE",
+    "reason_code": null,
+    "resumability": null,
+    "updated_at": null
+  },
+  "display_label": "Recorded Run Replay",
+  "evidence_summary": {
+    "admission_decisions": [],
+    "admitted": [],
+    "admitted_count": 0,
+    "checkpoints": [
+      {
+        "checkpoint_ref": "stockroom-s2-missing-evidence:PRE_HUMAN_EVIDENCE@v2",
+        "fingerprint": "9db4a8fb314097df771ff797e6d97a13d929b221bd3b3e1d74f03aab3a2b1d41",
+        "requirement_set_ref": "stockroom-s2-missing-evidence:evidence-set@v2",
+        "source_state": "ADMISSION_PENDING",
+        "target_state": "REWORK_REQUIRED",
+        "transition_purpose_id": null,
+        "transition_purpose_version": null
+      }
+    ],
+    "raw_bodies_exported": false,
+    "rejected_count": 0,
+    "requirement_sets": [
+      {
+        "fingerprint": "4b90553efd289df21a227a37de5092d9d632c50c188a72739a9d1a27fa43b277",
+        "ordered_checkpoint_refs": [
+          "stockroom-s2-missing-evidence:PRE_HUMAN_EVIDENCE@v2"
+        ],
+        "ordered_requirement_refs": [
+          "stockroom-s2-missing-evidence:summary-runtime@v2"
+        ],
+        "requirement_root_hash": "e076cbfb39006e16ecf4c6dd972299374795339cbc47923456413b0e16445396",
+        "requirement_set_ref": "stockroom-s2-missing-evidence:evidence-set@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "requirements": [
+      {
+        "applicable_checkpoint_refs": [
+          "stockroom-s2-missing-evidence:PRE_HUMAN_EVIDENCE@v2"
+        ],
+        "evidence_type_id": "STOCKROOM_RUNTIME_SUMMARY",
+        "evidence_type_version": "v1",
+        "fingerprint": "585601ff83a8e6beaa39083f495fa4a7c64728c96a08dcd5df8a19c732ff799f",
+        "freshness_kind": "WORKRUN_STATE_VERSION_SCOPED",
+        "obligation": "REQUIRED",
+        "profile": "EXECUTOR_REQUIRED",
+        "requirement_ref": "stockroom-s2-missing-evidence:summary-runtime@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "set_evaluations": [
+      {
+        "checkpoint_ref": "stockroom-s2-missing-evidence:PRE_HUMAN_EVIDENCE@v2",
+        "evaluated_at": "2026-09-13T15:22:20.481566Z",
+        "outcome": "UNSATISFIED",
+        "requirement_set_ref": "stockroom-s2-missing-evidence:evidence-set@v2"
+      }
+    ]
+  },
+  "executed_at_end_or_terminal_observation": "2026-09-13T15:22:20.668050Z",
+  "executed_at_start": "2026-09-13T15:22:15.957929Z",
+  "execution_summary": {
+    "attempt_created_at": "2026-09-13T15:22:16.035178Z",
+    "attempt_status": "EXECUTOR_COMPLETED",
+    "attempt_updated_at": "2026-09-13T15:22:20.439564Z",
+    "attempt_version": 8,
+    "events": [
+      {
+        "kind": "EXECUTION_ATTEMPT_CREATED",
+        "recorded_at": "2026-09-13T15:22:16.035178+00:00",
+        "version_after": 1
+      },
+      {
+        "kind": "EXECUTION_STARTED",
+        "recorded_at": "2026-09-13T15:22:16.172418+00:00",
+        "version_after": 2
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T15:22:17.967619+00:00",
+        "version_after": 3
+      },
+      {
+        "kind": "EXECUTION_OUTPUT_SETTLED",
+        "recorded_at": "2026-09-13T15:22:18.062293+00:00",
+        "version_after": 4
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T15:22:18.183008+00:00",
+        "version_after": 5
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T15:22:20.214814+00:00",
+        "version_after": 6
+      },
+      {
+        "kind": "EXECUTION_OUTPUT_SETTLED",
+        "recorded_at": "2026-09-13T15:22:20.312171+00:00",
+        "version_after": 7
+      },
+      {
+        "kind": "EXECUTION_COMPLETED",
+        "recorded_at": "2026-09-13T15:22:20.439564+00:00",
+        "version_after": 8
+      }
+    ],
+    "external_inference_calls": 0,
+    "external_inference_evidence_class": "BROWSER_ACCEPTED_EXECUTION_EVIDENCE; LOCAL_DETERMINISTIC_PROVIDER",
+    "operation_phases": [
+      {
+        "created_at": "2026-09-13T15:22:17.889219Z",
+        "kind": "PROVIDER",
+        "ordinal": 1,
+        "outcome": "PROVIDER_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T15:22:18.041956Z"
+      },
+      {
+        "created_at": "2026-09-13T15:22:18.151662Z",
+        "kind": "TOOL",
+        "ordinal": 2,
+        "outcome": "TOOL_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T15:22:20.030976Z"
+      },
+      {
+        "created_at": "2026-09-13T15:22:20.176428Z",
+        "kind": "PROVIDER",
+        "ordinal": 3,
+        "outcome": "PROVIDER_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T15:22:20.290619Z"
+      }
+    ],
+    "provider_operation_count": 2,
+    "tool_operation_count": 1
+  },
+  "final_workflow_state": "REWORK_REQUIRED",
+  "human": {
+    "authority_revision": null,
+    "bound_state": null,
+    "bound_state_version": null,
+    "opened_at": null,
+    "presence": "NONE",
+    "purpose_id": null,
+    "purpose_version": null,
+    "required": false,
+    "result_count": 0,
+    "result_status": "NONE",
+    "state": "NOT_REQUIRED",
+    "status": null,
+    "suspension_status": null,
+    "updated_at": null
+  },
+  "judgment": {
+    "authority_revision": 1,
+    "issued_at": "2026-09-13T15:22:20.556832Z",
+    "kind": "HOLD_REWORK_REQUIRED",
+    "owner_policy": "SYSTEM_DETERMINISTIC",
+    "presence": "PRESENT",
+    "reason_code": "STOCKROOM_REQUIRED_EVIDENCE_UNSATISFIED",
+    "state_version": 3,
+    "status": "PRESENT"
+  },
+  "live": false,
+  "no_inference_notice": "No LLM inference is performed while viewing this replay.",
+  "orchestrator": {
+    "commit_evidence_class": "ACCEPTED_GOVERNANCE_PLUS_EXACT_GIT_SOURCE_PROVENANCE",
+    "commit_not_read_from_durable_execution_column": true,
+    "execution_commit": "33a216f29062176ad196a567a299ba30291c3f72"
+  },
+  "public_admission": "CANONICAL_CORPUS_ACCEPTED_PUBLIC_RELEASE_PENDING",
+  "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+  "replay_id": "stockroom-recorded-9338b5a87d0d1d7bf7f8b624",
+  "replay_kind": "RECORDED_RUN_REPLAY",
+  "scenario": {
+    "id": "stockroom-s2-missing-evidence",
+    "version": "1.0.0"
+  },
+  "schema_id": "AISCC-RECORDED-RUN-REPLAY-V1",
+  "source_run_fingerprint_sha256": "9338b5a87d0d1d7bf7f8b624b055271de152fc94b048fbabac15c1bbb9c75e5b",
+  "state_version": 4,
+  "synthetic_repository": {
+    "commit": "05185c57a6265a4002050ce25cdfde3dc87e9779",
+    "name": "synthetic-stockroom",
+    "source_aggregate_sha256": "be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d"
+  },
+  "timestamp_basis": {
+    "end_or_terminal_observation": "Last admitted durable transition decision.decided_at; S4 denotes entry into pending Human state, not a Human decision",
+    "start": "First durable workflow transition request.created_at"
+  },
+  "transition_trace": [
+    {
+      "decided_at": "2026-09-13T15:22:15.979372Z",
+      "evaluated_at": "2026-09-13T15:22:15.979372Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T15:22:15.957929Z",
+      "resulting_state": "READY",
+      "resulting_state_version": 1,
+      "sequence": 1,
+      "source_state": null,
+      "source_state_version": 0,
+      "target_state": "READY"
+    },
+    {
+      "decided_at": "2026-09-13T15:22:16.128500Z",
+      "evaluated_at": "2026-09-13T15:22:16.128500Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_EXECUTION_STARTED",
+          "outcome": "PASS",
+          "reason": "P1_5_EXECUTION_REF_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T15:22:16.114443Z",
+      "resulting_state": "RUNNING",
+      "resulting_state_version": 2,
+      "sequence": 2,
+      "source_state": "READY",
+      "source_state_version": 1,
+      "target_state": "RUNNING"
+    },
+    {
+      "decided_at": "2026-09-13T15:22:20.460634Z",
+      "evaluated_at": "2026-09-13T15:22:20.460634Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_EXECUTOR_SUBMISSION",
+          "outcome": "PASS",
+          "reason": "P1_5_EXECUTION_REF_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T15:22:20.451728Z",
+      "resulting_state": "ADMISSION_PENDING",
+      "resulting_state_version": 3,
+      "sequence": 3,
+      "source_state": "RUNNING",
+      "source_state_version": 2,
+      "target_state": "ADMISSION_PENDING"
+    },
+    {
+      "decided_at": "2026-09-13T15:22:20.668050Z",
+      "evaluated_at": "2026-09-13T15:22:20.668050Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_HUMAN_NOT_REQUIRED",
+          "outcome": "PASS",
+          "reason": "P1_7_HUMAN_AUTHORITY_CURRENT"
+        },
+        {
+          "guard_id": "G_JUDGMENT_REWORK",
+          "outcome": "PASS",
+          "reason": "P1_7_JUDGMENT_AUTHORITY_CURRENT"
+        },
+        {
+          "guard_id": "G_REWORK_SPEC",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_REWORK_SPEC_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T15:22:20.539238Z",
+      "resulting_state": "REWORK_REQUIRED",
+      "resulting_state_version": 4,
+      "sequence": 4,
+      "source_state": "ADMISSION_PENDING",
+      "source_state_version": 3,
+      "target_state": "REWORK_REQUIRED"
+    }
+  ],
+  "truthful_notice": "This is a replay of a previously executed AISCC workflow.",
+  "viewing_llm_inference_calls": 0
+}

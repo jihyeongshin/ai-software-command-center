@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Recorded Run Replay · AI Software Command Center</title>
+  <link rel="stylesheet" href="assets/styles.css">
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to recordings</a>
+  <header class="masthead"><span class="brand">AISCC</span><span>AI Software Command Center</span><span class="tag">Recorded Run Replay</span></header>
+  <main id="main">
+    <section class="intro">
+      <p class="eyebrow">A record of the work. A view of the decisions.</p>
+      <h1>From an AI claim<br>to inspectable evidence.</h1>
+      <p class="lede">Explore four previously executed software workflows. Follow what the Agent proposed, what the System admitted, and where a Human decision was still required.</p>
+      <p class="notice">This is a recorded historical run. Viewing it does not execute AI.</p>
+      <p class="live-note">Live Demo is not enabled. Recorded Run Replay remains available.</p>
+    </section>
+    <section aria-labelledby="catalog-heading">
+      <div class="section-heading"><h2 id="catalog-heading">The recorded scenarios</h2><span>Read-only · No current execution</span></div>
+      <p id="catalog-status" role="status">Loading recorded catalog…</p>
+      <nav id="catalog" class="catalog" aria-label="Recorded scenarios"></nav>
+    </section>
+    <section id="detail" aria-labelledby="detail-heading" aria-busy="false">
+      <div class="section-heading"><h2 id="detail-heading">Inspect a recording</h2><a href="#catalog-heading">Back to catalog ↑</a></div>
+      <p id="detail-status" role="status">Choose a scenario above.</p>
+      <div id="record"></div>
+    </section>
+    <noscript><p class="notice">Enable JavaScript to inspect recordings. The stored corpus is also available as <a href="data/REPLAY_CORPUS_INDEX.json">JSON</a>. No AI runs while viewing it.</p></noscript>
+  </main>
+  <footer><p>Historical records preserve their original outcomes. An Agent claim is not admitted evidence, and a recorded outcome is not a new Human decision.</p><a href="health.json">Static release identity</a><a href="PUBLIC_REPLAY_BUILD_MANIFEST.json">Build provenance</a></footer>
+</body>
+</html>

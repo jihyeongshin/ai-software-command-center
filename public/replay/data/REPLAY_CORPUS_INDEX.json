@@ -1,0 +1,94 @@
+{
+  "corpus_integrity_root_sha256": "a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e",
+  "display_label": "Recorded Run Replay",
+  "integrity_algorithm": {
+    "canonical_tuples": [
+      [
+        "stockroom-s1-normal",
+        "6fb493838b0158fc9a8416146e980e027fc1091ec77e0e3504f07b4b71ed26cc",
+        12591
+      ],
+      [
+        "stockroom-s2-missing-evidence",
+        "103b98776d6e79867ea1e8ecac72a619c01a9223049434239e287381e2824201",
+        11755
+      ],
+      [
+        "stockroom-s3-policy-conflict",
+        "4ad9d71814ce5301fd48b6e40547229f6b76b16c36e69d722130eb82f03b1137",
+        9771
+      ],
+      [
+        "stockroom-s4-human-owned-claim",
+        "c6197411795760844bf74b8805476c35377117fb364423ec0a4cbf62734e3034",
+        13042
+      ]
+    ],
+    "input": "UTF-8 encoding of JSON array of arrays, ensure_ascii=false, separators=(comma,colon), no whitespace or trailing newline; integer byte sizes; index itself excluded",
+    "name": "SHA-256",
+    "ordered_by": "scenario_id ascending Unicode code-point order (all IDs are ASCII)",
+    "tuple_fields": [
+      "scenario_id",
+      "member_sha256",
+      "member_bytes"
+    ]
+  },
+  "live": false,
+  "member_count": 4,
+  "members": [
+    {
+      "execution_commit": "e7d7a44379eb0dc71f7b8d2207c6ca3719a0a211",
+      "final_state": "ACCEPTED",
+      "member_bytes": 12591,
+      "member_relative_path": "stockroom-s1-normal.json",
+      "member_sha256": "6fb493838b0158fc9a8416146e980e027fc1091ec77e0e3504f07b4b71ed26cc",
+      "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+      "replay_id": "stockroom-recorded-a58d3a54a1c58a32d4fbca51",
+      "scenario_id": "stockroom-s1-normal",
+      "scenario_version": "1.0.0",
+      "source_run_fingerprint_sha256": "a58d3a54a1c58a32d4fbca51d32e8e0a7536e52f6bd197a54f87741ab8478e34"
+    },
+    {
+      "execution_commit": "33a216f29062176ad196a567a299ba30291c3f72",
+      "final_state": "REWORK_REQUIRED",
+      "member_bytes": 11755,
+      "member_relative_path": "stockroom-s2-missing-evidence.json",
+      "member_sha256": "103b98776d6e79867ea1e8ecac72a619c01a9223049434239e287381e2824201",
+      "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+      "replay_id": "stockroom-recorded-9338b5a87d0d1d7bf7f8b624",
+      "scenario_id": "stockroom-s2-missing-evidence",
+      "scenario_version": "1.0.0",
+      "source_run_fingerprint_sha256": "9338b5a87d0d1d7bf7f8b624b055271de152fc94b048fbabac15c1bbb9c75e5b"
+    },
+    {
+      "execution_commit": "a1c934ea75906a548f2bc4adc777c2a0ecc99be5",
+      "final_state": "BLOCKED",
+      "member_bytes": 9771,
+      "member_relative_path": "stockroom-s3-policy-conflict.json",
+      "member_sha256": "4ad9d71814ce5301fd48b6e40547229f6b76b16c36e69d722130eb82f03b1137",
+      "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+      "replay_id": "stockroom-recorded-1cbcf87ed3a94f32e1988883",
+      "scenario_id": "stockroom-s3-policy-conflict",
+      "scenario_version": "1.0.0",
+      "source_run_fingerprint_sha256": "1cbcf87ed3a94f32e1988883002805d315937a8f050538a5c1c286feddd8e9fa"
+    },
+    {
+      "execution_commit": "a1c934ea75906a548f2bc4adc777c2a0ecc99be5",
+      "final_state": "HUMAN_REQUIRED",
+      "member_bytes": 13042,
+      "member_relative_path": "stockroom-s4-human-owned-claim.json",
+      "member_sha256": "c6197411795760844bf74b8805476c35377117fb364423ec0a4cbf62734e3034",
+      "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+      "replay_id": "stockroom-recorded-96d4c2601306e2fdb9f51195",
+      "scenario_id": "stockroom-s4-human-owned-claim",
+      "scenario_version": "1.0.0",
+      "source_run_fingerprint_sha256": "96d4c2601306e2fdb9f5119538f198d77e0a0e3765f46a4aa2c39419bd3de422"
+    }
+  ],
+  "no_inference_notice": "No LLM inference is performed while viewing this replay.",
+  "public_admission": "CANONICAL_CORPUS_ACCEPTED_PUBLIC_RELEASE_PENDING",
+  "replay_kind": "RECORDED_RUN_REPLAY",
+  "schema_id": "AISCC-RECORDED-REPLAY-CORPUS-INDEX-V1",
+  "truthful_notice": "This is a replay of a previously executed AISCC workflow.",
+  "viewing_llm_inference_calls": 0
+}

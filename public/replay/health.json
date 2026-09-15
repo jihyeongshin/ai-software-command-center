@@ -1,0 +1,9 @@
+{
+  "corpus_root_sha256": "a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e",
+  "live": false,
+  "mode": "RECORDED_RUN_REPLAY",
+  "owner_database": false,
+  "provider_inference": false,
+  "scenario_count": 4,
+  "status": "ok"
+}

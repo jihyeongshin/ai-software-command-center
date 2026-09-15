@@ -1,0 +1,86 @@
+{
+  "schema": "AISCC-P3-3-PUBLIC-RELEASE-MANIFEST-CANDIDATE-V1",
+  "status": "IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING",
+  "freeze_complete": false,
+  "human_review": "HUMAN_QA_PENDING",
+  "source_commit": "17fcd337a8bc1410e230a7c18195ac3d3006b417",
+  "branch": "main",
+  "release_mode": "RECORDED_RUN_REPLAY",
+  "public_surfaces": [
+    "public/replay/index.html",
+    "public/replay/404.html",
+    "public/replay/assets/app.js",
+    "public/replay/assets/styles.css",
+    "public/replay/data/REPLAY_CORPUS_INDEX.json"
+  ],
+  "public_surfaces_status": "LOCAL_IMPLEMENTATION_VERIFIED / NOT_DEPLOYED",
+  "required_build_commands": [
+    "python scripts/build_public_replay.py",
+    "python scripts/build_public_replay.py --check"
+  ],
+  "required_start_commands": [],
+  "command_status": "Static hosting needs no backend start command. Build/check locally verified. Cloudflare environment/settings require later verification.",
+  "verified_local_command": {
+    "command": "python -m http.server 8765 --bind 127.0.0.1 --directory public/replay",
+    "scope": "Human local static review only; no public deployment"
+  },
+  "deployment_targets": [
+    "Cloudflare Pages"
+  ],
+  "deployment_target_status": "ACCEPTED_DIRECTION / NOT_DEPLOYED",
+  "environment_variable_names": [],
+  "environment_variable_scope": "None required by static Replay",
+  "secret_names": [],
+  "secret_names_status": "None required by static Replay",
+  "database_storage_dependencies": {
+    "database": "none",
+    "storage": "static byte-identical corpus files"
+  },
+  "replay_data_dependencies": {
+    "index": ".aiassistant/reports/aiscc/replay/stockroom/v1/REPLAY_CORPUS_INDEX.json",
+    "member_count": 4,
+    "corpus_integrity_root_sha256": "a870da635941d7149edbbef911e8b2d75ff6fe12e8ade80c09dddc9086df795e",
+    "member_hash_size_matches": 4
+  },
+  "live_classification": "DISABLED_FOR_INITIAL_RELEASE",
+  "live_is_release_blocker": false,
+  "budget_guard_config_names": [],
+  "budget_guard_status": "Not used by Replay; optional Live disabled",
+  "health_readiness_paths": [
+    {
+      "path": "/health.json",
+      "scope": "static release identity, not dynamic probe",
+      "source": "public/replay/health.json"
+    }
+  ],
+  "rollback_fallback_mode": "Future verified immutable Replay artifact; no hidden Live or owner DB fallback",
+  "required_human_credentials_actions": [
+    "Visual/readability QA",
+    "Project ownership/rights/tool roster confirmation",
+    "Authorize exact persistence",
+    "Supply Cloudflare Pages account/project authorization at later deployment",
+    "Verify deployment settings/current provider workflow",
+    "Verify public availability and effective headers",
+    "Reverify official facts and perform final submission"
+  ],
+  "blocked_items": [
+    "R03 Human rights/tool roster confirmation",
+    "Human visual QA",
+    "Authorized persistence/deployment/public verification pending"
+  ],
+  "public_replay_deployment": "NOT_COMPLETED",
+  "public_bounded_live": "NOT_RELEASED",
+  "competition_final_submission": "NOT_COMPLETED",
+  "mandatory_stop": null,
+  "deployment_decision_id": "AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1",
+  "technical_prerequisites": {
+    "R01": "LOCAL_IMPLEMENTATION_VERIFIED",
+    "R02": "LOCAL_STATIC_ARTIFACT_VERIFIED; provider configuration and deployment pending"
+  },
+  "public_build_manifest": "public/replay/PUBLIC_REPLAY_BUILD_MANIFEST.json",
+  "optional_live_direction": {
+    "api_database": "Railway Hobby / Singapore",
+    "llm": "separate OpenAI API Project",
+    "status": "NOT_EXECUTED / OUT_OF_SCOPE"
+  }
+}

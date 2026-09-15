@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## Current release projection (20260915_1047)
+
+P3-2 is ACCEPTED / PERSISTED / CLOSED under the 1009 Cycle. P3-3 is ACTIVE. The historical phase projections below are superseded by the 1047 current records; their accepted decisions remain preserved.
+
+### AISCC-P3-3-REPLAY-FIRST-LIVE-DISABLED-V1
+
+- decision: Initial competition release uses Recorded Run Replay on Cloudflare Pages and keeps PUBLIC_BOUNDED_LIVE DISABLED_FOR_INITIAL_RELEASE.
+- decision_status: BROWSER_ADMITTED_RELEASE_DECISION; 1047 Cycle/Judgment.
+- implementation_status: IMPLEMENTATION_CANDIDATE / HUMAN_QA_PENDING; NOT_DEPLOYED.
+- authority: `20260915_1047_aiscc-p3-3-readiness-blocked-public-replay-implementation-entry-1.cycle.md`.
+- preserves: `AISCC-COMPETITION-DEPLOYMENT-DIRECTION-V1` exactly; optional Railway Hobby / Singapore and separate OpenAI API Project remain NOT_EXECUTED.
+- scope: standalone immutable public static artifact; no owner DB/API, provider secret, Live ingress or external assets.
+- public release, persistence, visual QA and final submission remain separate gates; no capability/pricing/account claim is inferred.
+
 ## Current terminal authority (20260914_2338)
 
 The current phase status and next executable are owned by the appended [AISCC-P2-4-SELF-DOGFOOD-CUTOVER-V1](#aiscc-p2-4-self-dogfood-cutover-v1) terminal decision. Earlier entries retain their accepted decisions and evidence; their phase and next-action projections describe their issuance time. The 2338 terminal decision supersedes those projections only.

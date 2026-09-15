@@ -1,0 +1,383 @@
+{
+  "agent_claim_vs_system_admission": {
+    "HumanResult_created": false,
+    "evidence_admission_outcomes": [
+      {
+        "issuer_type": "SYSTEM_RUNTIME_OBSERVATION",
+        "outcome": "ADMITTED",
+        "reason": "ADMITTED"
+      }
+    ],
+    "executor_claim_is_authority": false,
+    "summary": "System-admitted evidence and owner-backed Judgment support ACCEPTED; Agent output alone is not acceptance.",
+    "system_admission_is_required": true
+  },
+  "blocker": {
+    "authority_revision": null,
+    "blocked_epoch": null,
+    "blocker_kind": null,
+    "presence": "NONE",
+    "reason_code": null,
+    "resumability": null,
+    "updated_at": null
+  },
+  "display_label": "Recorded Run Replay",
+  "evidence_summary": {
+    "admission_decisions": [
+      {
+        "checkpoint_ref": "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2",
+        "decided_at": "2026-09-13T14:23:12.741414Z",
+        "issuer_type": "SYSTEM_RUNTIME_OBSERVATION",
+        "outcome": "ADMITTED",
+        "reason": "ADMITTED",
+        "requirement_ref": "stockroom-s1-normal:summary-runtime@v2",
+        "sensitivity": "INTERNAL"
+      }
+    ],
+    "admitted": [
+      {
+        "admitted_at": "2026-09-13T14:23:12.741414Z",
+        "body_exported": false,
+        "checkpoint_ref": "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2",
+        "content_hash": "97038cad34528fff38ac57418b351f1d1ad27b9be8b5d723c600067033b320ee",
+        "coverage_keys_omitted": "NON_PUBLIC_SAFE_METADATA_MINIMIZATION",
+        "issuer_type": "SYSTEM_RUNTIME_OBSERVATION",
+        "requirement_ref": "stockroom-s1-normal:summary-runtime@v2",
+        "sensitivity": "INTERNAL"
+      }
+    ],
+    "admitted_count": 1,
+    "checkpoints": [
+      {
+        "checkpoint_ref": "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2",
+        "fingerprint": "1be8a1811d6197d384e09d06748b633119483365059b769fdf34f301b3a369cc",
+        "requirement_set_ref": "stockroom-s1-normal:evidence-set@v2",
+        "source_state": "ADMISSION_PENDING",
+        "target_state": "ACCEPTED",
+        "transition_purpose_id": null,
+        "transition_purpose_version": null
+      }
+    ],
+    "raw_bodies_exported": false,
+    "rejected_count": 0,
+    "requirement_sets": [
+      {
+        "fingerprint": "27548398ce32f60b56848e66a8aee36e604ca7ed35e560d7dc6ac60044e278bc",
+        "ordered_checkpoint_refs": [
+          "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2"
+        ],
+        "ordered_requirement_refs": [
+          "stockroom-s1-normal:summary-runtime@v2"
+        ],
+        "requirement_root_hash": "d372d5992f5fd1cf9136d3d5b016150c691fb596ff2459d1eea90763e2fecbef",
+        "requirement_set_ref": "stockroom-s1-normal:evidence-set@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "requirements": [
+      {
+        "applicable_checkpoint_refs": [
+          "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2"
+        ],
+        "evidence_type_id": "STOCKROOM_RUNTIME_SUMMARY",
+        "evidence_type_version": "v1",
+        "fingerprint": "c4f3881a806bf946039a874969cf044b2e5942c5f28f9d48cbbb2eeb5d2e329b",
+        "freshness_kind": "WORKRUN_STATE_VERSION_SCOPED",
+        "obligation": "REQUIRED",
+        "profile": "EXECUTOR_REQUIRED",
+        "requirement_ref": "stockroom-s1-normal:summary-runtime@v2",
+        "semantic_owner": "P1_6_EVIDENCE"
+      }
+    ],
+    "set_evaluations": [
+      {
+        "checkpoint_ref": "stockroom-s1-normal:PRE_HUMAN_EVIDENCE@v2",
+        "evaluated_at": "2026-09-13T14:23:12.852704Z",
+        "outcome": "SATISFIED",
+        "requirement_set_ref": "stockroom-s1-normal:evidence-set@v2"
+      }
+    ]
+  },
+  "executed_at_end_or_terminal_observation": "2026-09-13T14:23:13.222730Z",
+  "executed_at_start": "2026-09-13T14:23:07.974256Z",
+  "execution_summary": {
+    "attempt_created_at": "2026-09-13T14:23:08.066646Z",
+    "attempt_status": "EXECUTOR_COMPLETED",
+    "attempt_updated_at": "2026-09-13T14:23:12.638252Z",
+    "attempt_version": 8,
+    "events": [
+      {
+        "kind": "EXECUTION_ATTEMPT_CREATED",
+        "recorded_at": "2026-09-13T14:23:08.066646+00:00",
+        "version_after": 1
+      },
+      {
+        "kind": "EXECUTION_STARTED",
+        "recorded_at": "2026-09-13T14:23:08.147850+00:00",
+        "version_after": 2
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T14:23:09.951416+00:00",
+        "version_after": 3
+      },
+      {
+        "kind": "EXECUTION_OUTPUT_SETTLED",
+        "recorded_at": "2026-09-13T14:23:10.033333+00:00",
+        "version_after": 4
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T14:23:10.161674+00:00",
+        "version_after": 5
+      },
+      {
+        "kind": "EXECUTION_BOUNDS_RESERVED",
+        "recorded_at": "2026-09-13T14:23:12.370410+00:00",
+        "version_after": 6
+      },
+      {
+        "kind": "EXECUTION_OUTPUT_SETTLED",
+        "recorded_at": "2026-09-13T14:23:12.479219+00:00",
+        "version_after": 7
+      },
+      {
+        "kind": "EXECUTION_COMPLETED",
+        "recorded_at": "2026-09-13T14:23:12.638252+00:00",
+        "version_after": 8
+      }
+    ],
+    "external_inference_calls": 0,
+    "external_inference_evidence_class": "BROWSER_ACCEPTED_EXECUTION_EVIDENCE; LOCAL_DETERMINISTIC_PROVIDER",
+    "operation_phases": [
+      {
+        "created_at": "2026-09-13T14:23:09.873577Z",
+        "kind": "PROVIDER",
+        "ordinal": 1,
+        "outcome": "PROVIDER_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T14:23:10.014473Z"
+      },
+      {
+        "created_at": "2026-09-13T14:23:10.121517Z",
+        "kind": "TOOL",
+        "ordinal": 2,
+        "outcome": "TOOL_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T14:23:12.157606Z"
+      },
+      {
+        "created_at": "2026-09-13T14:23:12.323060Z",
+        "kind": "PROVIDER",
+        "ordinal": 3,
+        "outcome": "PROVIDER_COMPLETED",
+        "phase": "OUTCOME_KNOWN",
+        "updated_at": "2026-09-13T14:23:12.453811Z"
+      }
+    ],
+    "provider_operation_count": 2,
+    "tool_operation_count": 1
+  },
+  "final_workflow_state": "ACCEPTED",
+  "human": {
+    "authority_revision": null,
+    "bound_state": null,
+    "bound_state_version": null,
+    "opened_at": null,
+    "presence": "NONE",
+    "purpose_id": null,
+    "purpose_version": null,
+    "required": false,
+    "result_count": 0,
+    "result_status": "NONE",
+    "state": "NOT_REQUIRED",
+    "status": null,
+    "suspension_status": null,
+    "updated_at": null
+  },
+  "judgment": {
+    "authority_revision": 1,
+    "issued_at": "2026-09-13T14:23:13.009097Z",
+    "kind": "ACCEPTED",
+    "owner_policy": "SYSTEM_DETERMINISTIC",
+    "presence": "PRESENT",
+    "reason_code": "STOCKROOM_EVIDENCE_SATISFIED",
+    "state_version": 3,
+    "status": "PRESENT"
+  },
+  "live": false,
+  "no_inference_notice": "No LLM inference is performed while viewing this replay.",
+  "orchestrator": {
+    "commit_evidence_class": "ACCEPTED_GOVERNANCE_PLUS_EXACT_GIT_SOURCE_PROVENANCE",
+    "commit_not_read_from_durable_execution_column": true,
+    "execution_commit": "e7d7a44379eb0dc71f7b8d2207c6ca3719a0a211"
+  },
+  "public_admission": "CANONICAL_CORPUS_ACCEPTED_PUBLIC_RELEASE_PENDING",
+  "recorded_at": "2026-09-13T16:54:25.221269+00:00",
+  "replay_id": "stockroom-recorded-a58d3a54a1c58a32d4fbca51",
+  "replay_kind": "RECORDED_RUN_REPLAY",
+  "scenario": {
+    "id": "stockroom-s1-normal",
+    "version": "1.0.0"
+  },
+  "schema_id": "AISCC-RECORDED-RUN-REPLAY-V1",
+  "source_run_fingerprint_sha256": "a58d3a54a1c58a32d4fbca51d32e8e0a7536e52f6bd197a54f87741ab8478e34",
+  "state_version": 4,
+  "synthetic_repository": {
+    "commit": "05185c57a6265a4002050ce25cdfde3dc87e9779",
+    "name": "synthetic-stockroom",
+    "source_aggregate_sha256": "be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d"
+  },
+  "timestamp_basis": {
+    "end_or_terminal_observation": "Last admitted durable transition decision.decided_at; S4 denotes entry into pending Human state, not a Human decision",
+    "start": "First durable workflow transition request.created_at"
+  },
+  "transition_trace": [
+    {
+      "decided_at": "2026-09-13T14:23:07.989242Z",
+      "evaluated_at": "2026-09-13T14:23:07.989242Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T14:23:07.974256Z",
+      "resulting_state": "READY",
+      "resulting_state_version": 1,
+      "sequence": 1,
+      "source_state": null,
+      "source_state_version": 0,
+      "target_state": "READY"
+    },
+    {
+      "decided_at": "2026-09-13T14:23:08.104347Z",
+      "evaluated_at": "2026-09-13T14:23:08.104347Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_CONTRACT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_CONTRACT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_EXECUTION_STARTED",
+          "outcome": "PASS",
+          "reason": "P1_5_EXECUTION_REF_VERIFIED"
+        },
+        {
+          "guard_id": "G_RUNTIME_CONTEXT",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_RUNTIME_CONTEXT_OWNER_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T14:23:08.091145Z",
+      "resulting_state": "RUNNING",
+      "resulting_state_version": 2,
+      "sequence": 2,
+      "source_state": "READY",
+      "source_state_version": 1,
+      "target_state": "RUNNING"
+    },
+    {
+      "decided_at": "2026-09-13T14:23:12.663473Z",
+      "evaluated_at": "2026-09-13T14:23:12.663473Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_EXECUTOR_SUBMISSION",
+          "outcome": "PASS",
+          "reason": "P1_5_EXECUTION_REF_VERIFIED"
+        },
+        {
+          "guard_id": "G_SCOPE",
+          "outcome": "PASS",
+          "reason": "STOCKROOM_G_SCOPE_OWNER_VERIFIED"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T14:23:12.650621Z",
+      "resulting_state": "ADMISSION_PENDING",
+      "resulting_state_version": 3,
+      "sequence": 3,
+      "source_state": "RUNNING",
+      "source_state_version": 2,
+      "target_state": "ADMISSION_PENDING"
+    },
+    {
+      "decided_at": "2026-09-13T14:23:13.222730Z",
+      "evaluated_at": "2026-09-13T14:23:13.222730Z",
+      "guards": [
+        {
+          "guard_id": "G_CURRENT",
+          "outcome": "PASS",
+          "reason": "CURRENT_STATE_VERSION_MATCH"
+        },
+        {
+          "guard_id": "G_EVIDENCE",
+          "outcome": "PASS",
+          "reason": "P1_6_EVIDENCE_SET_SATISFIED"
+        },
+        {
+          "guard_id": "G_HUMAN_NOT_REQUIRED",
+          "outcome": "PASS",
+          "reason": "P1_7_HUMAN_AUTHORITY_CURRENT"
+        },
+        {
+          "guard_id": "G_JUDGMENT_ACCEPTED",
+          "outcome": "PASS",
+          "reason": "P1_7_JUDGMENT_AUTHORITY_CURRENT"
+        }
+      ],
+      "outcome": "ADMITTED",
+      "provenance": "SOURCE_OWNED_HISTORICAL_TRANSITION_VERIFIED",
+      "reason": "ADMITTED",
+      "requested_at": "2026-09-13T14:23:12.984343Z",
+      "resulting_state": "ACCEPTED",
+      "resulting_state_version": 4,
+      "sequence": 4,
+      "source_state": "ADMISSION_PENDING",
+      "source_state_version": 3,
+      "target_state": "ACCEPTED"
+    }
+  ],
+  "truthful_notice": "This is a replay of a previously executed AISCC workflow.",
+  "viewing_llm_inference_calls": 0
+}

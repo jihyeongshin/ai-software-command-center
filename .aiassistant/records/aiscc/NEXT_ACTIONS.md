@@ -1,5 +1,39 @@
 # AISCC Next Actions
 
+## Current sequence (20260915_1225)
+
+P3-3 is ACTIVE. Local Recorded Replay implementation is HUMAN_PROVIDED / ACCEPTED / PERSISTENCE_PENDING under the [1225 Human QA Cycle](cycles/20260915_1225_aiscc-p3-3-public-replay-human-qa-accepted-persistence-entry-1.cycle.md).
+
+1. Accepted implementation Git persistence — current 1225 Task; entering HEAD `17fcd337a8bc1410e230a7c18195ac3d3006b417`.
+2. Bounded Cloudflare Pages deployment — separate authorization after Browser persistence review.
+3. Public endpoint / effective header / 404 / artifact-identity verification.
+4. Final competition submission — Human-owned, separate Task.
+
+No later action starts in this persistence Task. Public Replay deployment remains NOT_COMPLETED; Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE. Accepted hosting direction is unchanged. Human rights/tool roster and later account/project authorization remain pending.
+
+The sequence above supersedes earlier current-action/QA-pending projections below. Historical records remain preserved.
+
+## Current implementation and next gates (20260915_1047)
+
+- P3-2: ACCEPTED / PERSISTED / CLOSED.
+- P3-3: ACTIVE; public Recorded Replay implementation candidate, Human QA pending.
+- Exact implementation Task: `20260915_1047_aiscc-p3-3-public-recorded-replay-static-surface-and-cloudflare-pages-prerequisite-implementation-1`.
+- Entering baseline HEAD: `17fcd337a8bc1410e230a7c18195ac3d3006b417`.
+- Current technical prerequisite: public Replay serving/deployment; local static implementation/HTTP candidate passes, public release remains pending.
+- Accepted target: Cloudflare Pages / NOT_DEPLOYED; hosting selection is not reopened.
+- Live: DISABLED_FOR_INITIAL_RELEASE / NOT_RELEASED.
+- Public Replay deployment and final competition submission: NOT_COMPLETED.
+
+Sequence: implementation → local/Human QA → persistence → Cloudflare Pages deployment → public availability verification → final competition submission.
+
+Immediate next gate: Human reviews the 1047 local static surface and its QA guide. After acceptance, issue exact persistence authorization before the bounded Cloudflare Pages deployment Task. Cloudflare account/project authorization and rights/tool disclosures remain Human-owned. Optional Railway/OpenAI setup is outside the Replay release path.
+
+Authority: [1047 Cycle](cycles/20260915_1047_aiscc-p3-3-readiness-blocked-public-replay-implementation-entry-1.cycle.md). No deployment or final-submit authorization is implied by this queue.
+
+## Historical projections before 1047
+
+All earlier current/next-action wording below is historical. The 1047 section above is the current queue authority.
+
 ## Current next action (20260914_2338)
 
 ```text
