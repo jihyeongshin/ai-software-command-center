@@ -86,7 +86,7 @@ def test_current_immutable_spec_ready_history_retry_and_restart(database_url, tm
             assert run.task_contract_id == spec.task_contract_id
             async with f["sessions"]() as session:
                 assert await session.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260915_0013"
+                    "20260916_0014"
                 )
                 for table in (
                     "transition_requests",

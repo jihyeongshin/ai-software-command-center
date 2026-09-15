@@ -297,7 +297,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "20260915_0013"
+            assert revision == "20260916_0014"
         finally:
             await engine.dispose()
 

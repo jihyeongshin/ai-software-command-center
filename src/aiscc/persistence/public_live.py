@@ -122,6 +122,68 @@ class PublicLiveTransaction:
             datetime.fromisoformat(result["retention_until"]),
         )
 
+    async def admission_context(self, campaign: str, bucket: bytes) -> dict[str, Any] | None:
+        result = await self._call(
+            "SELECT public_live_api.admission_context(:c,:b)",
+            {"c": campaign, "b": bucket},
+        )
+        if result is not None and not isinstance(result, dict):
+            raise RuntimeError("PUBLIC_ADMISSION_CONTEXT_INVALID")
+        return result
+
+    async def admit_checked(
+        self, value: PersistRun, *, policy_digest: bytes, content_digest: bytes, hmac_version: str
+    ) -> dict[str, Any]:
+        """DB-mediated rate/pin/admission check; return only after outer commit."""
+        result = await self._call(
+            "SELECT public_live_api.admit_checked(CAST(:p AS jsonb))",
+            {
+                "p": json.dumps(
+                    {
+                        "run_id": value.run_id.hex(),
+                        "campaign_id": value.campaign_id,
+                        "bucket_hash": value.bucket_hash.hex(),
+                        "key_hash": value.key_hash.hex(),
+                        "read_hash": value.read_hash.hex(),
+                        "payload_digest": value.payload_digest.hex(),
+                        "policy_digest": policy_digest.hex(),
+                        "content_digest": content_digest.hex(),
+                        "hmac_version": hmac_version,
+                    }
+                )
+            },
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("PUBLIC_ADMISSION_RESULT_INVALID")
+        return result
+
+    async def run_context(self, run_id: bytes) -> dict[str, Any]:
+        result = await self._call("SELECT public_live_api.run_context(:r)", {"r": run_id})
+        if not isinstance(result, dict):
+            raise RuntimeError("PUBLIC_RUN_CONTEXT_INVALID")
+        return result
+
+    async def project_run(
+        self, run_id: bytes, expected_version: int, target: str, proof: bytes
+    ) -> int:
+        result = await self._call(
+            "SELECT public_live_api.project_run(:r,:v,:t,:p)",
+            {"r": run_id, "v": expected_version, "t": target, "p": proof},
+        )
+        if type(result) is not int:
+            raise RuntimeError("PUBLIC_PROJECTION_VERSION_INVALID")
+        return result
+
+    async def mark_checked(
+        self, run_id: bytes, generation: int, ordinal: int, max_cost: int, owner_version: int
+    ) -> None:
+        if type(max_cost) is not int or type(owner_version) is not int:
+            raise TypeError("exact integer bound and owner version required")
+        await self._call(
+            "SELECT public_live_api.mark_checked(:r,:g,:n,:b,:v)",
+            {"r": run_id, "g": generation, "n": ordinal, "b": max_cost, "v": owner_version},
+        )
+
     async def lock_context(self, campaign: str, days: tuple[date, ...], bucket: bytes) -> None:
         await self._call(
             "SELECT public_live_api.lock_context(:c,:d,:b)",
