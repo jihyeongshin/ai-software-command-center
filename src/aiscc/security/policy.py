@@ -687,6 +687,19 @@ class SecurityPolicy:
                     ResourceDomain.SCENARIO, "scenario:p1-5-fixed-synthetic@1"
                 )
             return False
+        if mode is RuntimeMode.PUBLIC_BOUNDED_LIVE and scenario_id == "stockroom-s1-normal":
+            from aiscc.public_live.provider_authority import LunaToolScopeAuthority
+
+            return (
+                scope.domain is ResourceDomain.PROCESS
+                and isinstance(self._stockroom_policy, LunaToolScopeAuthority)
+                and self._stockroom_policy.owns_scope(
+                    scope=scope,
+                    principal=principal,
+                    run_id=run_id,
+                    operation_fingerprint=operation_fingerprint,
+                )
+            )
         if scenario_id != "p1-3-fixed-synthetic":
             return False
         if scope.domain is ResourceDomain.PROCESS:

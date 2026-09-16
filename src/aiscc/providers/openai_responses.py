@@ -4,7 +4,7 @@ import hashlib
 from types import MappingProxyType
 from typing import Any
 
-from openai import APIConnectionError, APITimeoutError, OpenAI
+from openai import APIConnectionError, APITimeoutError, OpenAI, Timeout
 
 from aiscc.providers.models import (
     ExecutionOperationOutcome,
@@ -42,6 +42,15 @@ class OpenAIResponsesAdapter:
             "include": ["reasoning.encrypted_content"],
             "max_output_tokens": call.output_token_maximum or call.profile.output_token_bound,
         }
+        if call.profile.profile_id == "public-live-luna-v1":
+            from aiscc.public_live.luna_profile import bind_call
+
+            role = "CORRECT" if call.reasoning_effort == "medium" else "PRIMARY"
+            bound, _ = bind_call(call, role=role)
+            if call.reasoning_effort != bound.reasoning_effort or call.output_token_maximum != 2000:
+                raise ValueError("LUNA_REQUEST_BINDING_DENIED")
+            request["reasoning"] = {"effort": bound.reasoning_effort}
+            request["service_tier"] = "default"
         serialized = canonical_json_bytes(request)
         if len(serialized) > call.profile.input_byte_bound:
             raise ValueError("PROVIDER_INPUT_BOUND_EXCEEDED")
@@ -50,7 +59,11 @@ class OpenAIResponsesAdapter:
         client = OpenAI(
             api_key=secret,
             base_url=call.profile.base_url,
-            timeout=call.profile.total_timeout_seconds,
+            timeout=Timeout(
+                call.profile.total_timeout_seconds,
+                connect=call.profile.connect_timeout_seconds,
+                read=call.profile.read_timeout_seconds,
+            ),
             max_retries=0,
         )
         try:

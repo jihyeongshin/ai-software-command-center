@@ -429,6 +429,7 @@ class ProviderCall:
     input_authority: ProviderInputAuthority = ProviderInputAuthority.INITIAL_SERVER
     durable_continuation_hash: str | None = None
     output_token_maximum: int | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

@@ -1445,7 +1445,12 @@ class AgentExecutionService:
     def _check_open_and_time(self, call: ProviderCall) -> None:
         if self._closed:
             raise ValueError("EXECUTION_ATTEMPT_CLOSED")
-        if self._time_source() - self._started_at >= call.profile.total_timeout_seconds:
+        wall = (
+            90
+            if call.profile.profile_id == "public-live-luna-v1"
+            else call.profile.total_timeout_seconds
+        )
+        if self._time_source() - self._started_at >= wall:
             self._fail_once("WALL_TIME_LIMIT_EXHAUSTED")
             raise ValueError("EXECUTION_LIMIT_EXHAUSTED:WALL_TIME")
 
