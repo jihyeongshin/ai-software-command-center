@@ -92,10 +92,27 @@ def luna_profile(base_url: str = "http://127.0.0.1:18085/v1") -> ProviderProfile
     )
 
 
+def hosted_luna_profile() -> ProviderProfile:
+    """Exact hosted metadata; creating a profile does not authorize a send."""
+    from aiscc.providers.hosted_secret import SECRET_REF
+
+    return replace(
+        luna_profile(),
+        endpoint_ref="openai-public-live-production-v1",
+        base_url="https://api.openai.com/v1",
+        secret_ref=SECRET_REF,
+    )
+
+
 def bind_call(call: ProviderCall, *, role: str) -> tuple[ProviderCall, int]:
     if (
         role not in ROLE_EFFORT
-        or call.profile != luna_profile(call.profile.base_url)
+        or call.profile
+        != (
+            hosted_luna_profile()
+            if call.profile.base_url == "https://api.openai.com/v1"
+            else luna_profile(call.profile.base_url)
+        )
         or call.runtime_mode is not RuntimeMode.PUBLIC_BOUNDED_LIVE
         or call.scenario_id != "stockroom-s1-normal"
     ):

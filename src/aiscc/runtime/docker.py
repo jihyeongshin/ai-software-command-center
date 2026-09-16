@@ -13,6 +13,7 @@ from threading import Event, Lock, Thread
 
 from aiscc.contracts.security import ResourceDomain, ResourceScope, SecurityActionClass
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot
+from aiscc.runtime.child_environment import child_environment
 from aiscc.runtime.stockroom_image import (
     AdmittedStockroomImage,
     require_admitted_image,
@@ -96,9 +97,7 @@ class DockerRuntime:
         policy: SecurityPolicy,
         executable: str = "docker",
         *,
-        stockroom_runner: Callable[
-            [Sequence[str], DockerRunSpec], StockroomProcessObservation
-        ]
+        stockroom_runner: Callable[[Sequence[str], DockerRunSpec], StockroomProcessObservation]
         | None = None,
     ) -> None:
         self._policy = policy
@@ -210,12 +209,8 @@ class DockerRuntime:
             outcome = "KNOWN_TOOL_COMPLETED"
             quarantine = False
         try:
-            stdout = observation.stdout[: spec.stdout_limit_bytes].decode(
-                "ascii", errors="strict"
-            )
-            stderr = observation.stderr[: spec.stderr_limit_bytes].decode(
-                "ascii", errors="strict"
-            )
+            stdout = observation.stdout[: spec.stdout_limit_bytes].decode("ascii", errors="strict")
+            stderr = observation.stderr[: spec.stderr_limit_bytes].decode("ascii", errors="strict")
         except UnicodeDecodeError:
             return DockerCommandResult(
                 observation.exit_code,
@@ -461,6 +456,7 @@ class DockerRuntime:
             shell=False,
             timeout=timeout_seconds,
             check=False,
+            env=child_environment(),
         )
         return DockerCommandResult(
             completed.returncode,
@@ -546,8 +542,9 @@ class StockroomCancellation:
 class StockroomDockerRunner:
     """One dispatch, exact ownership, bounded capture and conservative settlement."""
 
-    def __init__(self, executable: Path, image: AdmittedStockroomImage,
-                 cancellation: StockroomCancellation) -> None:
+    def __init__(
+        self, executable: Path, image: AdmittedStockroomImage, cancellation: StockroomCancellation
+    ) -> None:
         self._image = require_admitted_image(image)
         if not executable.is_absolute() or not executable.is_file():
             raise ValueError("TRUSTED_ABSOLUTE_DOCKER_REQUIRED")
@@ -558,14 +555,18 @@ class StockroomDockerRunner:
         self._lock = Lock()
         self._dispatched = False
 
-    def _process(self, args, timeout, stdout_limit=65536, stderr_limit=65536,
-                 observe_cancel=False):
+    def _process(self, args, timeout, stdout_limit=65536, stderr_limit=65536, observe_cancel=False):
         """Drain both pipes concurrently; never retain unbounded subprocess output."""
-        environment = {key: os.environ[key] for key in ("SystemRoot", "WINDIR")
-                       if key in os.environ}
+        environment = {
+            key: os.environ[key] for key in ("SystemRoot", "WINDIR") if key in os.environ
+        }
         process = subprocess.Popen(
-            [self._executable, *args], stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False, env=environment,
+            [self._executable, *args],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            env=environment,
         )
         buffers = [bytearray(), bytearray()]
         failures = []
@@ -573,16 +574,19 @@ class StockroomDockerRunner:
         def drain(stream, output, limit):
             try:
                 while chunk := stream.read(4096):
-                    output.extend(chunk[:max(0, limit + 1 - len(output))])
+                    output.extend(chunk[: max(0, limit + 1 - len(output))])
             except Exception:
                 failures.append(True)
             finally:
                 stream.close()
 
-        readers = [Thread(target=drain, args=(stream, output, limit), daemon=True)
-                   for stream, output, limit in (
-                       (process.stdout, buffers[0], stdout_limit),
-                       (process.stderr, buffers[1], stderr_limit))]
+        readers = [
+            Thread(target=drain, args=(stream, output, limit), daemon=True)
+            for stream, output, limit in (
+                (process.stdout, buffers[0], stdout_limit),
+                (process.stderr, buffers[1], stderr_limit),
+            )
+        ]
         for reader in readers:
             reader.start()
         deadline = time.monotonic() + max(0.001, timeout)
@@ -625,16 +629,22 @@ class StockroomDockerRunner:
     @staticmethod
     def _owned(raw, identity, spec):
         labels = raw.get("Config", {}).get("Labels", {})
-        if (raw.get("Id") != identity or raw.get("Name") != "/" + spec.name
-                or labels.get("aiscc.run_id") != spec.run_id
-                or labels.get("aiscc.owner") != "p1-3"):
+        if (
+            raw.get("Id") != identity
+            or raw.get("Name") != "/" + spec.name
+            or labels.get("aiscc.run_id") != spec.run_id
+            or labels.get("aiscc.owner") != "p1-3"
+        ):
             raise ValueError("DOCKER_CONTAINER_OWNER_UNCERTAIN")
         return raw
 
     def __call__(self, args: Sequence[str], spec: DockerRunSpec) -> StockroomProcessObservation:
         _validate_stockroom_spec(spec)
-        if (spec.image_provenance is not self._image or spec.run_id != self._cancel.run_id
-                or spec.name != "aiscc-" + self._cancel.attempt_id):
+        if (
+            spec.image_provenance is not self._image
+            or spec.run_id != self._cancel.run_id
+            or spec.name != "aiscc-" + self._cancel.attempt_id
+        ):
             raise ValueError("DOCKER_ATTEMPT_BINDING_DENIED")
         with self._lock:
             if self._dispatched:
@@ -666,8 +676,11 @@ class StockroomDockerRunner:
                 timed_out = True
                 raise ValueError("DOCKER_OPERATION_DEADLINE")
             result = self._process(
-                ["start", "--attach", identity], operation_deadline - time.monotonic(),
-                spec.stdout_limit_bytes, spec.stderr_limit_bytes, True,
+                ["start", "--attach", identity],
+                operation_deadline - time.monotonic(),
+                spec.stdout_limit_bytes,
+                spec.stderr_limit_bytes,
+                True,
             )
             _, stdout, stderr, timed_out, cancelled = result
             captured = result[0] == 0 or timed_out or cancelled
@@ -691,8 +704,11 @@ class StockroomDockerRunner:
                         self._inspect("container", identity, deadline), identity, spec
                     )
                     state = raw.get("State", {})
-                    if (state.get("Running") is False and state.get("Status") in {"exited", "dead"}
-                            and type(state.get("ExitCode")) is int):
+                    if (
+                        state.get("Running") is False
+                        and state.get("Status") in {"exited", "dead"}
+                        and type(state.get("ExitCode")) is int
+                    ):
                         terminal = True
                         exit_code = state["ExitCode"]
                         break
@@ -702,12 +718,18 @@ class StockroomDockerRunner:
                     if removed[0] == 0:
                         # A successful full listing distinguishes absence from
                         # inspect/daemon errors.
-                        listing = self._query(["container", "ls", "--all", "--no-trunc",
-                                               "--format", "{{.ID}}"], deadline)
+                        listing = self._query(
+                            ["container", "ls", "--all", "--no-trunc", "--format", "{{.ID}}"],
+                            deadline,
+                        )
                         ids = listing[1].decode("ascii").splitlines()
-                        reconciled = (listing[0] == 0 and identity not in ids
-                                      and all(re.fullmatch(r"[0-9a-f]{64}", i) for i in ids))
+                        reconciled = (
+                            listing[0] == 0
+                            and identity not in ids
+                            and all(re.fullmatch(r"[0-9a-f]{64}", i) for i in ids)
+                        )
             except Exception:
                 pass
-        return StockroomProcessObservation(exit_code, stdout, stderr, timed_out, cancelled,
-                                           terminal, reconciled and captured)
+        return StockroomProcessObservation(
+            exit_code, stdout, stderr, timed_out, cancelled, terminal, reconciled and captured
+        )

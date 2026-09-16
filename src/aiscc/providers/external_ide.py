@@ -30,6 +30,7 @@ from aiscc.persistence.repository import (
     verify_historical_transition_provenance,
 )
 from aiscc.providers.models import ExecutionStatus, ExecutionSubmissionRef
+from aiscc.runtime.child_environment import child_environment
 from aiscc.task_authority.contracts import TaskContractBodyV1, plain
 
 PRODUCER = "LOCAL_IDE_SELF_DOGFOOD_V1"
@@ -365,7 +366,7 @@ class LocalGitObserver:
         self._clock = clock
 
     def _read(self, root, args, *, check=True):
-        env = {k: v for k, v in os.environ.items() if not k.upper().startswith("GIT_")}
+        env = child_environment()
         env.update(GIT_OPTIONAL_LOCKS="0", GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
         result = subprocess.run(
             [

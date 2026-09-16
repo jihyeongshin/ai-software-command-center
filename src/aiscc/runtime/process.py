@@ -7,6 +7,7 @@ from threading import Event
 
 from aiscc.contracts.security import ResourceDomain, ResourceScope, SecurityActionClass
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot
+from aiscc.runtime.child_environment import child_environment
 from aiscc.runtime.contracts import RuntimeOutcome, RuntimeOutcomeStatus
 from aiscc.security.capability import Capability
 from aiscc.security.policy import SecurityPolicy
@@ -97,6 +98,7 @@ class BoundedProcessRunner:
                 stderr=subprocess.PIPE,
                 text=True,
                 shell=False,
+                env=child_environment(),
             )
             deadline = time.monotonic() + timeout_seconds
             while process.poll() is None:

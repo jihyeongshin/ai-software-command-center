@@ -103,6 +103,7 @@ class SecurityPolicy:
         provider_tool_policy: object | None = None,
         secret_use_policy: object | None = None,
         stockroom_policy: object | None = None,
+        public_context_policy: object | None = None,
     ) -> None:
         self._profiles = dict(profiles)
         self._resource_issuer_token = object()
@@ -121,6 +122,7 @@ class SecurityPolicy:
         self._provider_tool_policy = provider_tool_policy
         self._secret_use_policy = secret_use_policy
         self._stockroom_policy = stockroom_policy
+        self._public_context_policy = public_context_policy
 
     def issue_resource_grant(
         self,
@@ -569,6 +571,21 @@ class SecurityPolicy:
     ) -> bool:
         current_time = now or datetime.now(UTC)
         grant = request.resource_grant
+        if (
+            request.mode is RuntimeMode.PUBLIC_BOUNDED_LIVE
+            and request.scenario_id == "stockroom-s1-normal"
+            and request.resource_scope.domain
+            in {ResourceDomain.REPOSITORY, ResourceDomain.SCENARIO}
+        ):
+            from aiscc.public_live.context_authority import PublicLiveContextResourceAuthority
+
+            owner = self._public_context_policy
+            if (
+                not isinstance(owner, PublicLiveContextResourceAuthority)
+                or grant is None
+                or not owner.current_matches(grant.selector_request, request.authoritative)
+            ):
+                return False
         return bool(
             grant is not None
             and grant._issuer_token is self._resource_issuer_token
@@ -603,6 +620,21 @@ class SecurityPolicy:
         selector_attestation_ref: str | None = None,
         selector_request: object | None = None,
     ) -> bool:
+        if (
+            mode is RuntimeMode.PUBLIC_BOUNDED_LIVE
+            and scenario_id == "stockroom-s1-normal"
+            and scope.domain in {ResourceDomain.REPOSITORY, ResourceDomain.SCENARIO}
+        ):
+            return self._public_context_allows(
+                selector_request,
+                mode=mode,
+                scenario_id=scenario_id,
+                action=action,
+                scope=scope,
+                principal=principal,
+                run_id=run_id,
+                operation_fingerprint=operation_fingerprint,
+            )
         if scope.domain in _P1_5_OWNED_DOMAINS:
             verifier = getattr(self._provider_tool_policy, "verify", None)
             return bool(
@@ -722,6 +754,32 @@ class SecurityPolicy:
             return scope == ResourceScope(ResourceDomain.SCENARIO, "scenario:p1-3-fixed-synthetic")
         return False
 
+    def _public_context_allows(
+        self,
+        context: object,
+        *,
+        mode: RuntimeMode,
+        scenario_id: str | None,
+        action: SecurityActionClass,
+        scope: ResourceScope,
+        principal: str,
+        run_id: str,
+        operation_fingerprint: str | None,
+    ) -> bool:
+        from aiscc.public_live.context_authority import PublicLiveContextResourceAuthority
+
+        owner = self._public_context_policy
+        return isinstance(owner, PublicLiveContextResourceAuthority) and owner.allows(
+            context,
+            mode=mode,
+            scenario_id=scenario_id,
+            action=action,
+            scope=scope,
+            principal=principal,
+            run_id=run_id,
+            operation_fingerprint=operation_fingerprint,
+        )
+
     def _stockroom_context_allows(
         self,
         context: object | None,
@@ -734,6 +792,21 @@ class SecurityPolicy:
         run_id: str,
         operation_fingerprint: str | None,
     ) -> bool:
+        if (
+            mode is RuntimeMode.PUBLIC_BOUNDED_LIVE
+            and scenario_id == "stockroom-s1-normal"
+            and scope.domain in {ResourceDomain.REPOSITORY, ResourceDomain.SCENARIO}
+        ):
+            return self._public_context_allows(
+                context,
+                mode=mode,
+                scenario_id=scenario_id,
+                action=action,
+                scope=scope,
+                principal=principal,
+                run_id=run_id,
+                operation_fingerprint=operation_fingerprint,
+            )
         if scenario_id not in _STOCKROOM_SCENARIOS:
             return True
         verifier = getattr(self._stockroom_policy, "allows", None)

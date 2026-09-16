@@ -1,0 +1,14 @@
+# Deployment contract metadata only; no credentials and no deployment action.
+version = "1"
+region = "asia-southeast1-eqsg3a"
+environment = "production"
+service_identity_status = "HUMAN_RAILWAY_DEPLOYMENT_REQUIRED"
+variable = "AISCC_OPENAI_API_KEY"
+secret_ref = "secret-ref:openai/public-live/runtime/v1"
+service_only = true
+sealed_required = true
+project_shared = false
+preview_allowed = false
+public_admission_enabled = false
+public_live_released = false
+hosted_proof_status = "HUMAN_PENDING"

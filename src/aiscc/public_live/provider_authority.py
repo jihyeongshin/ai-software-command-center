@@ -7,7 +7,7 @@ the independent provider/secret selectors, receipts, or leases.
 
 from dataclasses import replace
 
-from aiscc.contracts.security import ResourceDomain, SecurityActionClass
+from aiscc.contracts.security import ResourceDomain, ResourceScope, SecurityActionClass
 from aiscc.contracts.workflow import RuntimeMode
 from aiscc.providers.models import ProviderCall
 from aiscc.public_live.luna_profile import bind_call
@@ -79,7 +79,14 @@ class LunaToolScopeAuthority:
         self.fingerprint = fingerprint
         self.context = object()
 
-    def owns_scope(self, *, scope, principal, run_id, operation_fingerprint):
+    def owns_scope(
+        self,
+        *,
+        scope: ResourceScope,
+        principal: str,
+        run_id: str,
+        operation_fingerprint: str | None,
+    ) -> bool:
         return (
             scope == self.process_scope
             and principal == self.principal

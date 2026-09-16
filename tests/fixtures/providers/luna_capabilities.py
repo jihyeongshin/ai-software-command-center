@@ -71,7 +71,7 @@ def _permission(
     return request, capability
 
 
-def execution_for(call, ticket, adapter):
+def execution_for(call, ticket, adapter, *, resolver_factory=None):
     from aiscc.public_live.provider_authority import LunaScopeAuthority, luna_permission_profiles
 
     scope_authority = LunaScopeAuthority(call, ticket, owner=call.work_run_id)
@@ -84,10 +84,12 @@ def execution_for(call, ticket, adapter):
         allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
     )
     secret_authority = SecretUseAuthority(
-        allowed_secret_refs=frozenset({"secret-ref:public-live-luna-synthetic-only"}),
+        allowed_secret_refs=frozenset({profile.secret_ref}),
         allowed_profile_ids=frozenset({"public-live-luna-v1"}),
         allowed_scenarios=frozenset({"stockroom-s1-normal"}),
-        allowed_destinations=frozenset({"local-fake"}),
+        allowed_destinations=frozenset(
+            {"local-fake" if resolver_factory is None else profile.endpoint_ref}
+        ),
         allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
     )
     policy = SecurityPolicy(
@@ -111,10 +113,10 @@ def execution_for(call, ticket, adapter):
         fingerprint,
     )
     secret_selector = SecretUseSelectorRequest(
-        "secret-ref:public-live-luna-synthetic-only",
+        profile.secret_ref,
         "PROVIDER_API",
         "RESPONSES_CREATE",
-        "local-fake",
+        "local-fake" if resolver_factory is None else profile.endpoint_ref,
         profile.provider_resource_identity,
         "responses-v1",
         "owner",
@@ -183,7 +185,11 @@ def execution_for(call, ticket, adapter):
             )
 
     lease = SecretResolutionLeaseAuthority(policy.verify_consumption_receipt)
-    resolver = LeaseBoundSecretResolver(lease, {profile.secret_ref: "synthetic-local-only"})
+    resolver = (
+        LeaseBoundSecretResolver(lease, {profile.secret_ref: "synthetic-local-only"})
+        if resolver_factory is None
+        else resolver_factory(lease)
+    )
     service = AgentExecutionService(
         policy=policy,
         adapter=adapter,

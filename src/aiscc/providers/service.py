@@ -90,6 +90,7 @@ class AgentExecutionService:
         execution_ref_authority: ExecutionReferenceAuthority | None = None,
         server_initial_inputs: dict[str, tuple[dict[str, Any], ...]] | None = None,
         stockroom_context_factory: Callable[..., object] | None = None,
+        public_context_authority: object | None = None,
         stockroom_dispatch_context_factory: Callable[..., ToolDispatchContext] | None = None,
         security_profile_version: str = "p1-3-v2",
         time_source: Callable[[], float] = monotonic,
@@ -109,6 +110,7 @@ class AgentExecutionService:
         self._execution_ref_authority = execution_ref_authority
         self._server_initial_inputs = dict(server_initial_inputs or {})
         self._stockroom_context_factory = stockroom_context_factory
+        self._public_context_authority = public_context_authority
         self._stockroom_dispatch_context_factory = stockroom_dispatch_context_factory
         self._security_profile_version = security_profile_version
         self._time_source = time_source
@@ -214,9 +216,28 @@ class AgentExecutionService:
         lease = self._secret_lease_authority.issue(
             receipts[secret_index], capabilities[secret_index], secret_request
         )
-        secret = self._secret_resolver.resolve(lease)
+        from aiscc.providers.hosted_secret import HostedSecretUnavailable
+
         try:
+            secret = self._secret_resolver.resolve(lease)
             result = self._adapter.call(call, secret=secret)
+        except HostedSecretUnavailable:
+            from types import MappingProxyType
+
+            from aiscc.providers.models import canonical_sha256
+
+            return ProviderResult(
+                call.operation_id,
+                "unavailable",
+                ExecutionOperationOutcome.DEFINITELY_NOT_SENT,
+                None,
+                (),
+                None,
+                None,
+                MappingProxyType({}),
+                "LIVE_UNAVAILABLE",
+                canonical_sha256({"status": "LIVE_UNAVAILABLE"}),
+            )
         finally:
             self._secret_resolver.close(lease)
         self.counters.provider_calls += 1
@@ -344,6 +365,11 @@ class AgentExecutionService:
                 resource_identity=profile.provider_resource_identity,
                 call_ordinal=ordinal,
             )
+            from aiscc.public_live.luna_profile import hosted_luna_profile
+
+            hosted = profile == hosted_luna_profile()
+            lease = None
+            secret = None
             try:
                 self._require_running_context(current, attempt, profile, scenario_id)
                 if initial_inputs is None:
@@ -353,7 +379,9 @@ class AgentExecutionService:
                         repository,
                         execution_attempt_id,
                         operation_id,
-                        input_items,
+                        tuple({"type": "message", **item} for item in input_items)
+                        if hosted
+                        else input_items,
                     )
                 call = ProviderCall(
                     operation_id=operation_id,
@@ -373,6 +401,10 @@ class AgentExecutionService:
                     input_authority=input_authority,
                     durable_continuation_hash=continuation_hash,
                 )
+                if hosted:
+                    from aiscc.public_live.luna_profile import bind_call
+
+                    call, _ = bind_call(call, role="PRIMARY")
                 capabilities, secret_request = self._provider_capabilities(
                     call, current, operation_id
                 )
@@ -387,6 +419,24 @@ class AgentExecutionService:
                         ]
                     },
                 )
+                if hosted:
+                    uses, receipts = self._policy.consume_capabilities_atomically_with_receipts(
+                        capabilities
+                    )
+                    if len(uses) != len(capabilities) or not all(use.allowed for use in uses):
+                        raise ValueError("CAPABILITY_ATOMIC_CONSUME_DENIED")
+                    secret_indexes = [
+                        index
+                        for index, requirement in enumerate(capabilities)
+                        if requirement.scope.domain is ResourceDomain.SECRET
+                    ]
+                    if len(secret_indexes) != 1 or len(receipts) != len(capabilities):
+                        raise ValueError("PROVIDER_SECRET_CAPABILITY_DENIED")
+                    secret_index = secret_indexes[0]
+                    lease = lease_authority.issue(
+                        receipts[secret_index], capabilities[secret_index], secret_request
+                    )
+                    secret = self._secret_resolver.resolve(lease)
                 input_size = len(canonical_json_bytes(list(input_items)))
                 continuation_size = len(canonical_json_bytes(list(history))) if history else 0
                 reservation = await repository.reserve_execution_bounds(
@@ -404,30 +454,37 @@ class AgentExecutionService:
                     now=self._durable_time_source(),
                 )
                 if not reservation.admitted:
+                    if lease is not None:
+                        self._secret_resolver.close(lease)
                     return DurableExecutionResult("EXECUTION_FAILED")
                 call = replace(
                     call,
                     execution_version=reservation.execution_version,
                     output_token_maximum=(
-                        profile.output_token_bound - reservation.counters.output_tokens
+                        min(2000, profile.output_token_bound - reservation.counters.output_tokens)
+                        if hosted
+                        else profile.output_token_bound - reservation.counters.output_tokens
                     ),
                 )
-                uses, receipts = self._policy.consume_capabilities_atomically_with_receipts(
-                    capabilities
-                )
-                if len(uses) != len(capabilities) or not all(use.allowed for use in uses):
-                    raise ValueError("CAPABILITY_ATOMIC_CONSUME_DENIED")
-                secret_indexes = [
-                    index
-                    for index, requirement in enumerate(capabilities)
-                    if requirement.scope.domain is ResourceDomain.SECRET
-                ]
-                if len(secret_indexes) != 1 or len(receipts) != len(capabilities):
-                    raise ValueError("PROVIDER_SECRET_CAPABILITY_DENIED")
-                secret_index = secret_indexes[0]
-                lease = lease_authority.issue(
-                    receipts[secret_index], capabilities[secret_index], secret_request
-                )
+                if not hosted:
+                    uses, receipts = self._policy.consume_capabilities_atomically_with_receipts(
+                        capabilities
+                    )
+                    if len(uses) != len(capabilities) or not all(use.allowed for use in uses):
+                        raise ValueError("CAPABILITY_ATOMIC_CONSUME_DENIED")
+                    secret_indexes = [
+                        index
+                        for index, requirement in enumerate(capabilities)
+                        if requirement.scope.domain is ResourceDomain.SECRET
+                    ]
+                    if len(secret_indexes) != 1 or len(receipts) != len(capabilities):
+                        raise ValueError("PROVIDER_SECRET_CAPABILITY_DENIED")
+                    secret_index = secret_indexes[0]
+                    lease = lease_authority.issue(
+                        receipts[secret_index], capabilities[secret_index], secret_request
+                    )
+                if lease is None:
+                    raise ValueError("SECRET_LEASE_REQUIRED")
                 fresh = await repository.start_dispatch_if_fresh(
                     operation_id=operation_id,
                     expected_state_version=current.state_version,
@@ -438,14 +495,19 @@ class AgentExecutionService:
                     self._secret_resolver.close(lease)
                     return DurableExecutionResult("EXECUTION_FAILED")
             except (AuthorityConflictError, ValueError) as exc:
+                if lease is not None:
+                    self._secret_resolver.close(lease)
                 await repository.fail_operation_before_side_effect(
                     operation_id=operation_id,
                     reason=str(exc),
                     failure_class="SECURITY_DENIAL",
                 )
                 return DurableExecutionResult("EXECUTION_FAILED")
-            secret = self._secret_resolver.resolve(lease)
             try:
+                if not hosted:
+                    secret = self._secret_resolver.resolve(lease)
+                if secret is None:
+                    raise RuntimeError("SECRET_MATERIAL_UNAVAILABLE")
                 result = self._adapter.call(call, secret=secret)
             except Exception as exc:
                 await repository.advance_operation(
@@ -734,6 +796,9 @@ class AgentExecutionService:
                         selector_ref=None,
                         selector_request=None,
                         fingerprint=call.operation_fingerprint,
+                        execution_attempt_id=call.execution_attempt_id,
+                        provider_profile_id=call.profile.profile_id,
+                        provider_profile_version=call.profile.version,
                     ),
                     self._issue_capability(
                         current=current,
@@ -747,6 +812,9 @@ class AgentExecutionService:
                         selector_ref=None,
                         selector_request=None,
                         fingerprint=call.operation_fingerprint,
+                        execution_attempt_id=call.execution_attempt_id,
+                        provider_profile_id=call.profile.profile_id,
+                        provider_profile_version=call.profile.version,
                     ),
                 )
             )
@@ -784,6 +852,28 @@ class AgentExecutionService:
                 provider_profile_version=provider_profile_version,
                 resolved_spec_fingerprint=resolved_spec_fingerprint,
             )
+        if (
+            mode is RuntimeMode.PUBLIC_BOUNDED_LIVE
+            and scenario_id == "stockroom-s1-normal"
+            and scope.domain in {ResourceDomain.REPOSITORY, ResourceDomain.SCENARIO}
+        ):
+            from aiscc.public_live.context_authority import PublicLiveContextResourceAuthority
+
+            owner = self._public_context_authority
+            if isinstance(owner, PublicLiveContextResourceAuthority):
+                selector_request = owner.issue(
+                    current=current,
+                    mode=mode,
+                    principal=principal,
+                    scenario_id=scenario_id,
+                    scope=scope,
+                    action=action,
+                    fingerprint=fingerprint,
+                    execution_attempt_id=execution_attempt_id,
+                    provider_profile_id=provider_profile_id,
+                    provider_profile_version=provider_profile_version,
+                )
+                stockroom_context = selector_request
         grant = self._policy.issue_resource_grant(
             mode=mode,
             profile_version=self._security_profile_version,
@@ -1012,6 +1102,9 @@ class AgentExecutionService:
                             selector_ref=None,
                             selector_request=None,
                             fingerprint=fingerprint,
+                            execution_attempt_id=execution_attempt_id,
+                            provider_profile_id=profile.profile_id,
+                            provider_profile_version=profile.version,
                         )
                     )
             tool_secret_selector: SecretUseSelectorRequest | None = None

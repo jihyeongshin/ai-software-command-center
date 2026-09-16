@@ -22,12 +22,17 @@ _SIX_STATUSES = frozenset(
 class OpenAIResponsesAdapter:
     """Stateless Responses V1 adapter; the profile must point to a local acceptance endpoint."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, hosted: bool = False) -> None:
+        self._hosted = hosted
         self.invocation_count = 0
         self.last_request: dict[str, Any] | None = None
 
     def call(self, call: ProviderCall, *, secret: str) -> ProviderResult:
-        if not call.profile.base_url.startswith("http://127.0.0.1:"):
+        from aiscc.public_live.luna_profile import hosted_luna_profile
+
+        if not call.profile.base_url.startswith("http://127.0.0.1:") and not (
+            self._hosted and call.profile == hosted_luna_profile()
+        ):
             raise ValueError("REAL_PROVIDER_ENDPOINT_FORBIDDEN")
         input_items = list(call.input_items)
         request: dict[str, Any] = {
