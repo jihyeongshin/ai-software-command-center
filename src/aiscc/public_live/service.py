@@ -23,6 +23,7 @@ from aiscc.persistence.public_live import (
     RunIdentity,
 )
 from aiscc.public_live.identity import AdmissionDenied, IdentityPolicy, request_identity
+from aiscc.public_live.start_authority import StartContract
 from aiscc.workflow.guards import TrustedGuardFact
 from aiscc.workflow.kernel import WorkflowKernel
 from aiscc.workflow.models import DecisionOutcome, TransitionRequest
@@ -44,6 +45,7 @@ class AdmissionService:
         *,
         policy_digest: bytes,
         content_digest: bytes,
+        start_contract: StartContract | None = None,
     ) -> None:
         if len(policy_digest) != 32 or len(content_digest) != 32:
             raise ValueError("POLICY_UNAVAILABLE")
@@ -51,6 +53,7 @@ class AdmissionService:
         self.identity = identity
         self.policy_digest = policy_digest
         self.content_digest = content_digest
+        self.start_contract = start_contract
 
     async def admit(
         self, body: bytes, key: str, *, peer: str, headers: tuple[tuple[str, str], ...]
@@ -80,12 +83,34 @@ class AdmissionService:
                     bytes.fromhex(context["content_digest"]),
                 )
                 value = replace(value, payload_digest=original_payload)
-            result = await tx.admit_checked(
-                value,
-                policy_digest=self.policy_digest,
-                content_digest=self.content_digest,
-                hmac_version=self.identity.key_version,
-            )
+            if self.start_contract is None:
+                result = await tx.admit_checked(
+                    value,
+                    policy_digest=self.policy_digest,
+                    content_digest=self.content_digest,
+                    hmac_version=self.identity.key_version,
+                )
+            else:
+                start_payload = dict(self.start_contract.payload)
+                start_payload.update(
+                    {
+                        "contract_digest": self.start_contract.digest,
+                        "policy_digest": self.policy_digest.hex(),
+                        "content_digest": self.content_digest.hex(),
+                        "idempotency_ref": key_hash.hex(),
+                        "admitted_payload_hash": value.payload_digest.hex(),
+                        "reservation_ref": "public-reservation:" + value.run_id.hex(),
+                        "slot_generation": 1,
+                        "requester_ref": hashlib.sha256(bucket).hexdigest(),
+                    }
+                )
+                result = await tx.admit_checked_with_start(
+                    value,
+                    policy_digest=self.policy_digest,
+                    content_digest=self.content_digest,
+                    hmac_version=self.identity.key_version,
+                    start_contract=start_payload,
+                )
             expiry = None
             if "error" not in result and not result["replayed"]:
                 ctx = await tx.run_context(identity.run_id)

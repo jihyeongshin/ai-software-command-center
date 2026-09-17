@@ -75,6 +75,17 @@ def test_official_sdk_serializes_exact_stateless_v1_flags_against_local_fake() -
     assert all(tool["type"] == "function" and tool["strict"] for tool in request["tools"])
 
 
+def test_proxy_environment_cannot_retarget_fixed_transport(monkeypatch) -> None:
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+    monkeypatch.setenv("ALL_PROXY", "http://127.0.0.1:1")
+    with FakeResponsesServer() as server:
+        server.enqueue(response_body("completed", [final_message()]))
+        result = OpenAIResponsesAdapter().call(_call(), secret="synthetic-local-only")
+    assert result.outcome is ExecutionOperationOutcome.PROVIDER_COMPLETED
+    assert len(server.requests) == 1
+
+
 @pytest.mark.parametrize(
     ("status", "outcome"),
     [

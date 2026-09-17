@@ -12,7 +12,7 @@ import json
 import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import ClientDisconnect, Request
@@ -22,7 +22,7 @@ from starlette.types import Receive, Scope, Send
 from aiscc.persistence.public_live_limits import LimitsUnavailable, PublicLiveLimits, ReadNotFound
 from aiscc.public_live.identity import AdmissionDenied, request_identity
 from aiscc.public_live.service import AdmissionService
-from aiscc.public_live.source import DirectPeerSource, TrustedSource
+from aiscc.public_live.source import TrustedSource
 
 ORIGIN = "https://aiscc-replay.pages.dev"
 ROOT = "/v1/public-live/runs"
@@ -103,10 +103,14 @@ class LocalAdmissionBinding:
         )
 
 
+class SourceAuthority(Protocol):
+    def derive(self, scope: Scope) -> TrustedSource: ...
+
+
 class PublicLiveApp:
     def __init__(
         self,
-        source: DirectPeerSource | None,
+        source: SourceAuthority | None,
         limits: PublicLiveLimits | None,
         admission: LocalAdmissionBinding | None,
     ) -> None:
@@ -167,6 +171,10 @@ class PublicLiveApp:
 
         async def dispatch() -> Response:
             path = scope.get("path", "")
+            if path == "/health":
+                if scope.get("method") != "GET":
+                    return error("METHOD_NOT_ALLOWED")
+                return response(200, {"status": "ok"})
             if not path.startswith("/v1/public-live/"):
                 return error("NOT_FOUND")
             if self.source is None:
@@ -182,7 +190,7 @@ class PublicLiveApp:
                 return error("HEADERS_TOO_LARGE")
             if not cors:
                 return error("ORIGIN_DENIED")
-            if scope.get("scheme") != "https":
+            if not source.transport_secure:
                 return error("INVALID_REQUEST")  # No redirects or forwarded-proto authority.
             is_run = path.startswith(ROOT + "/") and "/" not in path[len(ROOT) + 1 :]
             if path != ROOT and not is_run:
@@ -191,7 +199,8 @@ class PublicLiveApp:
                 return error("INVALID_REQUEST")
             method = scope["method"]
             if method == "OPTIONS":
-                if one("access-control-request-method", "ORIGIN_DENIED") not in {"POST", "GET"}:
+                allowed_method = "GET" if is_run else "POST"
+                if one("access-control-request-method", "ORIGIN_DENIED") != allowed_method:
                     return error("ORIGIN_DENIED")
                 requested = values("access-control-request-headers")
                 if len(requested) > 1:
@@ -203,7 +212,7 @@ class PublicLiveApp:
                 return response(
                     204,
                     extra={
-                        "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
+                        "Access-Control-Allow-Methods": f"{allowed_method}, OPTIONS",
                         "Access-Control-Allow-Headers": (
                             "Content-Type, Idempotency-Key, X-Run-Read-Capability"
                         ),
@@ -282,7 +291,7 @@ class PublicLiveApp:
 
 def create_app(
     *,
-    source: DirectPeerSource | None = None,
+    source: SourceAuthority | None = None,
     limits: PublicLiveLimits | None = None,
     admission: LocalAdmissionBinding | None = None,
 ) -> PublicLiveApp:

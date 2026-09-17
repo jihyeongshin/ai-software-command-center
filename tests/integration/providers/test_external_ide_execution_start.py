@@ -440,7 +440,7 @@ def test_start_migration_upgrade_empty_downgrade_and_nonempty_preservation(datab
         assert migration("upgrade", "20260914_0010")[0] == 0
         assert migration("upgrade", "head")[0] == 0
         empty = asyncio.run(snapshot())
-        assert empty[0] == "20260916_0017" and empty[2] == ((), ())
+        assert empty[0] == "20260917_0020" and empty[2] == ((), ())
         assert migration("downgrade", "20260914_0010")[0] == 0
         assert migration("upgrade", "head")[0] == 0
         assert asyncio.run(snapshot()) == empty

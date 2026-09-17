@@ -230,7 +230,7 @@ def test_genesis_additive_migration_empty_and_nonempty_preservation(database_url
                             await connection.execute(
                                 text(
                                     "SELECT record_id,project_id,record_kind,canonical_body,"
-                                "fingerprint,issued_at "
+                                    "fingerprint,issued_at "
                                     "FROM self_dogfood_genesis_authority ORDER BY record_id"
                                 )
                             )
@@ -241,7 +241,7 @@ def test_genesis_additive_migration_empty_and_nonempty_preservation(database_url
                             await connection.execute(
                                 text(
                                     "SELECT tablename FROM pg_tables "
-                                "WHERE schemaname='public' ORDER BY tablename"
+                                    "WHERE schemaname='public' ORDER BY tablename"
                                 )
                             )
                         ).all()
@@ -252,7 +252,7 @@ def test_genesis_additive_migration_empty_and_nonempty_preservation(database_url
                                 text(
                                     "SELECT tgname,pg_get_triggerdef(oid) FROM pg_trigger "
                                     "WHERE tgrelid='self_dogfood_genesis_authority'::regclass "
-                                "ORDER BY tgname"
+                                    "ORDER BY tgname"
                                 )
                             )
                         ).all()
@@ -264,7 +264,7 @@ def test_genesis_additive_migration_empty_and_nonempty_preservation(database_url
     asyncio.run(admin(f'CREATE DATABASE "{name}"'))
     try:
         assert migrate("upgrade", "head")[0] == 0
-        assert asyncio.run(snapshot())[:2] == ("20260916_0017", ())
+        assert asyncio.run(snapshot())[:2] == ("20260917_0020", ())
         assert migrate("downgrade", "20260914_0011")[0] == 0
         assert migrate("upgrade", "head")[0] == 0
 

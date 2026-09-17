@@ -297,7 +297,7 @@ def test_migration_is_at_exact_head(database_url: str) -> None:
         try:
             async with engine.connect() as connection:
                 revision = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert revision == "20260916_0017"
+            assert revision == "20260917_0020"
         finally:
             await engine.dispose()
 
@@ -886,9 +886,7 @@ def test_blocker_provenance_projection_and_workrun_rollback_together(
                     )
                     or 0
                 )
-                request_row = await session.get(
-                    TransitionRequestRow, block.transition_request_id
-                )
+                request_row = await session.get(TransitionRequestRow, block.transition_request_id)
             projection = await kernel.load(run_id)
             assert blocker_count == 0
             assert request_row is None

@@ -578,10 +578,14 @@ class SecurityPolicy:
             in {ResourceDomain.REPOSITORY, ResourceDomain.SCENARIO}
         ):
             from aiscc.public_live.context_authority import PublicLiveContextResourceAuthority
+            from aiscc.public_live.start_authority import PublicLiveStartContextAuthority
 
             owner = self._public_context_policy
             if (
-                not isinstance(owner, PublicLiveContextResourceAuthority)
+                not isinstance(
+                    owner,
+                    (PublicLiveContextResourceAuthority, PublicLiveStartContextAuthority),
+                )
                 or grant is None
                 or not owner.current_matches(grant.selector_request, request.authoritative)
             ):
@@ -767,9 +771,12 @@ class SecurityPolicy:
         operation_fingerprint: str | None,
     ) -> bool:
         from aiscc.public_live.context_authority import PublicLiveContextResourceAuthority
+        from aiscc.public_live.start_authority import PublicLiveStartContextAuthority
 
         owner = self._public_context_policy
-        return isinstance(owner, PublicLiveContextResourceAuthority) and owner.allows(
+        return isinstance(
+            owner, (PublicLiveContextResourceAuthority, PublicLiveStartContextAuthority)
+        ) and owner.allows(
             context,
             mode=mode,
             scenario_id=scenario_id,

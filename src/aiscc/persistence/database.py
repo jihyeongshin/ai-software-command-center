@@ -8,10 +8,13 @@ from sqlalchemy.ext.asyncio import (
 )
 
 
-def create_engine(database_url: str, *, echo: bool = False) -> AsyncEngine:
+def create_engine(database_url: str, *, echo: bool = False, role: str | None = None) -> AsyncEngine:
     if not database_url.startswith("postgresql+asyncpg://"):
         raise ValueError("P1-4 authoritative store requires postgresql+asyncpg")
-    return create_async_engine(database_url, echo=echo, pool_pre_ping=True)
+    connect_args = {"server_settings": {"role": role}} if role is not None else {}
+    return create_async_engine(
+        database_url, echo=echo, pool_pre_ping=True, connect_args=connect_args
+    )
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

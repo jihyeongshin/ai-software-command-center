@@ -1,0 +1,26 @@
+{
+  "schema_version": "PUBLIC_LIVE_START_CONTRACT_V1",
+  "task_contract_id": "aiscc-public-live-stockroom-v1",
+  "task_contract_version": "1",
+  "runtime_mode": "PUBLIC_BOUNDED_LIVE",
+  "scenario_id": "stockroom-s1-normal",
+  "scenario_version": "1.0.0",
+  "repository_identity": "repository:synthetic-stockroom",
+  "repository_version": "be3dbe304904048b47ebe5e31d78c60a10572f7bc2931fd4058994585eba300d",
+  "provider_profile_id": "public-live-luna-v1",
+  "provider_profile_version": "1",
+  "tool_registry_id": "aiscc-stockroom-tools",
+  "tool_registry_version": "2",
+  "bounds": {
+    "run_deadline_seconds": 90,
+    "provider_call_maximum": 4,
+    "semantic_phase_maximum": 3,
+    "provider_retry_maximum": 1,
+    "tool_dispatch_maximum": 1,
+    "input_tokens_per_request": 8000,
+    "output_tokens_per_request": 2000,
+    "substantive_output_tokens_per_run": 6000,
+    "claim_lease_seconds": 15,
+    "claim_renew_seconds": 5
+  }
+}

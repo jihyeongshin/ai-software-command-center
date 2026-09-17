@@ -78,7 +78,7 @@ def test_preflight_exact_and_no_admission():
         )
     )
     assert result["status"] == 204 and result["raw"] == b""
-    assert result["headers"]["access-control-allow-methods"] == "POST, GET, OPTIONS"
+    assert result["headers"]["access-control-allow-methods"] == "POST, OPTIONS"
     assert result["headers"]["access-control-max-age"] == "300"
     assert result["headers"]["vary"] == "Origin"
     assert result["headers"]["access-control-allow-origin"] == ORIGIN

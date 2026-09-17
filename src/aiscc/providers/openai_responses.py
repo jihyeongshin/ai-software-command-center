@@ -4,7 +4,7 @@ import hashlib
 from types import MappingProxyType
 from typing import Any
 
-from openai import APIConnectionError, APITimeoutError, OpenAI, Timeout
+from openai import APIConnectionError, APITimeoutError, DefaultHttpxClient, OpenAI, Timeout
 
 from aiscc.providers.models import (
     ExecutionOperationOutcome,
@@ -28,10 +28,23 @@ class OpenAIResponsesAdapter:
         self.last_request: dict[str, Any] | None = None
 
     def call(self, call: ProviderCall, *, secret: str) -> ProviderResult:
+        from urllib.parse import urlsplit
+
         from aiscc.public_live.luna_profile import hosted_luna_profile
 
-        if not call.profile.base_url.startswith("http://127.0.0.1:") and not (
-            self._hosted and call.profile == hosted_luna_profile()
+        endpoint = urlsplit(call.profile.base_url)
+        local = (
+            endpoint.scheme == "http"
+            and endpoint.hostname == "127.0.0.1"
+            and endpoint.port is not None
+            and endpoint.username is None
+            and endpoint.password is None
+            and not endpoint.query
+            and not endpoint.fragment
+            and endpoint.path == "/v1"
+        )
+        if (self._hosted and call.profile != hosted_luna_profile()) or (
+            not self._hosted and not local
         ):
             raise ValueError("REAL_PROVIDER_ENDPOINT_FORBIDDEN")
         input_items = list(call.input_items)
@@ -70,6 +83,7 @@ class OpenAIResponsesAdapter:
                 read=call.profile.read_timeout_seconds,
             ),
             max_retries=0,
+            http_client=DefaultHttpxClient(trust_env=False, follow_redirects=False),
         )
         try:
             raw_response = client.responses.with_raw_response.create(**request)

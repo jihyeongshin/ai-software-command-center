@@ -95,6 +95,8 @@ class AgentExecutionService:
         security_profile_version: str = "p1-3-v2",
         time_source: Callable[[], float] = monotonic,
         durable_time_source: Callable[[], datetime] = lambda: datetime.now(UTC),
+        public_semantic_validator: Callable[[str, ProviderResult], MappingProxyType[str, Any]]
+        | None = None,
     ) -> None:
         self._policy = policy
         self._adapter = adapter
@@ -115,6 +117,7 @@ class AgentExecutionService:
         self._security_profile_version = security_profile_version
         self._time_source = time_source
         self._durable_time_source = durable_time_source
+        self._public_semantic_validator = public_semantic_validator
         self._started_at = time_source()
         self._closed = False
         self.failure_events: list[str] = []
@@ -256,6 +259,8 @@ class AgentExecutionService:
         principal: str,
         scenario_id: str,
         max_provider_rounds: int | None = None,
+        public_claim: Any | None = None,
+        public_worker_repository: Any | None = None,
     ) -> DurableExecutionResult:
         """Run or resume the sole durable P1-5 provider/tool causal path."""
         repository = self._require_durable_dependencies()
@@ -289,8 +294,22 @@ class AgentExecutionService:
             if recovered:
                 return DurableExecutionResult("EXECUTION_FAILED")
             history = await repository.load_private_protocol_items(execution_attempt_id)
+            operations = await repository.load_operations(execution_attempt_id)
+            semantic_history: tuple[dict[str, object], ...] = ()
+            if public_worker_repository is not None and public_claim is not None:
+                semantic_history = await public_worker_repository.semantic_history(
+                    public_claim.current().run_id
+                )
+            last_semantic = semantic_history[-1] if semantic_history else None
+            retrying_closed_provider = bool(
+                operations
+                and operations[-1].kind is OperationKind.PROVIDER
+                and operations[-1].outcome is ExecutionOperationOutcome.DEFINITELY_NOT_SENT
+            )
             final_text = _latest_final_text(history)
-            if final_text is not None:
+            if final_text is not None and (
+                last_semantic is None or last_semantic.get("validation_decision") == "COMPLETE"
+            ):
                 submission = await self._complete_durable_attempt(
                     repository, current, attempt, final_text
                 )
@@ -309,7 +328,15 @@ class AgentExecutionService:
                     return DurableExecutionResult("EXECUTION_FAILED")
                 history = await repository.load_private_protocol_items(execution_attempt_id)
             call_id = _continuation_call_id(history)
-            if history:
+            if retrying_closed_provider or (
+                last_semantic is not None
+                and last_semantic.get("validation_decision")
+                in {"VERIFY_REQUIRED", "CORRECTABLE_DEFECT"}
+            ):
+                input_items = initial_inputs or ()
+                input_authority = ProviderInputAuthority.INITIAL_SERVER
+                continuation_hash = None
+            elif history:
                 if call_id is None:
                     raise AuthorityConflictError("durable continuation call_id is missing")
                 validate_continuation(
@@ -326,8 +353,29 @@ class AgentExecutionService:
                 input_items = initial_inputs or ()
                 input_authority = ProviderInputAuthority.INITIAL_SERVER
                 continuation_hash = None
-            operations = await repository.load_operations(execution_attempt_id)
             ordinal = len(operations) + 1
+            semantic_plan = None
+            if attempt.runtime_mode is RuntimeMode.PUBLIC_BOUNDED_LIVE:
+                from aiscc.providers.semantic import plan_next_semantic_request
+
+                prior = tuple(MappingProxyType(dict(item)) for item in semantic_history)
+                validation = None
+                if last_semantic is not None and last_semantic.get("validation_decision") in {
+                    "VERIFY_REQUIRED",
+                    "CORRECTABLE_DEFECT",
+                }:
+                    validation = MappingProxyType(
+                        {
+                            "decision": last_semantic["validation_decision"],
+                            "proof": last_semantic["validation_proof"],
+                            "defect_ref": last_semantic.get("defect_ref"),
+                        }
+                    )
+                semantic_plan = plan_next_semantic_request(
+                    prior=prior,
+                    validation=validation,
+                    tool_continuation=call_id is not None,
+                )
             operation_id = _stable_id(
                 "provider", execution_attempt_id, str(ordinal), profile.provider_resource_identity
             )
@@ -365,6 +413,17 @@ class AgentExecutionService:
                 resource_identity=profile.provider_resource_identity,
                 call_ordinal=ordinal,
             )
+            if public_claim is not None:
+                if public_worker_repository is None or semantic_plan is None:
+                    raise AuthorityConflictError("public claim executor authority is incomplete")
+                claim_ref = public_claim.current()
+                await public_worker_repository.link_and_bind_operation(
+                    claim_ref,
+                    ordinal=ordinal,
+                    operation_id=operation_id,
+                    role=semantic_plan.role,
+                    retry_of=semantic_plan.retry_of_operation_id,
+                )
             from aiscc.public_live.luna_profile import hosted_luna_profile
 
             hosted = profile == hosted_luna_profile()
@@ -383,28 +442,47 @@ class AgentExecutionService:
                         if hosted
                         else input_items,
                     )
-                call = ProviderCall(
-                    operation_id=operation_id,
-                    operation_fingerprint=fingerprint,
-                    execution_attempt_id=execution_attempt_id,
-                    work_run_id=work_run_id,
-                    state=current.state,
-                    state_version=current.state_version,
-                    runtime_mode=runtime_mode,
-                    principal=principal,
-                    scenario_id=scenario_id,
-                    execution_version=attempt.execution_version,
-                    profile=profile,
-                    input_items=input_items,
-                    tools=self._provider_tools(profile, broker),
-                    call_ordinal=ordinal,
-                    input_authority=input_authority,
-                    durable_continuation_hash=continuation_hash,
-                )
+                if hosted and semantic_plan is not None:
+                    from aiscc.providers.semantic import build_public_provider_call
+
+                    call = build_public_provider_call(
+                        plan=semantic_plan,
+                        operation_id=operation_id,
+                        operation_fingerprint=fingerprint,
+                        work_run_id=work_run_id,
+                        execution_attempt_id=execution_attempt_id,
+                        state_version=current.state_version,
+                        execution_version=attempt.execution_version,
+                        principal=principal,
+                        input_items=input_items,
+                        tools=self._provider_tools(profile, broker),
+                        continuation_hash=continuation_hash,
+                    )
+                else:
+                    call = ProviderCall(
+                        operation_id=operation_id,
+                        operation_fingerprint=fingerprint,
+                        execution_attempt_id=execution_attempt_id,
+                        work_run_id=work_run_id,
+                        state=current.state,
+                        state_version=current.state_version,
+                        runtime_mode=runtime_mode,
+                        principal=principal,
+                        scenario_id=scenario_id,
+                        execution_version=attempt.execution_version,
+                        profile=profile,
+                        input_items=input_items,
+                        tools=self._provider_tools(profile, broker),
+                        call_ordinal=ordinal,
+                        input_authority=input_authority,
+                        durable_continuation_hash=continuation_hash,
+                    )
                 if hosted:
                     from aiscc.public_live.luna_profile import bind_call
 
-                    call, _ = bind_call(call, role="PRIMARY")
+                    if semantic_plan is None:
+                        raise AuthorityConflictError("public semantic plan is missing")
+                    call, _ = bind_call(call, role=semantic_plan.role)
                 capabilities, secret_request = self._provider_capabilities(
                     call, current, operation_id
                 )
@@ -490,10 +568,13 @@ class AgentExecutionService:
                     expected_state_version=current.state_version,
                     expected_execution_version=reservation.execution_version,
                     refs={"secret_lease_id": lease.lease_id},
+                    claim_ref=public_claim.current() if public_claim is not None else None,
                 )
                 if not fresh:
                     self._secret_resolver.close(lease)
                     return DurableExecutionResult("EXECUTION_FAILED")
+                if public_claim is not None:
+                    public_claim.dispatch_started = True
             except (AuthorityConflictError, ValueError) as exc:
                 if lease is not None:
                     self._secret_resolver.close(lease)
@@ -597,12 +678,49 @@ class AgentExecutionService:
                     operation_id,
                     result.output_items,
                 )
+            semantic_decision = None
+            if (
+                result.outcome is ExecutionOperationOutcome.PROVIDER_COMPLETED
+                and result.tool_call is None
+                and semantic_plan is not None
+                and public_worker_repository is not None
+            ):
+                semantic_decision = (
+                    self._public_semantic_validator(semantic_plan.role, result)
+                    if self._public_semantic_validator is not None
+                    else MappingProxyType(
+                        {
+                            "decision": "COMPLETE",
+                            "proof": result.result_hash,
+                            "defect_ref": None,
+                        }
+                    )
+                )
+                await public_worker_repository.record_validation(
+                    operation_id,
+                    decision=str(semantic_decision["decision"]),
+                    proof=str(semantic_decision["proof"]),
+                    defect_ref=(
+                        str(semantic_decision["defect_ref"])
+                        if semantic_decision.get("defect_ref") is not None
+                        else None
+                    ),
+                )
             self.counters.provider_calls += 1
             self.counters.rounds += 1
             self.counters.budget_units += 1
             if target_phase is ExecutionOperationPhase.OUTCOME_UNKNOWN or result.outcome not in {
                 ExecutionOperationOutcome.PROVIDER_COMPLETED
             }:
+                if (
+                    result.outcome is ExecutionOperationOutcome.DEFINITELY_NOT_SENT
+                    and semantic_plan is not None
+                    and semantic_plan.retry_of_operation_id is None
+                    and ordinal < profile.provider_call_maximum
+                ):
+                    if public_claim is not None:
+                        public_claim.dispatch_started = False
+                    continue
                 await repository.transition_attempt(
                     execution_attempt_id,
                     "EXECUTION_FAILED",
@@ -627,6 +745,11 @@ class AgentExecutionService:
                 )
                 if not tool_admitted:
                     return DurableExecutionResult("EXECUTION_FAILED")
+                continue
+            if semantic_decision is not None and semantic_decision["decision"] in {
+                "VERIFY_REQUIRED",
+                "CORRECTABLE_DEFECT",
+            }:
                 continue
             if result.output_text is None:
                 raise AuthorityConflictError("provider completed without final output or tool call")

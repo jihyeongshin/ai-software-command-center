@@ -432,9 +432,7 @@ class PostgresExecutionRepository:
             await _advisory_lock(session, f"run:{work_run_id}")
             await _advisory_lock(session, f"execution-attempt:{attempt_id}")
             run = await session.scalar(
-                select(WorkRunRow)
-                .where(WorkRunRow.work_run_id == work_run_id)
-                .with_for_update()
+                select(WorkRunRow).where(WorkRunRow.work_run_id == work_run_id).with_for_update()
             )
             attempt = await session.scalar(
                 select(ExecutionAttemptRow)
@@ -536,9 +534,7 @@ class PostgresExecutionRepository:
             ):
                 raise AuthorityConflictError("invalid-history abort state/version mismatch")
             now = datetime.now().astimezone()
-            after = ExecutionStatus(
-                lifecycle_result(attempt.status, INVALID_HISTORY_ABORT_EVENT)
-            )
+            after = ExecutionStatus(lifecycle_result(attempt.status, INVALID_HISTORY_ABORT_EVENT))
             event = _execution_event(
                 attempt_id,
                 INVALID_HISTORY_ABORT_EVENT,
@@ -715,6 +711,23 @@ class PostgresExecutionRepository:
             row.outcome = outcome.value if outcome else None
             row.latest_event_sequence = event.event_sequence
             row.updated_at = now
+            if target in {
+                ExecutionOperationPhase.OUTCOME_KNOWN,
+                ExecutionOperationPhase.OUTCOME_UNKNOWN,
+            }:
+                function = (
+                    "worker_close_dispatch_pin"
+                    if target is ExecutionOperationPhase.OUTCOME_KNOWN
+                    else "worker_quarantine_dispatch"
+                )
+                await session.execute(
+                    text(f"SELECT public_live_api.{function}(:operation_id,:event_id,:evidence)"),
+                    {
+                        "operation_id": operation_id,
+                        "event_id": event.event_id,
+                        "evidence": bytes.fromhex(event.event_identity),
+                    },
+                )
 
     async def store_private_protocol_item(
         self,
@@ -882,9 +895,7 @@ class PostgresExecutionRepository:
             await _advisory_lock(session, f"execution-attempt:{attempt.execution_attempt_id}")
             await _advisory_lock(session, f"operation:{operation_id}")
             run = await session.scalar(
-                select(WorkRunRow)
-                .where(WorkRunRow.work_run_id == attempt.work_run_id)
-                .with_for_update()
+                select(WorkRunRow).where(WorkRunRow.work_run_id == attempt.work_run_id)
             )
             attempt = await session.scalar(
                 select(ExecutionAttemptRow)
@@ -1021,9 +1032,7 @@ class PostgresExecutionRepository:
             await _advisory_lock(session, f"run:{attempt.work_run_id}")
             await _advisory_lock(session, f"execution-attempt:{attempt.execution_attempt_id}")
             run = await session.scalar(
-                select(WorkRunRow)
-                .where(WorkRunRow.work_run_id == attempt.work_run_id)
-                .with_for_update()
+                select(WorkRunRow).where(WorkRunRow.work_run_id == attempt.work_run_id)
             )
             attempt = await session.scalar(
                 select(ExecutionAttemptRow)
@@ -1111,6 +1120,7 @@ class PostgresExecutionRepository:
         expected_state_version: int,
         expected_execution_version: int,
         refs: dict[str, object] | None = None,
+        claim_ref: object | None = None,
     ) -> bool:
         async with self._session_factory() as session, session.begin():
             operation = await session.get(ExecutionOperationRow, operation_id)
@@ -1123,9 +1133,7 @@ class PostgresExecutionRepository:
             await _advisory_lock(session, f"execution-attempt:{attempt.execution_attempt_id}")
             await _advisory_lock(session, f"operation:{operation_id}")
             run = await session.scalar(
-                select(WorkRunRow)
-                .where(WorkRunRow.work_run_id == attempt.work_run_id)
-                .with_for_update()
+                select(WorkRunRow).where(WorkRunRow.work_run_id == attempt.work_run_id)
             )
             attempt = await session.scalar(
                 select(ExecutionAttemptRow)
@@ -1184,6 +1192,33 @@ class PostgresExecutionRepository:
                 datetime.now(UTC),
                 target=ExecutionOperationPhase.DISPATCH_STARTED,
             )
+            if claim_ref is not None:
+                claim = cast(Any, claim_ref)
+                event = await session.scalar(
+                    select(OperationEventRow).where(
+                        OperationEventRow.operation_id == operation_id,
+                        OperationEventRow.event_sequence == operation.latest_event_sequence,
+                        OperationEventRow.target_phase
+                        == ExecutionOperationPhase.DISPATCH_STARTED.value,
+                    )
+                )
+                if event is None:
+                    raise AuthorityConflictError("dispatch marker disappeared before pin")
+                await session.execute(
+                    text(
+                        "SELECT public_live_api.worker_pin_dispatch("
+                        ":c,:w,:p,:f,:v,:operation_id,:event_id)"
+                    ),
+                    {
+                        "c": claim.claim_id,
+                        "w": claim.worker_id,
+                        "p": claim.process_generation,
+                        "f": claim.fence,
+                        "v": claim.claim_version,
+                        "operation_id": operation_id,
+                        "event_id": event.event_id,
+                    },
+                )
             return True
 
     async def fail_operation_before_side_effect(

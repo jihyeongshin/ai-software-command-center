@@ -157,6 +157,39 @@ class PublicLiveTransaction:
             raise RuntimeError("PUBLIC_ADMISSION_RESULT_INVALID")
         return result
 
+    async def admit_checked_with_start(
+        self,
+        value: PersistRun,
+        *,
+        policy_digest: bytes,
+        content_digest: bytes,
+        hmac_version: str,
+        start_contract: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Commit admission and its immutable start request in one transaction."""
+        result = await self._call(
+            "SELECT public_live_api.admit_checked_and_start(CAST(:a AS jsonb),CAST(:s AS jsonb))",
+            {
+                "a": json.dumps(
+                    {
+                        "run_id": value.run_id.hex(),
+                        "campaign_id": value.campaign_id,
+                        "bucket_hash": value.bucket_hash.hex(),
+                        "key_hash": value.key_hash.hex(),
+                        "read_hash": value.read_hash.hex(),
+                        "payload_digest": value.payload_digest.hex(),
+                        "policy_digest": policy_digest.hex(),
+                        "content_digest": content_digest.hex(),
+                        "hmac_version": hmac_version,
+                    }
+                ),
+                "s": json.dumps(start_contract),
+            },
+        )
+        if not isinstance(result, dict):
+            raise RuntimeError("PUBLIC_ADMISSION_RESULT_INVALID")
+        return result
+
     async def run_context(self, run_id: bytes) -> dict[str, Any]:
         result = await self._call("SELECT public_live_api.run_context(:r)", {"r": run_id})
         if not isinstance(result, dict):
