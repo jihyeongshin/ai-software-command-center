@@ -55,6 +55,8 @@ class LimitResult:
 
 
 class PublicLiveLimits:
+    flood_query = "SELECT public_live_api.flood_consume_retained(:c,:v,:s)"
+
     def __init__(self, repository: PublicLiveRepository):
         self.repository = repository
 
@@ -62,10 +64,7 @@ class PublicLiveLimits:
         try:
             async with self.repository.transaction() as tx:
                 result = LimitResult.parse(
-                    await tx._call(
-                        "SELECT public_live_api.flood_consume_retained(:c,:v,:s)",
-                        {"c": campaign, "v": version, "s": source},
-                    )
+                    await tx._call(self.flood_query, {"c": campaign, "v": version, "s": source})
                 )
             return result  # Commit also required for denied ingress accounting.
         except (SQLAlchemyError, OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
@@ -109,3 +108,14 @@ class PublicLiveLimits:
             raise LimitsUnavailable("LIVE_UNAVAILABLE") from exc
         except (OSError, ValueError, RuntimeError, KeyError, TypeError) as exc:
             raise LimitsUnavailable("LIVE_UNAVAILABLE") from exc
+
+
+class PublicLiveIngressLimits(PublicLiveLimits):
+    """Pre-admission flood authority for the frozen hosted campaign.
+
+    The database function validates the exact campaign/version and maintains the
+    same authoritative 120/1200 counters without requiring a release campaign
+    row. Admission and campaign activation remain separate Human-owned actions.
+    """
+
+    flood_query = "SELECT public_live_api.ingress_flood_consume_retained(:c,:v,:s)"

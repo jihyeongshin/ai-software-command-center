@@ -12,7 +12,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 
-from aiscc.persistence.database import create_engine
+from aiscc.persistence.database import create_engine, create_session_factory
+from aiscc.persistence.public_live import PublicLiveRepository
+from aiscc.persistence.public_live_limits import LimitsUnavailable, PublicLiveIngressLimits
 from aiscc.public_live.http import PublicLiveApp
 from aiscc.public_live.ingress import HostedPublicLiveIngress
 
@@ -20,7 +22,7 @@ EXPECTED_FUNCTIONS = (
     "admission_context(c text, b bytea)",
     "admit_checked_and_start(a jsonb, p jsonb)",
     "clock_lock()",
-    "flood_consume_retained(c text, v text, s bytea)",
+    "ingress_flood_consume_retained(c text, v text, s bytea)",
     "lock_run(r bytea)",
     "read_consume_retained(r bytea)",
     "read_key(c text, k bytea)",
@@ -38,7 +40,7 @@ EXPECTED_0021_FUNCTIONS = (
 )
 
 
-def test_upgrade_0020_to_0022() -> None:
+def test_upgrade_0020_to_0023() -> None:
     base = make_url(os.environ["AISCC_TEST_DATABASE_URL"])
     assert base.host == "127.0.0.1"
     name = "aiscc_ingress_upgrade_" + uuid4().hex
@@ -55,7 +57,12 @@ def test_upgrade_0020_to_0022() -> None:
     asyncio.run(database(f'CREATE DATABASE "{name}"'))
     url = base.set(database=name).render_as_string(False)
     try:
-        for revision in ("20260917_0020", "20260917_0021", "20260918_0022"):
+        for revision in (
+            "20260917_0020",
+            "20260917_0021",
+            "20260918_0022",
+            "20260918_0023",
+        ):
             result = subprocess.run(
                 [sys.executable, "-B", "-m", "alembic", "upgrade", revision],
                 env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
@@ -70,7 +77,7 @@ def test_upgrade_0020_to_0022() -> None:
                 async with engine.connect() as connection:
                     assert await connection.scalar(
                         text("SELECT version_num FROM alembic_version")
-                    ) == ("20260918_0022")
+                    ) == ("20260918_0023")
                     row = (
                         await connection.execute(
                             text(
@@ -123,7 +130,7 @@ def test_upgrade_0020_to_0022() -> None:
 
         asyncio.run(verify_0021_surface())
         reapplied = subprocess.run(
-            [sys.executable, "-B", "-m", "alembic", "upgrade", "20260918_0022"],
+            [sys.executable, "-B", "-m", "alembic", "upgrade", "20260918_0023"],
             env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
             capture_output=True,
             text=True,
@@ -173,6 +180,8 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
     async def check() -> None:
         admin = create_engine(l2_url)
         base = make_url(l2_url)
+        ingress = None
+        peer = None
 
         async def role_engine(role: str, role_password: str):
             return create_engine(
@@ -231,7 +240,7 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
         try:
             async with admin.begin() as connection:
                 assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260918_0022"
+                    "20260918_0023"
                 )
                 await connection.execute(
                     text(
@@ -316,10 +325,67 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
                     False,
                 )
 
+            limits = PublicLiveIngressLimits(PublicLiveRepository(create_session_factory(ingress)))
+            first = await limits.flood("public-live-v1", "v1", bytes(32))
+            if first.retry_after <= 5:
+                await asyncio.sleep(first.retry_after + 0.1)
+                first = await limits.flood("public-live-v1", "v1", bytes(32))
+            assert first.allowed
+            peer = await role_engine("aiscc_live_ingress_login", password)
+            peer_limits = PublicLiveIngressLimits(
+                PublicLiveRepository(create_session_factory(peer))
+            )
+            async with admin.begin() as connection:
+                await connection.execute(
+                    text(
+                        "UPDATE public_live_shared_limit SET attempts=119 "
+                        "WHERE campaign_id='public-live-v1' AND kind='SOURCE' "
+                        "AND identity=:source AND bucket=:bucket"
+                    ),
+                    {"source": bytes(32), "bucket": first.bucket},
+                )
+            source_boundary = await asyncio.gather(
+                limits.flood("public-live-v1", "v1", bytes(32)),
+                peer_limits.flood("public-live-v1", "v1", bytes(32)),
+            )
+            assert sorted(result.allowed for result in source_boundary) == [False, True]
+            async with admin.begin() as connection:
+                await connection.execute(
+                    text(
+                        "UPDATE public_live_shared_limit SET attempts=1199 "
+                        "WHERE campaign_id='public-live-v1' AND kind='CAMPAIGN' "
+                        "AND bucket=:bucket"
+                    ),
+                    {"bucket": first.bucket},
+                )
+            campaign_boundary = await asyncio.gather(
+                limits.flood("public-live-v1", "v1", b"a" * 32),
+                peer_limits.flood("public-live-v1", "v1", b"b" * 32),
+            )
+            assert sorted(result.allowed for result in campaign_boundary) == [False, True]
+            with pytest.raises(LimitsUnavailable, match="LIVE_UNAVAILABLE"):
+                await limits.flood("not-the-fixed-campaign", "v1", b"c" * 32)
+            async with admin.connect() as connection:
+                assert await connection.scalar(text("SELECT count(*) FROM public_campaign")) == 0
+                counts = (
+                    await connection.execute(
+                        text(
+                            "SELECT kind,count(*),sum(attempts) "
+                            "FROM public_live_shared_limit WHERE bucket=:bucket "
+                            "GROUP BY kind ORDER BY kind"
+                        ),
+                        {"bucket": first.bucket},
+                    )
+                ).all()
+                assert [tuple(row) for row in counts] == [
+                    ("CAMPAIGN", 1, 1201),
+                    ("SOURCE", 2, 122),
+                ]
+
             for statement in (
                 "SELECT public_live_api.clock_lock()",
-                "SELECT public_live_api.flood_consume_retained("
-                "'missing','v1',decode(repeat('00',32),'hex'))",
+                "SELECT public_live_api.ingress_flood_consume_retained("
+                "'public-live-v1','v1',decode(repeat('00',32),'hex'))",
                 "SELECT public_live_api.read_consume_retained(decode(repeat('00',16),'hex'))",
                 "SELECT public_live_api.read_key('missing',decode(repeat('00',32),'hex'))",
                 "SELECT public_live_api.admission_context('missing',decode(repeat('00',32),'hex'))",
@@ -334,6 +400,8 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
                 "UPDATE public.public_start_request SET phase=phase WHERE false",
                 "DELETE FROM public.public_start_request WHERE false",
                 "SELECT public_live_api.flood_consume("
+                "'missing','v1',decode(repeat('00',32),'hex'))",
+                "SELECT public_live_api.flood_consume_retained("
                 "'missing','v1',decode(repeat('00',32),'hex'))",
                 "SELECT public_live_api.read_consume(decode(repeat('00',16),'hex'))",
                 "SELECT public_live_api.maintain_limiter()",
@@ -370,6 +438,10 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
                 )
             await lifespan(await role_engine("aiscc_live_ingress_login", password), accepted=False)
         finally:
+            if peer is not None:
+                await peer.dispose()
+            if ingress is not None:
+                await ingress.dispose()
             await admin.dispose()
             cleanup = create_engine(l2_url)
             try:

@@ -12,7 +12,7 @@ from starlette.types import Receive, Scope, Send
 
 from aiscc.persistence import create_engine, create_session_factory
 from aiscc.persistence.public_live import PublicLiveRepository
-from aiscc.persistence.public_live_limits import PublicLiveLimits
+from aiscc.persistence.public_live_limits import PublicLiveIngressLimits
 from aiscc.public_live.edge_identity import RailwayEdgeIdentityAuthority
 from aiscc.public_live.http import PublicLiveApp
 
@@ -134,5 +134,5 @@ def create_app() -> HostedPublicLiveIngress:
     )
     # admission=None is intentional and release-safe. A later release task must
     # explicitly bind admission after hosted edge proof and L6 acceptance.
-    application = PublicLiveApp(source, PublicLiveLimits(repository), None)
+    application = PublicLiveApp(source, PublicLiveIngressLimits(repository), None)
     return HostedPublicLiveIngress(application, engine)
