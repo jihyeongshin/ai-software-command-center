@@ -1,5 +1,14 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-COMPETITION-DEFER-V1
+
+- Decision: `DEFER_PUBLIC_LIVE / KEEP_REPLAY_PUBLIC`.
+- Status: `BROWSER_COMMAND_CENTER_ACCEPTED / PERSISTED` after this Task.
+- Reason: final bounded 0025 rework consumed its one narrow correction and still failed the `LIVE_DISABLED` acceptance gate at downstream `LIVE_UNAVAILABLE`; additional scope is not selected for the competition critical path.
+- Preserves: Replay production/submission authority, frozen Live design, accepted hosted least-privilege foundation, Public admission `DISABLED`, Public Live `NOT_RELEASED`.
+- Does not authorize: resource teardown, post-competition abandonment, or Live release.
+- Authority: [0056 defer Cycle](cycles/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-1.cycle.md) and [0056 Browser Command Center Judgment](../../reports/aiscc/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-judgment-1.md).
+
 ## AISCC-P3-3-PUBLIC-LIVE-PREREQUISITE-DESIGN-V1
 
 - decision_status: HUMAN_PROVIDED / HUMAN_ACCEPTED / FROZEN under the [1646 Cycle](cycles/20260915_1646_aiscc-p3-3-public-live-human-acceptance-final-design-freeze-entry-1.cycle.md).

@@ -1,5 +1,17 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_0056)
+
+1. Do not select additional Public Live implementation or rework before the competition deadline.
+2. Preserve Public Replay availability as the current operational obligation.
+3. After the submission deadline, freeze the submitted experience under the existing no-mutation rule.
+4. Keep private Railway resources outside the competition public surface; this decision does not change them.
+5. Treat any post-competition Live continuation or Railway resource cleanup as a separately authorized future selection, not an implicit queue item.
+
+Competition disposition: `DEFER_PUBLIC_LIVE / KEEP_REPLAY_PUBLIC`. Public Live remains `NOT_RELEASED / DEFERRED_FOR_COMPETITION`, Public admission remains `DISABLED`, and the L5 positive release gate remains `INCOMPLETE / TERMINALLY_DEFERRED_FOR_COMPETITION`. The historical L1-L8 plan and frozen design remain preserved below, but their competition execution path is superseded by this defer decision.
+
+Authority: [0056 defer Cycle](cycles/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-1.cycle.md) and [0056 Browser Command Center Judgment](../../reports/aiscc/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-judgment-1.md).
+
 ## Current sequence (20260915_1646)
 
 Public Live prerequisite design is HUMAN_ACCEPTED / FROZEN; Live implementation is NOT_STARTED. P3-3 remains SUBMITTED / POST_SUBMISSION_IMPROVEMENT_WINDOW and competition submission COMPLETED. Public Replay remains DEPLOYED / VERIFIED / HUMAN_ACCEPTED; Live remains NOT_RELEASED / DISABLED_FOR_INITIAL_RELEASE.

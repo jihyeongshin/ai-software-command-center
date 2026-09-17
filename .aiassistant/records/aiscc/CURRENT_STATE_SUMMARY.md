@@ -1,5 +1,18 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_0056)
+
+- Competition submission: COMPLETED / HUMAN_PROVIDED.
+- Public Replay: DEPLOYED / VERIFIED / HUMAN_ACCEPTED.
+- Public Live: NOT_RELEASED / DEFERRED_FOR_COMPETITION.
+- Public admission: DISABLED.
+- L5: bounded implementation/proof attempted; positive hosted release gate INCOMPLETE; competition retry queue CLOSED.
+- L6/L7/L8 Live path: NOT_ENTERED_FOR_COMPETITION.
+- Current competition surface: Replay-only.
+- Next operational obligation: preserve Replay availability; after the deadline, freeze the submitted experience.
+
+Authority: [0056 defer Cycle](cycles/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-1.cycle.md) and [0056 Browser Command Center Judgment](../../reports/aiscc/20260918_0056_aiscc-p3-3-public-live-bounded-rework-mandatory-stop-replay-only-defer-judgment-1.md). The final bounded 0025 rework exhausted its one narrow correction and did not pass the positive hosted release gate. This current projection supersedes earlier current-state and retry-queue wording while preserving the frozen Live design and accepted hosted least-privilege foundation as historical authority. It does not authorize resource teardown, future Live release, or post-competition continuation.
+
 ## Current authority (20260915_1646)
 
 - Competition submission: COMPLETED / HUMAN_PROVIDED.
