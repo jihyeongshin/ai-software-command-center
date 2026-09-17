@@ -6,15 +6,18 @@ the independent provider/secret selectors, receipts, or leases.
 """
 
 from dataclasses import replace
+from typing import Any
 
 from aiscc.contracts.security import ResourceDomain, ResourceScope, SecurityActionClass
 from aiscc.contracts.workflow import RuntimeMode
 from aiscc.providers.models import ProviderCall
+from aiscc.providers.tools import ToolDispatchContext
 from aiscc.public_live.luna_profile import bind_call
+from aiscc.runtime.docker import DockerRunSpec, stockroom_spec_fingerprint
 from aiscc.security.policy import default_profiles
 
 
-def luna_permission_profiles():
+def luna_permission_profiles() -> dict[str, Any]:
     profiles = default_profiles()
     key = RuntimeMode.PUBLIC_BOUNDED_LIVE.value
     profiles[key] = replace(profiles[key], fixed_scenarios=frozenset({"stockroom-s1-normal"}))
@@ -24,7 +27,7 @@ def luna_permission_profiles():
 class LunaScopeAuthority:
     """Per-request server scope, used as SecurityPolicy's Stockroom authority."""
 
-    def __init__(self, call: ProviderCall, ticket: dict, *, owner: str):
+    def __init__(self, call: ProviderCall, ticket: dict[str, Any], *, owner: str) -> None:
         bound, _ = bind_call(call, role=ticket["role"])
         if (
             owner != call.work_run_id
@@ -36,10 +39,15 @@ class LunaScopeAuthority:
         self._call = bound
         self.context = object()
 
-    def allows(
-        self, context, *, mode, scenario_id, action, scope, principal, run_id, operation_fingerprint
-    ):
+    def allows(self, context: object, **values: Any) -> bool:
         call = self._call
+        mode = values["mode"]
+        scenario_id = values["scenario_id"]
+        action = values["action"]
+        scope = values["scope"]
+        principal = values["principal"]
+        run_id = values["run_id"]
+        operation_fingerprint = values["operation_fingerprint"]
         identities = {
             ResourceDomain.PROVIDER: call.profile.provider_resource_identity,
             ResourceDomain.SECRET: call.profile.secret_resource_identity,
@@ -60,24 +68,57 @@ class LunaScopeAuthority:
 class LunaToolScopeAuthority:
     """One exact resolved Stockroom process scope, never a public argv selector."""
 
-    def __init__(self, *, dispatch_context, spec, principal: str, fingerprint: str):
-        from aiscc.providers.stockroom_tool import stockroom_spec_fingerprint
+    def __init__(
+        self,
+        *,
+        dispatch_context: ToolDispatchContext | None = None,
+        spec: DockerRunSpec,
+        principal: str,
+        fingerprint: str | None = None,
+        run_id: str | None = None,
+    ) -> None:
+        if (
+            spec.resource_id != "process:stockroom-summary-v1"
+            or spec.command != ("python", "-B", "-m", "stockroom", "summary")
+            or spec.network != "none"
+            or not principal
+            or (dispatch_context is None) == (run_id is None)
+        ):
+            raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
+        self.process_scope = spec.scope()
+        self._spec_fingerprint = stockroom_spec_fingerprint(spec)
+        expected_run_id = (
+            dispatch_context.work_run_id if dispatch_context is not None else run_id
+        )
+        if expected_run_id is None:
+            raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
+        self._expected_run_id: str = expected_run_id
+        self.dispatch_context: ToolDispatchContext | None = None
+        self.principal = principal
+        self.fingerprint: str | None = None
+        self.context = object()
+        if dispatch_context is not None:
+            if fingerprint is None:
+                raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
+            self.bind(dispatch_context=dispatch_context, fingerprint=fingerprint)
 
+    def bind(self, *, dispatch_context: ToolDispatchContext, fingerprint: str) -> object:
         if (
             dispatch_context.profile_id != "public-live-luna-v1"
             or dispatch_context.runtime_mode != RuntimeMode.PUBLIC_BOUNDED_LIVE.value
             or dispatch_context.scenario_id != "stockroom-s1-normal"
-            or dispatch_context.resolved_spec_fingerprint != stockroom_spec_fingerprint(spec)
-            or spec.resource_id != "process:stockroom-summary-v1"
-            or spec.command != ("python", "-B", "-m", "stockroom", "summary")
-            or spec.network != "none"
+            or dispatch_context.resolved_spec_fingerprint != self._spec_fingerprint
+            or dispatch_context.work_run_id != self._expected_run_id
+            or len(fingerprint) != 64
         ):
             raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
-        self.process_scope = spec.scope()
+        if self.dispatch_context is not None and (
+            self.dispatch_context != dispatch_context or self.fingerprint != fingerprint
+        ):
+            raise ValueError("PUBLIC_STOCKROOM_SCOPE_ALREADY_BOUND")
         self.dispatch_context = dispatch_context
-        self.principal = principal
         self.fingerprint = fingerprint
-        self.context = object()
+        return self.context
 
     def owns_scope(
         self,
@@ -88,17 +129,24 @@ class LunaToolScopeAuthority:
         operation_fingerprint: str | None,
     ) -> bool:
         return (
-            scope == self.process_scope
+            self.dispatch_context is not None
+            and scope == self.process_scope
             and principal == self.principal
             and run_id == self.dispatch_context.work_run_id
             and operation_fingerprint == self.fingerprint
         )
 
-    def allows(
-        self, context, *, mode, scenario_id, action, scope, principal, run_id, operation_fingerprint
-    ):
+    def allows(self, context: object, **values: Any) -> bool:
+        mode = values["mode"]
+        scenario_id = values["scenario_id"]
+        action = values["action"]
+        scope = values["scope"]
+        principal = values["principal"]
+        run_id = values["run_id"]
+        operation_fingerprint = values["operation_fingerprint"]
         return (
-            context is self.context
+            self.dispatch_context is not None
+            and context is self.context
             and mode is RuntimeMode.PUBLIC_BOUNDED_LIVE
             and scenario_id == "stockroom-s1-normal"
             and action is SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT

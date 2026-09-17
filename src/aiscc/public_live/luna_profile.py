@@ -6,16 +6,23 @@ from types import MappingProxyType
 from urllib.parse import urlsplit
 
 from aiscc.contracts.workflow import RuntimeMode
-from aiscc.providers.models import ProviderCall, ProviderProfile, canonical_json_bytes
+from aiscc.providers.models import (
+    ProviderCall,
+    ProviderInputAuthority,
+    ProviderProfile,
+    ToolRegistry,
+    canonical_json_bytes,
+)
+from aiscc.providers.stockroom_tool import StockroomToolConfig
+from aiscc.runtime.docker import DockerRunSpec
 
 PRICE_REFERENCE = "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
 POLICY_REFERENCE = "20260916_0950_aiscc-p3-3-public-live-l4-provider-profile-v1-accepted.md"
 ROLE_EFFORT = MappingProxyType({"PRIMARY": "low", "VERIFY": "low", "CORRECT": "medium"})
 
 
-def luna_tool_registry(config, spec):
+def luna_tool_registry(config: StockroomToolConfig, spec: DockerRunSpec) -> ToolRegistry:
     """Reuse Stockroom's exact process/resource requirements and sandbox spec."""
-    from aiscc.providers.models import ToolRegistry
     from aiscc.providers.stockroom_tool import build_stockroom_registry
 
     if config.registry_version != "2":
@@ -119,15 +126,28 @@ def bind_call(call: ProviderCall, *, role: str) -> tuple[ProviderCall, int]:
         raise ValueError("LUNA_PROFILE_BINDING_DENIED")
     if len(call.input_items) > 16:
         raise ValueError("INPUT_LIMIT")
-    # Text-only server payload. Byte upper bound, plus 1024 reserved framing
-    # tokens, is intentionally stricter than a chars/4 token estimate.
-    for item in call.input_items:
-        if (
-            set(item) != {"role", "content"}
-            or item["role"] not in {"system", "developer", "user", "assistant"}
-            or not isinstance(item["content"], str)
-        ):
-            raise ValueError("SERVER_TEXT_INPUT_REQUIRED")
+    # Initial input is server-owned text. A durable local continuation may
+    # contain only the Responses protocol item classes already validated by
+    # P1-5 before this binding runs.
+    if call.input_authority is ProviderInputAuthority.INITIAL_SERVER:
+        for item in call.input_items:
+            if (
+                set(item) != {"role", "content"}
+                or item["role"] not in {"system", "developer", "user", "assistant"}
+                or not isinstance(item["content"], str)
+            ):
+                raise ValueError("SERVER_TEXT_INPUT_REQUIRED")
+    elif (
+        call.input_authority is not ProviderInputAuthority.DURABLE_LOCAL
+        or call.durable_continuation_hash is None
+        or len(call.durable_continuation_hash) != 64
+        or any(
+            item.get("type")
+            not in {"message", "function_call", "function_call_output", "reasoning"}
+            for item in call.input_items
+        )
+    ):
+        raise ValueError("DURABLE_CONTINUATION_REQUIRED")
     for tool in call.tools:
         if (
             tool.get("name") != "stockroom_summary"
