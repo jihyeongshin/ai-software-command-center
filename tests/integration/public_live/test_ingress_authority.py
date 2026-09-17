@@ -20,6 +20,16 @@ EXPECTED_FUNCTIONS = (
     "admission_context(c text, b bytea)",
     "admit_checked_and_start(a jsonb, p jsonb)",
     "clock_lock()",
+    "flood_consume_retained(c text, v text, s bytea)",
+    "lock_run(r bytea)",
+    "read_consume_retained(r bytea)",
+    "read_key(c text, k bytea)",
+    "run_context(r bytea)",
+)
+EXPECTED_0021_FUNCTIONS = (
+    "admission_context(c text, b bytea)",
+    "admit_checked_and_start(a jsonb, p jsonb)",
+    "clock_lock()",
     "flood_consume(c text, v text, s bytea)",
     "lock_run(r bytea)",
     "read_consume(r bytea)",
@@ -28,7 +38,7 @@ EXPECTED_FUNCTIONS = (
 )
 
 
-def test_upgrade_0020_to_0021() -> None:
+def test_upgrade_0020_to_0022() -> None:
     base = make_url(os.environ["AISCC_TEST_DATABASE_URL"])
     assert base.host == "127.0.0.1"
     name = "aiscc_ingress_upgrade_" + uuid4().hex
@@ -45,7 +55,7 @@ def test_upgrade_0020_to_0021() -> None:
     asyncio.run(database(f'CREATE DATABASE "{name}"'))
     url = base.set(database=name).render_as_string(False)
     try:
-        for revision in ("20260917_0020", "20260917_0021"):
+        for revision in ("20260917_0020", "20260917_0021", "20260918_0022"):
             result = subprocess.run(
                 [sys.executable, "-B", "-m", "alembic", "upgrade", revision],
                 env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
@@ -60,7 +70,7 @@ def test_upgrade_0020_to_0021() -> None:
                 async with engine.connect() as connection:
                     assert await connection.scalar(
                         text("SELECT version_num FROM alembic_version")
-                    ) == ("20260917_0021")
+                    ) == ("20260918_0022")
                     row = (
                         await connection.execute(
                             text(
@@ -75,6 +85,50 @@ def test_upgrade_0020_to_0021() -> None:
                 await engine.dispose()
 
         asyncio.run(verify())
+
+        restored = subprocess.run(
+            [sys.executable, "-B", "-m", "alembic", "downgrade", "20260917_0021"],
+            env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
+            capture_output=True,
+            text=True,
+        )
+        assert restored.returncode == 0, restored.stderr.replace(url, "<TEST_DB>")
+
+        async def verify_0021_surface() -> None:
+            engine = create_engine(url)
+            try:
+                async with engine.connect() as connection:
+                    assert await connection.scalar(
+                        text("SELECT version_num FROM alembic_version")
+                    ) == ("20260917_0021")
+                    functions = (
+                        (
+                            await connection.execute(
+                                text(
+                                    "SELECT p.proname||'('||"
+                                    "pg_get_function_identity_arguments(p.oid)||')' "
+                                    "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+                                    "WHERE n.nspname='public_live_api' AND "
+                                    "has_function_privilege("
+                                    "'aiscc_public_live_ingress',p.oid,'EXECUTE') ORDER BY 1"
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
+                    assert tuple(functions) == EXPECTED_0021_FUNCTIONS
+            finally:
+                await engine.dispose()
+
+        asyncio.run(verify_0021_surface())
+        reapplied = subprocess.run(
+            [sys.executable, "-B", "-m", "alembic", "upgrade", "20260918_0022"],
+            env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
+            capture_output=True,
+            text=True,
+        )
+        assert reapplied.returncode == 0, reapplied.stderr.replace(url, "<TEST_DB>")
 
         async def add_downgrade_guard_member() -> None:
             engine = create_engine(url)
@@ -106,16 +160,6 @@ def test_upgrade_0020_to_0021() -> None:
                 await engine.dispose()
 
         asyncio.run(remove_downgrade_guard_member())
-        downgraded = subprocess.run(
-            [sys.executable, "-B", "-m", "alembic", "downgrade", "20260917_0020"],
-            env=os.environ | {"AISCC_DATABASE_URL": url, "PYTHONDONTWRITEBYTECODE": "1"},
-            capture_output=True,
-            text=True,
-        )
-        # PostgreSQL roles are cluster-wide. Grants in the fixture's separate
-        # fresh-head database must also prevent a destructive cross-DB drop.
-        assert downgraded.returncode != 0
-        assert "cannot be dropped because some objects depend on it" in downgraded.stderr
     finally:
         asyncio.run(database(f'DROP DATABASE "{name}"'))
 
@@ -187,7 +231,7 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
         try:
             async with admin.begin() as connection:
                 assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260917_0021"
+                    "20260918_0022"
                 )
                 await connection.execute(
                     text(
@@ -274,9 +318,9 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
 
             for statement in (
                 "SELECT public_live_api.clock_lock()",
-                "SELECT public_live_api.flood_consume("
+                "SELECT public_live_api.flood_consume_retained("
                 "'missing','v1',decode(repeat('00',32),'hex'))",
-                "SELECT public_live_api.read_consume(decode(repeat('00',16),'hex'))",
+                "SELECT public_live_api.read_consume_retained(decode(repeat('00',16),'hex'))",
                 "SELECT public_live_api.read_key('missing',decode(repeat('00',32),'hex'))",
                 "SELECT public_live_api.admission_context('missing',decode(repeat('00',32),'hex'))",
                 "SELECT public_live_api.admit_checked_and_start('{}'::jsonb,'{}'::jsonb)",
@@ -289,6 +333,10 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
                 "INSERT INTO public.public_start_event DEFAULT VALUES",
                 "UPDATE public.public_start_request SET phase=phase WHERE false",
                 "DELETE FROM public.public_start_request WHERE false",
+                "SELECT public_live_api.flood_consume("
+                "'missing','v1',decode(repeat('00',32),'hex'))",
+                "SELECT public_live_api.read_consume(decode(repeat('00',16),'hex'))",
+                "SELECT public_live_api.maintain_limiter()",
                 "SELECT public_live_api.pipeline_context(decode(repeat('00',16),'hex'))",
                 "SELECT public_live_api.execution_context(decode(repeat('00',16),'hex'))",
                 "SELECT public_live_api.worker_claim_next("

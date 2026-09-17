@@ -13,7 +13,6 @@ from aiscc.public_live.identity import AdmissionDenied
 from aiscc.public_live.source import TrustedSource, trusted_source
 
 _EDGE = re.compile(r"[a-z]{3}[1-9][0-9]*", re.ASCII)
-_CONFLICTING = frozenset({b"forwarded", b"x-forwarded-for", b"cf-connecting-ip"})
 
 
 @dataclass(frozen=True)
@@ -60,8 +59,6 @@ class RailwayEdgeIdentityAuthority:
                 raise ValueError
             raw: Sequence[tuple[bytes, bytes]] = scope["headers"]
             lowered = [(bytes(k).lower(), bytes(v)) for k, v in raw]
-            if any(name in _CONFLICTING for name, _ in lowered):
-                raise ValueError
             host = self._one(lowered, b"host")
             real_ip = self._one(lowered, b"x-real-ip")
             proto = self._one(lowered, b"x-forwarded-proto")

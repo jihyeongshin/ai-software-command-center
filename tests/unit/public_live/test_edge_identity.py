@@ -55,9 +55,6 @@ def test_ipv4_mapped_ipv6_normalizes_to_ipv4() -> None:
         lambda h: [(k, b"http") if k == b"x-forwarded-proto" else (k, v) for k, v in h],
         lambda h: [(k, v) for k, v in h if k != b"x-railway-edge"],
         lambda h: [(k, b"invalid") if k == b"x-railway-edge" else (k, v) for k, v in h],
-        lambda h: h + [(b"forwarded", b"for=8.8.8.8")],
-        lambda h: h + [(b"x-forwarded-for", b"8.8.8.8")],
-        lambda h: h + [(b"cf-connecting-ip", b"8.8.8.8")],
         lambda h: [(k, b"other.up.railway.app") if k == b"host" else (k, v) for k, v in h],
     ],
 )
@@ -66,6 +63,23 @@ def test_ambiguous_spoofed_or_conflicting_identity_denied(mutate) -> None:
     value["headers"] = mutate(value["headers"])
     with pytest.raises(AdmissionDenied, match="IDENTITY_UNAVAILABLE"):
         authority().derive(value)
+
+
+def test_non_authority_forwarding_headers_are_ignored() -> None:
+    expected = authority().derive(scope())
+    hostile = authority().derive(
+        scope(
+            extra=[
+                (b"forwarded", b"for=not-an-ip;proto=http"),
+                (b"forwarded", b"for=192.0.2.1,for=198.51.100.2"),
+                (b"x-forwarded-for", b"not-an-ip, 192.0.2.1"),
+                (b"x-forwarded-for", b"203.0.113.7"),
+                (b"cf-connecting-ip", b"invalid"),
+                (b"cf-connecting-ip", b"2001:db8::1"),
+            ]
+        )
+    )
+    assert hostile == expected
 
 
 def test_release_gate_is_fail_closed_and_request_cannot_set_it() -> None:
