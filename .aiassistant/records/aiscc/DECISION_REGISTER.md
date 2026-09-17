@@ -1,5 +1,20 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-L5-TERMINAL-CLOSURE-CANDIDATE-V1
+
+- Decision candidate: `L5_TERMINAL_ACCEPTANCE_CANDIDATE`.
+- Status: `EXECUTOR_EVIDENCE_COMPLETE / BROWSER_REVIEW_REQUIRED`; this entry does not mark L5 accepted or closed.
+- Current code baseline: `4c3cb6dc33e47be2a3260d15134ba6b036c7f0fc`.
+- Criterion 1, Railway trusted peer/header overwrite and spoof cases: `REUSED_ACCEPTED` from the 0201 result accepted by the 0317 Browser judgment.
+- Criterion 2, supervisor termination/no-send fencing/remote-unknown quarantine: `REUSED_ACCEPTED` from the cumulative local L5 runtime accepted under 1331 and persisted under 1524/1612; proof-owner code remains unchanged at the current baseline.
+- Criterion 3, no public owner DB route or secret exposure: `REUSED_ACCEPTED` from 1459 local secret/container proof, 2112 private worker proof, and 0201 hosted route/least-privilege/final inventory evidence.
+- Criterion 4, tool/network/filesystem isolation and Replay independence: `REUSED_ACCEPTED` from the cumulative executable sandbox/provider-double and full-regression evidence accepted under 1331; proof-owner code remains unchanged.
+- Criterion 5, actual paid resource/deployment actions require separate authorization: `SATISFIED_BY_AUTHORITY_BOUNDARY`; every hosted mutation was separately Task-authorized, while provider secret insertion, paid calls, admission, release, and L6-L8 remain outside this candidate.
+- Final safe state: Public admission `DISABLED`; Public Live `NOT_RELEASED`; Replay unchanged; provider/OpenAI calls `0`.
+- Authority: [0317 acceptance Cycle](cycles/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-entry-1.cycle.md), [0317 Browser judgment](../../reports/aiscc/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-judgment-1.md), and [frozen implementation sequence](../../reports/aiscc/AISCC_PUBLIC_LIVE_IMPLEMENTATION_SEQUENCE.json).
+- Historical reconciliation: `AISCC-P3-3-PUBLIC-LIVE-COMPETITION-DEFER-V1` remains accepted history at issuance time; its no-more-retry current projection is superseded by the later Human reopen and accepted 0201 result.
+- Does not authorize: Public Live release, admission enablement, provider credentials/calls, L6/L7/L8, or new paid resources.
+
 ## AISCC-P3-3-PUBLIC-LIVE-COMPETITION-DEFER-V1
 
 - Decision: `DEFER_PUBLIC_LIVE / KEEP_REPLAY_PUBLIC`.

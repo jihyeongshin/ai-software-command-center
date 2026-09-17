@@ -1,5 +1,21 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_0317 reconciliation candidate)
+
+- Competition submission: `COMPLETED / HUMAN_PROVIDED`.
+- Public Replay: `DEPLOYED / VERIFIED / HUMAN_ACCEPTED / UNCHANGED`.
+- Public Live: `NOT_RELEASED`.
+- Public admission: `DISABLED`.
+- L5 overall: `IN_PROGRESS / TERMINAL_ACCEPTANCE_CANDIDATE / BROWSER_REVIEW_REQUIRED`.
+- L5 hosted ingress / Railway edge identity / disabled-control matrix: `ACCEPTED` under the 0317 Browser judgment for the 0201 result.
+- L5 supervisor/no-send/remote-unknown, sandbox/tool isolation, secret non-exposure and Replay-independence evidence: `REUSED_ACCEPTED`; the eleven proof-owner paths are unchanged from the accepted source-complete baseline.
+- L6/L7/L8: `NOT_ENTERED / NOT_AUTHORIZED`.
+- Provider/OpenAI physical calls in the closure work: `0`.
+
+The 0056 `DEFER_PUBLIC_LIVE / KEEP_REPLAY_PUBLIC` decision remains valid historical authority for the point when it was made. Its closed-retry current projection was superseded by the later Human reopen and the accepted 0201 bounded recovery. This reconciliation does not erase 0056 history, release Public Live, enable admission, or claim Browser acceptance of L5 terminal closure.
+
+Current authority sources: [0317 acceptance Cycle](cycles/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-entry-1.cycle.md), [0317 Browser judgment](../../reports/aiscc/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-judgment-1.md), [L5 implementation sequence](../../reports/aiscc/AISCC_PUBLIC_LIVE_IMPLEMENTATION_SEQUENCE.json), and the 0317 terminal-closure Task. The next action is Browser review of the exact terminal-closure candidate; release and later phases remain separate Human/Browser gates.
+
 ## Current authority (20260918_0056)
 
 - Competition submission: COMPLETED / HUMAN_PROVIDED.

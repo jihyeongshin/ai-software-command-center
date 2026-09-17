@@ -1,5 +1,17 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_0317 reconciliation candidate)
+
+1. Browser Command Center reviews the exact 0317 terminal-closure result bundle and its criterion-by-criterion provenance.
+2. If accepted, Browser may record L5 `ACCEPTED / CLOSED`; the Executor does not perform that state transition itself.
+3. Until that judgment, keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, Railway edge trust absent, and Replay unchanged.
+4. Do not redo the accepted 0201 hosted ingress matrix unless a directly affected path or deployment contract changes.
+5. Any provider credential insertion, paid call, admission enablement, Public Live release, or L6/L7/L8 entry requires a separate explicit Human/Browser Task.
+
+The 0056 defer remains historical accepted provenance. Its closed competition retry queue was superseded by the later Human reopen and the accepted 0201 hosted ingress recovery. The present queue is limited to Browser review of `L5_TERMINAL_ACCEPTANCE_CANDIDATE`; it does not enqueue release or another technical rework.
+
+Authority: [0317 acceptance Cycle](cycles/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-entry-1.cycle.md), [0317 Browser judgment](../../reports/aiscc/20260918_0317_aiscc-p3-3-l5-hosted-ingress-proof-accepted-terminal-closure-judgment-1.md), and [implementation sequence](../../reports/aiscc/AISCC_PUBLIC_LIVE_IMPLEMENTATION_SEQUENCE.json).
+
 ## Current sequence (20260918_0056)
 
 1. Do not select additional Public Live implementation or rework before the competition deadline.
