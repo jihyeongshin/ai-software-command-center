@@ -1,5 +1,17 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_0822 L6 terminal candidate)
+
+1. Treat L5 as `ACCEPTED / CLOSED` under the attached 0822 Browser Cycle/Judgment.
+2. Browser Command Center reviews the exact 0822 L6 terminal-acceptance candidate, including T01-T35, production owner-chain/corpus-pin, multi-worker unknown-send, cap, and Replay-independence evidence.
+3. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, and Replay unchanged while that review is pending.
+4. Do not enter L7/L8, insert or read provider credentials, perform a paid provider call, or enable release without a separate explicit Human/Browser Task.
+5. Do not repeat the accepted hosted Railway edge proof unless a directly affected owner path or deployment contract changes.
+
+The 0056 defer and 0317 L5 candidate remain historical provenance. The attached 0822 authority closes L5 and authorizes only L6 verification. This Executor result is an L6 candidate and does not perform Browser acceptance or a release transition.
+
+Authority: [0822 acceptance Cycle](cycles/20260918_0822_aiscc-p3-3-l5-terminal-acceptance-l6-entry-1.cycle.md), [0822 final Browser Judgment](../../reports/aiscc/20260918_0822_aiscc-p3-3-l5-terminal-closure-final-acceptance-judgment-1.md), [0822 L6 handoff](../../reports/aiscc/20260918_0822_aiscc-browser-command-center-l5-terminal-acceptance-l6-entry-handoff-1.md), and [implementation sequence](../../reports/aiscc/AISCC_PUBLIC_LIVE_IMPLEMENTATION_SEQUENCE.json).
+
 ## Current sequence (20260918_0317 reconciliation candidate)
 
 1. Browser Command Center reviews the exact 0317 terminal-closure result bundle and its criterion-by-criterion provenance.

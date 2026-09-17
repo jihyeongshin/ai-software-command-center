@@ -1,5 +1,21 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_0822 L5 terminal acceptance / L6 candidate)
+
+- Competition submission: `COMPLETED / HUMAN_PROVIDED`.
+- Public Replay: `DEPLOYED / VERIFIED / HUMAN_ACCEPTED / UNCHANGED`.
+- Public Live: `NOT_RELEASED`.
+- Public admission: `DISABLED`.
+- L3/L4/L5: `ACCEPTED / CLOSED` under the attached 0822 Browser Cycle/Judgment.
+- L6: `L6_TERMINAL_ACCEPTANCE_CANDIDATE / BROWSER_REVIEW_REQUIRED`; the Executor does not mark L6 accepted or closed.
+- Frozen L6 dependency join: `SATISFIED`.
+- Frozen scenario: `stockroom-s1-normal / 1.0.0`.
+- Real provider/OpenAI calls during L6 verification: `0`.
+
+The attached 0822 Browser authority supersedes the 0317 candidate projection by accepting and closing L5. The 0056 defer and 0317 candidate records remain preserved as historical authority at issuance time. L6 verification used isolated PostgreSQL, synthetic provider transport, the production owner/runtime composition, and unchanged accepted hosted edge evidence. It did not enable admission, release Public Live, enter L7/L8, or use provider credentials.
+
+Current authority sources: [0822 acceptance Cycle](cycles/20260918_0822_aiscc-p3-3-l5-terminal-acceptance-l6-entry-1.cycle.md), [0822 final Browser Judgment](../../reports/aiscc/20260918_0822_aiscc-p3-3-l5-terminal-closure-final-acceptance-judgment-1.md), [0822 L6 handoff](../../reports/aiscc/20260918_0822_aiscc-browser-command-center-l5-terminal-acceptance-l6-entry-handoff-1.md), and the frozen L6 implementation sequence/security matrix. The next action is Browser review of the exact L6 terminal-acceptance candidate; later release phases remain separate Human/Browser gates.
+
 ## Current authority (20260918_0317 reconciliation candidate)
 
 - Competition submission: `COMPLETED / HUMAN_PROVIDED`.

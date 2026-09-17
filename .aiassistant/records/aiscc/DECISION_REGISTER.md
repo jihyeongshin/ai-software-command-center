@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-L5-TERMINAL-ACCEPTED-L6-CANDIDATE-V1
+
+- L5 decision: `ACCEPTED / CLOSED` by Browser Command Center under the attached 0822 Cycle/Judgment.
+- L6 decision candidate: `L6_TERMINAL_ACCEPTANCE_CANDIDATE`.
+- L6 status: `EXECUTOR_EVIDENCE_COMPLETE / BROWSER_REVIEW_REQUIRED`; this entry does not mark L6 accepted or closed.
+- Canonical entering baseline: `6239e4b3c8ae1b84ac4604ddf66987fb50225462`.
+- Frozen matrix: T01-T35 has explicit current execution evidence, with T17/T19 hosted edge facts reused only from the accepted 0201/0822 lineage because affected product paths are unchanged.
+- Owner chain: production initializer, durable work authority, worker claim/fence, P1-5 dispatch marker, synthetic provider, and Stockroom tool composition are verified against `stockroom-s1-normal / 1.0.0`.
+- Bounds: restart/unknown-send, global/client/hour/day/campaign/slot/paid-call caps, and Replay failure-domain independence are verified without a real provider call.
+- Final safe state: Public admission `DISABLED`; Public Live `NOT_RELEASED`; Replay unchanged; provider/OpenAI calls `0`; L7/L8 not entered.
+- Authority: [0822 acceptance Cycle](cycles/20260918_0822_aiscc-p3-3-l5-terminal-acceptance-l6-entry-1.cycle.md), [0822 final Browser Judgment](../../reports/aiscc/20260918_0822_aiscc-p3-3-l5-terminal-closure-final-acceptance-judgment-1.md), [0822 L6 handoff](../../reports/aiscc/20260918_0822_aiscc-browser-command-center-l5-terminal-acceptance-l6-entry-handoff-1.md), and the frozen implementation sequence/security matrix.
+- Historical reconciliation: the 0056 defer and 0317 candidate entries retain their issuance-time meaning; the 0822 Browser judgment supersedes their current L5 projection only.
+- Does not authorize: provider credentials/calls, admission enablement, Public Live release, L7/L8, Railway/Cloudflare mutation, or a new paid resource.
+
 ## AISCC-P3-3-PUBLIC-LIVE-L5-TERMINAL-CLOSURE-CANDIDATE-V1
 
 - Decision candidate: `L5_TERMINAL_ACCEPTANCE_CANDIDATE`.
