@@ -506,7 +506,7 @@ def test_migration_paths_and_owner_preservation():
                     .all()
                 )
                 rev = await conn.scalar(text("SELECT version_num FROM alembic_version"))
-                if rev == "20260918_0023":
+                if rev == "20260919_0024":
                     assert (
                         await conn.execute(
                             text("SELECT enabled,active_campaign FROM public_control")
@@ -534,6 +534,6 @@ def test_migration_paths_and_owner_preservation():
                 assert rev == "20260914_0012"
             migrate(url, "head")
             after, rev = asyncio.run(snapshot(url))
-            assert rev == "20260918_0023" and after == before
+            assert rev == "20260919_0024" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))

@@ -71,7 +71,6 @@ class Harness:
                     text(f"CREATE ROLE {role} LOGIN PASSWORD 'synthetic_only' INHERIT")
                 )
                 await conn.execute(text(f"GRANT {group} TO {role}"))
-            await conn.execute(text(f"GRANT aiscc_public_live_runtime TO {self.roles[1]}"))
             await conn.execute(
                 text("""INSERT INTO public_campaign
               (campaign_id,starts_at,ends_at,available,hmac_version,scenario_id,scenario_version,
@@ -374,6 +373,70 @@ def test_real_owner_binding_markers_unknown_and_closure(l2_url):
             )
             await h.service.record_outcome(r.run_id, 1, "late")
             assert await h.sql("SELECT settled FROM public_campaign") == 68000
+
+    asyncio.run(check())
+
+
+def test_reconciler_compatibility_acl_is_exact(l2_url):
+    async def check():
+        async with harness(l2_url) as h:
+            async with h.admin.connect() as conn:
+                required = (
+                    "public_live_api.run_context(bytea)",
+                    "public_live_api.project_run(bytea,bigint,text,bytea)",
+                )
+                unrelated = (
+                    "public_live_api.admission_context(text,bytea)",
+                    "public_live_api.admit_checked(jsonb)",
+                    "public_live_api.mark_checked(bytea,bigint,integer,bigint,bigint)",
+                    "public_live_api.pipeline_context(bytea)",
+                )
+                for function in required:
+                    assert await conn.scalar(
+                        text("SELECT has_function_privilege(:role,:function,'EXECUTE')"),
+                        {"role": "aiscc_public_live_reconciler", "function": function},
+                    )
+                    assert await conn.scalar(
+                        text("SELECT has_function_privilege(:role,:function,'EXECUTE')"),
+                        {"role": "aiscc_public_live_runtime", "function": function},
+                    )
+                    assert not await conn.scalar(
+                        text(
+                            "SELECT EXISTS(SELECT 1 FROM pg_proc p "
+                            "WHERE p.oid=to_regprocedure(:function) AND EXISTS("
+                            "SELECT 1 FROM aclexplode(coalesce(p.proacl,"
+                            "acldefault('f',p.proowner))) a "
+                            "WHERE a.grantee=0 AND a.privilege_type='EXECUTE'))"
+                        ),
+                        {"function": function},
+                    )
+                for function in unrelated:
+                    assert not await conn.scalar(
+                        text("SELECT has_function_privilege(:role,:function,'EXECUTE')"),
+                        {"role": "aiscc_public_live_reconciler", "function": function},
+                    )
+                assert not await conn.scalar(
+                    text(
+                        "SELECT bool_or(has_table_privilege(:role,c.oid,'INSERT') OR "
+                        "has_table_privilege(:role,c.oid,'UPDATE') OR "
+                        "has_table_privilege(:role,c.oid,'DELETE')) "
+                        "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                        "WHERE n.nspname='public' AND c.relkind IN ('r','p')"
+                    ),
+                    {"role": "aiscc_public_live_reconciler"},
+                )
+                assert not await conn.scalar(
+                    text("SELECT pg_has_role(:role,'aiscc_public_live_runtime','USAGE')"),
+                    {"role": h.roles[1]},
+                )
+
+            run = await h.admit()
+            await h.running(run.run_id)
+            h.evidence.closed.add((run.run_id, "exact-acl"))
+            assert await h.service.close(run.run_id, "exact-acl", target="FAILED_NOT_DISPATCHED")
+            assert not await h.service.close(
+                run.run_id, "exact-acl", target="FAILED_NOT_DISPATCHED"
+            )
 
     asyncio.run(check())
 
