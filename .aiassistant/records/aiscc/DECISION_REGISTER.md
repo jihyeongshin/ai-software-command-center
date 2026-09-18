@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-FIXED-TOOL-AMENDMENT-CANDIDATE-V1
+
+- Human decision: `ACCEPT_PUBLIC_FIXED_IN_PROCESS_TOOL`.
+- Implementation: exact Public Live `stockroom-s1-normal / 1.0.0`, profile `public-live-luna-v1 / 1`, tool `stockroom_summary`, and exact empty arguments use a fixed deterministic in-process dispatcher behind the existing Tool Broker receipt and durable TOOL operation chain.
+- Public tool capability decision: TOOL exactly one; PROCESS, FILESYSTEM, tool NETWORK, and tool SECRET zero. Provider network/secret authority remains independent and unchanged.
+- Owner/Self-Dogfood decision: existing Docker-backed Stockroom path is unchanged and regression-proven.
+- Local affected L5/L6 result: `PASS / CANDIDATE`; real provider calls zero.
+- Hosted worker result: existing private worker redeployed successfully and registered without Docker; post-deploy side-effect counts remained zero.
+- Hosted security conflict: ingress still has non-empty provider-secret and edge-trust variables despite having no public domain. No value was read. Because 2134 does not authorize ingress configuration mutation, the Executor stopped that branch fail-closed.
+- Current result: `PUBLIC_FIXED_TOOL_IMPLEMENTED / L6_AFFECTED_REPROOF_CANDIDATE / L5_HOSTED_SECURITY_PRECONDITION_CONFLICT / BROWSER_REVIEW_REQUIRED`.
+- Failed 1919 evidence remains retained and unmodified; its mediated `FAILED_NOT_DISPATCHED` closure requires separate authorization.
+- Does not authorize: admission enablement, ingress exposure, new public runs, provider calls, failed-run settlement, Cloudflare Live deployment, release, or new Railway resources.
+- Authority: [2134 Cycle](cycles/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-accepted-amendment-entry-1.cycle.md), [2134 Judgment](../../reports/aiscc/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-acceptance-amendment-judgment-1.md), and the 2134 Executor proof bundle.
+
 ## AISCC-P3-3-PUBLIC-LIVE-WORKER-RUNTIME-DECISION-REQUIRED-V1
 
 - 1919 release disposition: `RELEASE_ROLLED_BACK_TO_REPLAY_ONLY / ACCEPTED_SAFE_ROLLBACK`.

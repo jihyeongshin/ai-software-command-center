@@ -1,5 +1,18 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_2134 hosted security residue review)
+
+1. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress domains absent, and Replay unchanged.
+2. Browser reviews the 2134 fixed-tool implementation and affected local L5/L6 evidence.
+3. Issue a separate bounded Railway configuration Task to establish the required hosted invariant: provider secret present only on the worker and Railway edge trust absent while ingress remains private.
+4. After that configuration is verified, rerun only the affected hosted no-send checks: worker healthy/registered, claimable work zero, provider request count unchanged, and no public ingress.
+5. If desired, separately authorize the existing mediated `FAILED_NOT_DISPATCHED` closure for the retained 1919 run. Do not combine that settlement with hosted configuration cleanup.
+6. Any release retry requires a later explicit Human/Browser Task.
+
+Do not create a public run, invoke OpenAI, expose ingress, enable admission, deploy Cloudflare Live, settle the failed run, or create a new Railway resource under this sequence.
+
+Authority: [2134 Cycle](cycles/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-accepted-amendment-entry-1.cycle.md), [2134 Judgment](../../reports/aiscc/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-acceptance-amendment-judgment-1.md), and the 2134 Executor result.
+
 ## Current sequence (20260918_2036 worker runtime decision required)
 
 1. Keep Public Replay public and unchanged; keep Public admission `DISABLED` and Public Live `NOT_RELEASED`.

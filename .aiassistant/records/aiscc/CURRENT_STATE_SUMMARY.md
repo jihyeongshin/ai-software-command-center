@@ -1,5 +1,21 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_2134 Public fixed tool amendment candidate)
+
+- Human-approved Public Live runtime amendment: `ACCEPT_PUBLIC_FIXED_IN_PROCESS_TOOL / IMPLEMENTED`.
+- Public Live fixed `stockroom_summary` now traverses the real Tool Broker and durable TOOL operation path while using the canonical deterministic `STOCKROOM_SUMMARY` in-process dispatcher.
+- Public tool authority: exactly one TOOL receipt; PROCESS, FILESYSTEM, tool NETWORK, tool SECRET, subprocess, Docker, filesystem, network, and environment access are absent.
+- Owner/Self-Dogfood Stockroom remains on the unchanged Docker-backed path; its targeted regression is green.
+- Affected local L5/L6 proof: PASS with isolated PostgreSQL and synthetic provider transport; provider-to-tool-to-provider durable continuation is proven without a real provider request.
+- Existing private Railway worker deployment `0f4bc561-2664-4412-bf17-f77c91323f7c`: `SUCCESS`; startup reports `PUBLIC_LIVE_FIXED_STOCKROOM_READY`; post-deploy claimable work, unreleased claims, dispatch pins, execution operations, provider requests, and active future-deadline runs are all zero.
+- Hosted security precondition conflict: ingress has zero public domains, but both the provider-secret variable and Railway edge-trust variable are non-empty. Their values were not read or exported. This prevents the required worker-only provider-secret assertion and means affected L5 hosted proof is not terminally complete.
+- Public admission: `DISABLED`; Public Live: `NOT_RELEASED`; Replay: unchanged; real provider calls: `0`; new public runs: `0`.
+- Current result: `PUBLIC_FIXED_TOOL_IMPLEMENTED / L6_AFFECTED_REPROOF_CANDIDATE / L5_HOSTED_SECURITY_PRECONDITION_CONFLICT / BROWSER_REVIEW_REQUIRED`.
+
+The 2134 runtime amendment supersedes the 2036 Docker requirement for the exact Public Live Stockroom path only. It does not change Owner/Self-Dogfood Docker semantics or authorize release. A separate Railway configuration Task must remove the provider secret and edge-trust residue from ingress, then repeat only the affected read-only/no-send hosted assertions before any release retry.
+
+Authority: [2134 Human amendment Cycle](cycles/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-accepted-amendment-entry-1.cycle.md), [2134 Browser Judgment](../../reports/aiscc/20260918_2134_aiscc-p3-3-l8-public-fixed-tool-human-acceptance-amendment-judgment-1.md), and [2134 handoff](../../reports/aiscc/20260918_2134_aiscc-browser-command-center-l8-public-fixed-tool-amendment-implementation-handoff-1.md).
+
 ## Current authority (20260918_2036 release rollback / worker runtime decision)
 
 - Competition submission and Public Replay: `PUBLIC / RETAINED / UNCHANGED`.
