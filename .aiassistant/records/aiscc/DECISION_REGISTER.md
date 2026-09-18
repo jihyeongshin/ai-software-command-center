@@ -1,5 +1,17 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-RERELEASE-READINESS-BLOCKER-V1
+
+- Browser authority now accepts/closes the 2344 retained-run settlement in full.
+- Readiness preflight result: `RERELEASE_READINESS_BLOCKED / RECONCILER_RUNTIME_ACL_ASYMMETRY_UNRESOLVED / BROWSER_REVIEW_REQUIRED`.
+- Source/ACL conflict: `ReconciliationService` reads context and projects terminal state through its reconciler repository, but current `run_context(bytea)` and `project_run(bytea,bigint,text,bytea)` functions are granted only to `aiscc_public_live_runtime`.
+- The accepted 2344 task-owned role-switching adapter was exact operator authority for one retained run. It did not install a reusable hosted reconciler binding or modify grants.
+- Fresh hosted DB durability evidence is also unavailable in this Task: Railway reports zero registered SSH keys; adding one would be a forbidden external mutation.
+- Read-only facts that remain valid: HEAD/origin exact; all relevant Railway services running; ingress/worker domains 0; accepted fixed-tool worker deployment unchanged; Replay HTTP 200; frontend live config disabled with null API origin.
+- Required next authority: a separate bounded security/DB compatibility Task must resolve the reconciler function authority and provide a safe read-only hosted evidence path, then repeat the fresh readiness preflight.
+- Does not authorize a grant, migration, login, SSH-key registration, release, admission enablement, provider call, new run, domain, deployment, or Cloudflare mutation.
+- Authority: [0102 Cycle](cycles/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-release-readiness-entry-1.cycle.md), [0102 Judgment](../../reports/aiscc/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-judgment-1.md), and the 0102 Executor evidence bundle.
+
 ## AISCC-P3-3-PUBLIC-LIVE-RETAINED-1919-SETTLEMENT-CANDIDATE-V1
 
 - Human/Browser authority: settle only the unique retained 1919 smoke after re-proving definitely-not-dispatched evidence.

@@ -1,5 +1,20 @@
 # AISCC Current State Summary
 
+## Current authority (20260919_0102 fresh re-release readiness blocked)
+
+- Browser Command Center accepts and closes the 2344 retained-run settlement: `FAILED_NOT_DISPATCHED`, reservation `SETTLED / 0`, slot `FREE`, preserved historical lineage.
+- Canonical entry baseline: `61ce804988dd0c32fef112f23bb2193b07a83541`; local HEAD and `origin/main` matched exactly.
+- Fresh Railway metadata: ingress, worker, initializer, API, and Live PostgreSQL deployments are `SUCCESS / RUNNING`; ingress and worker public domains remain 0.
+- The accepted fixed-tool worker deployment remains exact: `0f4bc561-2664-4412-bf17-f77c91323f7c`; accepted fixed-tool and worker-secret evidence is therefore unchanged in lineage.
+- Public Replay returned HTTP 200. Its live config remains exact fail-closed: `enabled=false`, `api_origin=null`.
+- Re-release readiness is blocked by the unresolved hosted reconciliation ACL contract. `ReconciliationService` uses `run_context` and `project_run` inside reconciler transactions, while migrations grant the current functions only to `aiscc_public_live_runtime`, not `aiscc_public_live_reconciler`.
+- The 2344 task-owned operator bridge was accepted for that exact one-run settlement; it is not a persistent hosted runtime binding and does not cure the general ACL mismatch.
+- Fresh settlement/control/campaign durability could not be read from hosted PostgreSQL without registering a Railway SSH key. No keys are registered, and this read-only Task forbids that account mutation.
+- Result: `RERELEASE_READINESS_BLOCKED / RECONCILER_RUNTIME_ACL_ASYMMETRY_UNRESOLVED / BROWSER_REVIEW_REQUIRED`.
+- No DB, Railway, Cloudflare, source, provider, admission, domain, or release mutation occurred. Public Live remains `NOT_RELEASED`; Replay remains public and unchanged.
+
+Authority: [0102 Cycle](cycles/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-release-readiness-entry-1.cycle.md), [0102 Judgment](../../reports/aiscc/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-judgment-1.md), [0102 handoff](../../reports/aiscc/20260919_0102_aiscc-browser-command-center-l8-settlement-accepted-fresh-release-readiness-handoff-1.md), and the 0102 Executor evidence bundle.
+
 ## Current authority (20260918_2344 retained 1919 smoke settlement candidate)
 
 - Canonical entering baseline: `81148b72613b42f228e66cabab55085438e9fe51`.

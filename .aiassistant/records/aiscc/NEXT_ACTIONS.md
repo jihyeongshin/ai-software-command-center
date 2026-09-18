@@ -1,5 +1,18 @@
 # AISCC Next Actions
 
+## Current sequence (20260919_0102 readiness blocker)
+
+1. Preserve Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress/worker domains 0, and Replay unchanged.
+2. Browser reviews the 0102 ACL and hosted-evidence-access blocker proof.
+3. Issue a separate bounded security/DB compatibility Task to make the reconciler repository's `run_context` and `project_run` calls executable through an explicit least-privilege hosted authority. Any migration/grant is a new Human/Browser decision.
+4. Establish an authorized mutation-free read-only hosted PostgreSQL evidence path; do not infer durability from historical evidence alone.
+5. Repeat the full fresh re-release readiness preflight after both conditions are resolved.
+6. Only after Browser accepts a ready candidate may Human decide whether to authorize another Public Live release attempt.
+
+Do not reuse the 2344 one-run operator adapter as a general runtime bypass. Do not register an SSH key, change DB grants, enable admission, create a run, call the provider, expose ingress, deploy Cloudflare, or release Public Live under this Task.
+
+Authority: [0102 Cycle](cycles/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-release-readiness-entry-1.cycle.md), [0102 Judgment](../../reports/aiscc/20260919_0102_aiscc-p3-3-l8-retained-1919-settlement-final-acceptance-judgment-1.md), [0102 handoff](../../reports/aiscc/20260919_0102_aiscc-browser-command-center-l8-settlement-accepted-fresh-release-readiness-handoff-1.md), and the 0102 Executor result.
+
 ## Current sequence (20260918_2344 retained settlement candidate)
 
 1. Browser Command Center reviews the exact 2344 target identity, closure proof, ledger conservation, reconciler authority, and idempotency evidence.
