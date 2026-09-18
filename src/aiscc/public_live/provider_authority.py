@@ -13,14 +13,26 @@ from aiscc.contracts.workflow import RuntimeMode
 from aiscc.providers.models import ProviderCall
 from aiscc.providers.tools import ToolDispatchContext
 from aiscc.public_live.luna_profile import bind_call
-from aiscc.runtime.docker import DockerRunSpec, stockroom_spec_fingerprint
 from aiscc.security.policy import default_profiles
+
+_PUBLIC_FIXED_TOOL_RESOURCE_IDENTITY = (
+    "aiscc-stockroom-tools:2:stockroom_summary:1:stockroom-summary-v1"
+)
 
 
 def luna_permission_profiles() -> dict[str, Any]:
     profiles = default_profiles()
     key = RuntimeMode.PUBLIC_BOUNDED_LIVE.value
-    profiles[key] = replace(profiles[key], fixed_scenarios=frozenset({"stockroom-s1-normal"}))
+    profiles[key] = replace(
+        profiles[key],
+        resources=profiles[key].resources
+        - {
+            ResourceDomain.PROCESS,
+            ResourceDomain.FILESYSTEM,
+            ResourceDomain.NETWORK,
+        },
+        fixed_scenarios=frozenset({"stockroom-s1-normal"}),
+    )
     return profiles
 
 
@@ -65,31 +77,27 @@ class LunaScopeAuthority:
         )
 
 
-class LunaToolScopeAuthority:
-    """One exact resolved Stockroom process scope, never a public argv selector."""
+class PublicLiveFixedToolScopeAuthority:
+    """One exact fixed Public Live tool binding without process or I/O authority."""
 
     def __init__(
         self,
         *,
         dispatch_context: ToolDispatchContext | None = None,
-        spec: DockerRunSpec,
+        implementation_fingerprint: str,
         principal: str,
         fingerprint: str | None = None,
         run_id: str | None = None,
     ) -> None:
         if (
-            spec.resource_id != "process:stockroom-summary-v1"
-            or spec.command != ("python", "-B", "-m", "stockroom", "summary")
-            or spec.network != "none"
-            or not principal
+            not principal
+            or len(implementation_fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in implementation_fingerprint)
             or (dispatch_context is None) == (run_id is None)
         ):
             raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
-        self.process_scope = spec.scope()
-        self._spec_fingerprint = stockroom_spec_fingerprint(spec)
-        expected_run_id = (
-            dispatch_context.work_run_id if dispatch_context is not None else run_id
-        )
+        self._implementation_fingerprint = implementation_fingerprint
+        expected_run_id = dispatch_context.work_run_id if dispatch_context is not None else run_id
         if expected_run_id is None:
             raise ValueError("PUBLIC_STOCKROOM_SCOPE_DENIED")
         self._expected_run_id: str = expected_run_id
@@ -107,7 +115,9 @@ class LunaToolScopeAuthority:
             dispatch_context.profile_id != "public-live-luna-v1"
             or dispatch_context.runtime_mode != RuntimeMode.PUBLIC_BOUNDED_LIVE.value
             or dispatch_context.scenario_id != "stockroom-s1-normal"
-            or dispatch_context.resolved_spec_fingerprint != self._spec_fingerprint
+            or dispatch_context.resolved_spec_fingerprint != ""
+            or dispatch_context.resolved_implementation_fingerprint
+            != self._implementation_fingerprint
             or dispatch_context.work_run_id != self._expected_run_id
             or len(fingerprint) != 64
         ):
@@ -130,7 +140,8 @@ class LunaToolScopeAuthority:
     ) -> bool:
         return (
             self.dispatch_context is not None
-            and scope == self.process_scope
+            and scope.domain is ResourceDomain.TOOL
+            and scope.resource_id == _PUBLIC_FIXED_TOOL_RESOURCE_IDENTITY
             and principal == self.principal
             and run_id == self.dispatch_context.work_run_id
             and operation_fingerprint == self.fingerprint
@@ -153,12 +164,6 @@ class LunaToolScopeAuthority:
             and principal == self.principal
             and run_id == self.dispatch_context.work_run_id
             and operation_fingerprint == self.fingerprint
-            and (
-                scope == self.process_scope
-                or (
-                    scope.domain is ResourceDomain.TOOL
-                    and scope.resource_id
-                    == "aiscc-stockroom-tools:2:stockroom_summary:1:stockroom-summary-v1"
-                )
-            )
+            and scope.domain is ResourceDomain.TOOL
+            and scope.resource_id == _PUBLIC_FIXED_TOOL_RESOURCE_IDENTITY
         )

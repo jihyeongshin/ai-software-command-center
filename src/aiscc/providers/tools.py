@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from typing import cast
 
 from jsonschema import Draft202012Validator  # type: ignore[import-untyped]
 
@@ -50,7 +51,8 @@ class ToolDispatchContext:
     resource_ref: str
     provider_operation_id: str
     provider_call_id: str
-    resolved_spec_fingerprint: str
+    resolved_spec_fingerprint: str = ""
+    resolved_implementation_fingerprint: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +101,7 @@ class ToolRegistryBroker:
         errors = sorted(validator.iter_errors(arguments), key=lambda item: list(item.path))
         if errors:
             raise ValueError("TOOL_SCHEMA_DENIED")
+        resolved_binding: dict[str, str] = {}
         if definition.dispatcher_version == "stockroom-summary-v1":
             if (
                 type(dispatch_context) is not ToolDispatchContext
@@ -112,9 +115,28 @@ class ToolRegistryBroker:
                 or dispatch_context.scenario_version != "1.0.0"
                 or dispatch_context.profile_id != profile_id
                 or dispatch_context.profile_version != "1"
-                or len(dispatch_context.resolved_spec_fingerprint) != 64
             ):
                 raise ValueError("STOCKROOM_RESOLVED_DISPATCH_CONTEXT_REQUIRED")
+            if mode is RuntimeMode.PUBLIC_BOUNDED_LIVE:
+                if (
+                    dispatch_context.resolved_spec_fingerprint != ""
+                    or len(dispatch_context.resolved_implementation_fingerprint) != 64
+                ):
+                    raise ValueError("STOCKROOM_RESOLVED_DISPATCH_CONTEXT_REQUIRED")
+                resolved_binding = {
+                    "resolved_implementation_fingerprint": (
+                        dispatch_context.resolved_implementation_fingerprint
+                    )
+                }
+            else:
+                if (
+                    len(dispatch_context.resolved_spec_fingerprint) != 64
+                    or dispatch_context.resolved_implementation_fingerprint != ""
+                ):
+                    raise ValueError("STOCKROOM_RESOLVED_DISPATCH_CONTEXT_REQUIRED")
+                resolved_binding = {
+                    "resolved_spec_fingerprint": dispatch_context.resolved_spec_fingerprint
+                }
         elif dispatch_context is not None:
             raise ValueError("LEGACY_TOOL_DISPATCH_CONTEXT_DENIED")
         fingerprint = canonical_sha256(
@@ -161,9 +183,7 @@ class ToolRegistryBroker:
                         "resource_ref": dispatch_context.resource_ref,
                         "provider_operation_id": dispatch_context.provider_operation_id,
                         "provider_call_id": dispatch_context.provider_call_id,
-                        "resolved_spec_fingerprint": (
-                            dispatch_context.resolved_spec_fingerprint
-                        ),
+                        **resolved_binding,
                     }
                     if dispatch_context is not None
                     else None
@@ -357,12 +377,15 @@ class ToolRegistryBroker:
             dispatch = getattr(dispatcher, "dispatch_with_receipts", None)
             if not callable(dispatch) or consumed.secret_lease is not None:
                 raise ValueError("STOCKROOM_RECEIPT_AWARE_DISPATCHER_REQUIRED")
-            result = dispatch(
-                definition,
-                arguments,
-                receipts=consumed.receipts,
-                requirements=consumed.prepared.capabilities,
-                dispatch_identity=consumed.dispatch_identity,
+            result = cast(
+                ToolOutputRef,
+                dispatch(
+                    definition,
+                    arguments,
+                    receipts=consumed.receipts,
+                    requirements=consumed.prepared.capabilities,
+                    dispatch_identity=consumed.dispatch_identity,
+                ),
             )
         elif consumed.secret_lease is None:
             result = dispatcher.dispatch(definition, arguments)

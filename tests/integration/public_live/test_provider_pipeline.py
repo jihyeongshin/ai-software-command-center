@@ -205,9 +205,9 @@ def test_fence_between_authorization_and_send_prevents_provider_start(l2_url):
     asyncio.run(check())
 
 
-def test_durable_tool_claim_drives_receipt_backed_dispatch_once(l2_url, tmp_path, monkeypatch):
+def test_durable_tool_claim_drives_receipt_backed_dispatch_once(l2_url):
     from aiscc.public_live.provider_pipeline import PublicProviderPipeline
-    from tests.unit.providers.test_luna_tool import CANDIDATE, composition, success
+    from tests.unit.providers.test_luna_tool import CANDIDATE, composition
 
     async def check():
         async with harness(l2_url) as h:
@@ -215,8 +215,8 @@ def test_durable_tool_claim_drives_receipt_backed_dispatch_once(l2_url, tmp_path
             await store.authorize(run, digest("tool-primary"), 8000, version)
             await outcome(store, run, 1)
             owner = (await store.context(run))["owner_binding"]
-            broker, prepared, dispatcher, runtime, spec, policy = composition(
-                tmp_path, monkeypatch, success, owner=owner, state_version=version
+            _, broker, prepared, dispatcher, policy = composition(
+                owner=owner, state_version=version
             )
             pipeline = PublicProviderPipeline(store, None)
             result = await pipeline.dispatch_tool(

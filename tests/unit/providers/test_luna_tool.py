@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 from dataclasses import replace
-from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -16,81 +15,63 @@ from aiscc.contracts.security import (
 from aiscc.contracts.workflow import RuntimeMode, WorkflowSnapshot, WorkflowState
 from aiscc.providers.authority import ProviderToolResourceAuthority
 from aiscc.providers.local_deterministic import STOCKROOM_SUMMARY
-from aiscc.providers.models import ProviderToolSelectorRequest, ToolCallCandidate
-from aiscc.providers.stockroom_tool import (
-    StockroomSummaryDispatcher,
-    build_dispatch_context,
-    build_stockroom_spec,
-    load_stockroom_tool_config,
-)
-from aiscc.providers.tools import (
-    ToolRegistryBroker,
-)
-from aiscc.runtime.docker import DockerRuntime, StockroomProcessObservation
+from aiscc.providers.models import ProviderToolSelectorRequest, ToolCallCandidate, canonical_sha256
+from aiscc.providers.tools import ConsumedToolDispatch, ToolRegistryBroker, UnknownToolOutcome
+from aiscc.public_live.luna_profile import luna_profile
+from aiscc.public_live.provider_authority import luna_permission_profiles
+from aiscc.public_live.stockroom_runtime import compose_public_stockroom
 from aiscc.security.capability import CapabilityConsumeRequest
 from aiscc.security.policy import SecurityPolicy
 
+CANDIDATE = ToolCallCandidate("stockroom_summary", "{}", "call-stockroom")
 
-def composition(tmp_path: Path, monkeypatch, runner, owner="run-stockroom", state_version=4):
-    from aiscc.public_live.luna_profile import luna_tool_registry
-    from aiscc.public_live.provider_authority import (
-        LunaToolScopeAuthority,
-        luna_permission_profiles,
-    )
-    from tests.unit.runtime.test_stockroom_image import synthetic_image
 
-    image, *_ = synthetic_image(tmp_path, monkeypatch)
-    config = load_stockroom_tool_config(Path("config/providers/stockroom-tools.v2.toml"))
-    spec = build_stockroom_spec(
-        config,
-        name="stockroom-runner",
-        run_id=owner,
-        workspace=tmp_path,
-        image_provenance=image,
-    )
-    registry = luna_tool_registry(config, spec)
-    broker = ToolRegistryBroker(registry)
-    dispatch_context = build_dispatch_context(
+def composition(owner: str = "run-stockroom", state_version: int = 4):
+    profile = luna_profile()
+    public = compose_public_stockroom(
         run_id=owner,
         attempt_id="attempt-stockroom",
-        state_version=state_version,
-        scenario_id="stockroom-s1-normal",
-        profile_id="public-live-luna-v1",
-        provider_operation_id="provider-operation",
-        provider_call_id=CANDIDATE.call_id,
-        spec=spec,
+        principal="owner",
+        profile=profile,
     )
-    dispatch_context = replace(dispatch_context, runtime_mode=RuntimeMode.PUBLIC_BOUNDED_LIVE.value)
+    broker = ToolRegistryBroker(public.registry)
+    snapshot = WorkflowSnapshot(owner, WorkflowState.RUNNING, state_version)
+    context = public.scope_authority.build_dispatch_context(
+        current=snapshot,
+        attempt=SimpleNamespace(execution_attempt_id="attempt-stockroom"),
+        profile=profile,
+        scenario_id="stockroom-s1-normal",
+        operation_id="tool-operation",
+        provider_call_id=CANDIDATE.call_id,
+    )
     definition, arguments, fingerprint = broker.validate_candidate(
         CANDIDATE,
         mode=RuntimeMode.PUBLIC_BOUNDED_LIVE,
-        profile_id="public-live-luna-v1",
+        profile_id=profile.profile_id,
         scenario_id="stockroom-s1-normal",
-        dispatch_context=dispatch_context,
+        dispatch_context=context,
     )
     assert arguments == {}
     identity = ":".join(
         (
-            registry.registry_id,
-            registry.version,
+            public.registry.registry_id,
+            public.registry.version,
             definition.tool_id,
             definition.schema_version,
             definition.dispatcher_version,
         )
     )
-    authority = ProviderToolResourceAuthority(
+    provider_authority = ProviderToolResourceAuthority(
         allowed_resource_identities=frozenset({identity}),
-        allowed_profile_ids=frozenset({"public-live-luna-v1"}),
+        allowed_profile_ids=frozenset({profile.profile_id}),
         allowed_scenarios=frozenset({"stockroom-s1-normal"}),
         allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
     )
-    restriction = LunaToolScopeAuthority(
-        dispatch_context=dispatch_context, spec=spec, principal="owner", fingerprint=fingerprint
-    )
     policy = SecurityPolicy(
-        luna_permission_profiles(), provider_tool_policy=authority, stockroom_policy=restriction
+        luna_permission_profiles(),
+        provider_tool_policy=provider_authority,
+        stockroom_policy=public.scope_authority,
     )
-    snapshot = WorkflowSnapshot(owner, WorkflowState.RUNNING, state_version)
     selector = ProviderToolSelectorRequest(
         ResourceDomain.TOOL.value,
         identity,
@@ -100,108 +81,173 @@ def composition(tmp_path: Path, monkeypatch, runner, owner="run-stockroom", stat
         snapshot.state,
         snapshot.state_version,
         RuntimeMode.PUBLIC_BOUNDED_LIVE,
-        "public-live-luna-v1",
-        "1",
+        profile.profile_id,
+        profile.version,
         "stockroom-s1-normal",
         fingerprint,
     )
-    attestation = authority.attest(selector)
-
-    def request_for(scope: ResourceScope, index: int) -> CapabilityConsumeRequest:
-        selector_ref = attestation.attestation_id if scope.domain is ResourceDomain.TOOL else None
-        selector_request = selector if scope.domain is ResourceDomain.TOOL else None
-        owner_context = restriction.context
-        grant = policy.issue_resource_grant(
-            mode=RuntimeMode.PUBLIC_BOUNDED_LIVE,
-            profile_version="p1-3-v2",
-            scenario_id="stockroom-s1-normal",
-            principal="owner",
-            run_id=snapshot.run_id,
-            action=SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
-            scope=scope,
-            selector_attestation_ref=selector_ref,
-            selector_request=selector_request,
-            operation_fingerprint=fingerprint,
-            stockroom_context=owner_context,
-        )
-        permission = PermissionRequest(
-            "owner",
-            snapshot.run_id,
-            RuntimeMode.PUBLIC_BOUNDED_LIVE,
-            snapshot,
-            snapshot,
-            SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
-            scope,
-            grant,
-            "p1-3-v2",
-            "stockroom-s1-normal",
-            *(AuthorityStatus.GRANTED for _ in range(5)),
-            AuthorityStatus.NOT_APPLICABLE,
-        )
-        capability = policy.issue_capability(policy.evaluate(permission), permission)
-        assert capability is not None
-        return CapabilityConsumeRequest(
-            capability,
-            "owner",
-            RuntimeMode.PUBLIC_BOUNDED_LIVE,
-            snapshot,
-            "p1-3-v2",
-            SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
-            scope,
-            selector_ref,
-            fingerprint,
-        )
-
+    attestation = provider_authority.attest(selector)
     tool_scope = ResourceScope(ResourceDomain.TOOL, identity)
-    requirements = (request_for(tool_scope, 1), request_for(spec.scope(), 2))
+    stockroom_context = public.scope_authority.issue_context(
+        scope=tool_scope,
+        operation_fingerprint=fingerprint,
+    )
+    grant = policy.issue_resource_grant(
+        mode=RuntimeMode.PUBLIC_BOUNDED_LIVE,
+        profile_version="p1-3-v2",
+        scenario_id="stockroom-s1-normal",
+        principal="owner",
+        run_id=snapshot.run_id,
+        action=SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
+        scope=tool_scope,
+        selector_attestation_ref=attestation.attestation_id,
+        selector_request=selector,
+        operation_fingerprint=fingerprint,
+        stockroom_context=stockroom_context,
+    )
+    permission = PermissionRequest(
+        "owner",
+        snapshot.run_id,
+        RuntimeMode.PUBLIC_BOUNDED_LIVE,
+        snapshot,
+        snapshot,
+        SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
+        tool_scope,
+        grant,
+        "p1-3-v2",
+        "stockroom-s1-normal",
+        *(AuthorityStatus.GRANTED for _ in range(5)),
+        AuthorityStatus.NOT_APPLICABLE,
+    )
+    capability = policy.issue_capability(policy.evaluate(permission), permission)
+    assert capability is not None
+    requirement = CapabilityConsumeRequest(
+        capability,
+        "owner",
+        RuntimeMode.PUBLIC_BOUNDED_LIVE,
+        snapshot,
+        "p1-3-v2",
+        SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
+        tool_scope,
+        attestation.attestation_id,
+        fingerprint,
+    )
     prepared = broker.prepare_dispatch(
         CANDIDATE,
         mode=RuntimeMode.PUBLIC_BOUNDED_LIVE,
-        profile_id="public-live-luna-v1",
+        profile_id=profile.profile_id,
         scenario_id="stockroom-s1-normal",
-        capabilities=requirements,
-        dispatch_context=dispatch_context,
+        capabilities=(requirement,),
+        dispatch_context=context,
     )
-    runtime = DockerRuntime(policy, stockroom_runner=runner)
-    return broker, prepared, StockroomSummaryDispatcher(runtime, spec), runtime, spec, policy
+    return public, broker, prepared, public.dispatcher(policy), policy
 
 
-CANDIDATE = ToolCallCandidate("stockroom_summary", "{}", "call-stockroom")
-
-
-def success(*_):
-    body = json.dumps(STOCKROOM_SUMMARY, sort_keys=True, separators=(",", ":")) + "\n"
-    return StockroomProcessObservation(0, body.encode("ascii"), b"")
-
-
-def test_luna_uses_existing_receipt_backed_stockroom_dispatch(tmp_path, monkeypatch):
-    broker, prepared, dispatcher, runtime, spec, policy = composition(
-        tmp_path, monkeypatch, success
-    )
+def test_public_luna_uses_fixed_receipt_backed_dispatch_without_ambient_io(monkeypatch):
+    public, broker, prepared, dispatcher, policy = composition()
     consumed = broker.consume_prepared(prepared, policy=policy, secret_lease_authority=None)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("ambient I/O path was reached")
+
+    monkeypatch.setattr("shutil.which", forbidden)
+    monkeypatch.setattr("subprocess.run", forbidden)
+    monkeypatch.setattr("subprocess.Popen", forbidden)
+    monkeypatch.setattr("socket.socket", forbidden)
+    monkeypatch.setattr("socket.create_connection", forbidden)
     result = broker.dispatch_prepared(consumed, dispatcher=dispatcher, secret_resolver=None)
+
     assert result.output == STOCKROOM_SUMMARY
+    assert result.output is not STOCKROOM_SUMMARY
+    assert result.result_hash == canonical_sha256(STOCKROOM_SUMMARY)
     assert dispatcher.invocation_count == 1
-    with pytest.raises(ValueError):
+    assert dispatcher.last_consumed_domains == (ResourceDomain.TOOL,)
+    assert public.registry.tools["stockroom_summary"].underlying_resource_requirements == ()
+    assert public.registry.tools["stockroom_summary"].secret_requirement is None
+    with pytest.raises(UnknownToolOutcome, match="PUBLIC_STOCKROOM_TOOL_RECEIPT_DENIED"):
         broker.dispatch_prepared(consumed, dispatcher=dispatcher, secret_resolver=None)
     assert dispatcher.invocation_count == 1
 
 
-@pytest.mark.parametrize("change", ["scope", "context", "fingerprint", "scenario"])
-def test_public_stockroom_scope_cannot_expand(tmp_path, monkeypatch, change):
-    broker, prepared, dispatcher, runtime, spec, policy = composition(
-        tmp_path, monkeypatch, success
+def test_public_fixed_dispatch_rejects_forged_receipt():
+    _, broker, prepared, dispatcher, policy = composition()
+    consumed = broker.consume_prepared(prepared, policy=policy, secret_lease_authority=None)
+    forged = replace(consumed.receipts[0], receipt_id="forged-receipt")
+    tampered = ConsumedToolDispatch(
+        consumed.prepared,
+        consumed.secret_lease,
+        (forged,),
+        consumed.dispatch_identity,
     )
-    restriction = policy._stockroom_policy
+    with pytest.raises(UnknownToolOutcome, match="PUBLIC_STOCKROOM_TOOL_RECEIPT_DENIED"):
+        broker.dispatch_prepared(tampered, dispatcher=dispatcher, secret_resolver=None)
+    assert dispatcher.invocation_count == 0
+
+
+@pytest.mark.parametrize(
+    ("candidate", "mode", "profile_id", "scenario_id", "reason"),
+    [
+        (
+            ToolCallCandidate("stockroom_summary", '{"path":"/tmp"}', "call-extra"),
+            RuntimeMode.PUBLIC_BOUNDED_LIVE,
+            "public-live-luna-v1",
+            "stockroom-s1-normal",
+            "TOOL_SCHEMA_DENIED",
+        ),
+        (
+            CANDIDATE,
+            RuntimeMode.OWNER_SELF_DOGFOOD,
+            "public-live-luna-v1",
+            "stockroom-s1-normal",
+            "TOOL_CONTEXT_DENIED",
+        ),
+        (
+            CANDIDATE,
+            RuntimeMode.PUBLIC_BOUNDED_LIVE,
+            "foreign-profile",
+            "stockroom-s1-normal",
+            "TOOL_CONTEXT_DENIED",
+        ),
+        (
+            CANDIDATE,
+            RuntimeMode.PUBLIC_BOUNDED_LIVE,
+            "public-live-luna-v1",
+            "foreign-scenario",
+            "TOOL_SCENARIO_DENIED",
+        ),
+    ],
+)
+def test_public_fixed_tool_denies_non_exact_contract(
+    candidate, mode, profile_id, scenario_id, reason
+):
+    public, broker, prepared, _, _ = composition()
+    with pytest.raises(ValueError, match=reason):
+        broker.validate_candidate(
+            candidate,
+            mode=mode,
+            profile_id=profile_id,
+            scenario_id=scenario_id,
+            dispatch_context=prepared.dispatch_context,
+        )
+    assert public.registry.tools["stockroom_summary"].underlying_resource_domains == frozenset()
+
+
+@pytest.mark.parametrize(
+    "domain",
+    [ResourceDomain.PROCESS, ResourceDomain.FILESYSTEM, ResourceDomain.NETWORK],
+)
+def test_public_stockroom_cannot_issue_ambient_resource_grant(domain):
+    public, _, prepared, _, policy = composition()
+    scope = ResourceScope(domain, f"denied:{domain.value.lower()}")
     grant = policy.issue_resource_grant(
         mode=RuntimeMode.PUBLIC_BOUNDED_LIVE,
         profile_version="p1-3-v2",
-        scenario_id="other" if change == "scenario" else "stockroom-s1-normal",
+        scenario_id="stockroom-s1-normal",
         principal="owner",
         run_id=prepared.dispatch_context.work_run_id,
         action=SecurityActionClass.RUN_EXECUTION_SIDE_EFFECT,
-        scope=replace(spec.scope(), argv=("sh",)) if change == "scope" else spec.scope(),
-        operation_fingerprint="0" * 64 if change == "fingerprint" else prepared.fingerprint,
-        stockroom_context=object() if change == "context" else restriction.context,
+        scope=scope,
+        operation_fingerprint=prepared.fingerprint,
+        stockroom_context=public.scope_authority.context,
     )
     assert grant is None

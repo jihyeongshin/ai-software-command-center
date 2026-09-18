@@ -15,7 +15,6 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
 
 from aiscc.persistence import create_engine, create_session_factory
-from aiscc.providers.local_deterministic import STOCKROOM_SUMMARY
 from aiscc.providers.models import (
     ExecutionOperationOutcome,
     ProviderCall,
@@ -32,7 +31,6 @@ from aiscc.public_live.start_authority import StartContract
 from aiscc.public_live.start_repository import StartRepository
 from aiscc.public_live.worker import create_worker
 from aiscc.public_live.worker_authority import ActiveClaim, DurableWorkerAuthority, WorkerRepository
-from aiscc.runtime.docker import StockroomProcessObservation
 from tests.integration.public_live.test_service import harness
 
 pytestmark = pytest.mark.postgres
@@ -260,11 +258,11 @@ def test_production_claim_executor_runs_primary_verify_correct(l2_url) -> None:
     asyncio.run(check())
 
 
-def test_missing_docker_fails_before_operation_with_exact_worker_login(l2_url, monkeypatch) -> None:
+def test_fixed_worker_starts_idle_with_exact_worker_login_without_docker(
+    l2_url, monkeypatch
+) -> None:
     async def check():
         async with harness(l2_url) as h:
-            h.admission.start_contract = StartContract.load()
-            run = (await h.admit()).run_id
             worker_password = secrets.token_urlsafe(24)
             async with h.admin.begin() as connection:
                 await connection.execute(
@@ -275,38 +273,20 @@ def test_missing_docker_fails_before_operation_with_exact_worker_login(l2_url, m
                 .set(username="aiscc_live_worker_login", password=worker_password)
                 .render_as_string(hide_password=False)
             )
-            initializer = create_initializer({"AISCC_PUBLIC_LIVE_START_DATABASE_URL": h.url})
             worker = create_worker({"AISCC_PUBLIC_LIVE_DATABASE_URL": worker_url})
-            monkeypatch.setattr(
-                "aiscc.public_live.stockroom_runtime.shutil.which", lambda _name: None
-            )
+
+            def forbidden(*_args, **_kwargs):
+                raise AssertionError("Docker lookup was reached")
+
+            monkeypatch.setattr("shutil.which", forbidden)
             try:
-                assert await initializer.step()
                 await worker.authority.repository.verify_runtime_identity()
                 await worker.authority.register()
-                claim = await worker.authority.claim_next_work()
-                assert claim is not None
-                with pytest.raises(RuntimeError, match="^PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED$"):
-                    await worker.execute_claim(ActiveClaim(claim))
-                async with h.admin.connect() as connection:
-                    operations = await connection.scalar(
-                        text(
-                            "SELECT count(*) FROM execution_operations o "
-                            "JOIN public_provider_execution e ON e.execution_attempt_id="
-                            "o.execution_attempt_id WHERE e.run_id=:r"
-                        ),
-                        {"r": run},
-                    )
-                    dispatches = await connection.scalar(
-                        text("SELECT count(*) FROM public_provider_request WHERE run_id=:r"),
-                        {"r": run},
-                    )
-                assert operations == 0
-                assert dispatches == 0
+                worker.check()
+                assert await worker.authority.claim_next_work() is None
                 assert worker.adapter.invocation_count == 0
                 assert worker.last_stockroom_dispatcher is None
             finally:
-                await initializer.close()
                 await worker.close()
 
     asyncio.run(check())
@@ -458,18 +438,7 @@ def test_production_stockroom_tool_dispatches_once_and_continues(l2_url) -> None
             h.admission.start_contract = StartContract.load()
             run = (await h.admit()).run_id
             initializer = create_initializer({"AISCC_PUBLIC_LIVE_START_DATABASE_URL": h.url})
-            process_calls = 0
-
-            def stockroom_runner(_args, _spec):
-                nonlocal process_calls
-                process_calls += 1
-                body = json.dumps(STOCKROOM_SUMMARY, sort_keys=True, separators=(",", ":"))
-                return StockroomProcessObservation(0, (body + "\n").encode(), b"")
-
-            worker = create_worker(
-                {"AISCC_PUBLIC_LIVE_DATABASE_URL": h.url},
-                stockroom_runner=stockroom_runner,
-            )
+            worker = create_worker({"AISCC_PUBLIC_LIVE_DATABASE_URL": h.url})
             adapter = ToolProviderDouble()
             worker.adapter = adapter
             previous = os.environ.get("AISCC_OPENAI_API_KEY")
@@ -491,8 +460,11 @@ def test_production_stockroom_tool_dispatches_once_and_continues(l2_url) -> None
                             {"r": run},
                         )
                     ).all()
-                assert process_calls == 1
                 assert worker.last_stockroom_dispatcher.invocation_count == 1
+                assert {
+                    domain.value
+                    for domain in worker.last_stockroom_dispatcher.last_consumed_domains
+                } == {"TOOL", "REPOSITORY", "SCENARIO"}
                 assert adapter.invocation_count == 2
                 assert any(
                     item.get("type") == "function_call_output"
@@ -515,14 +487,14 @@ def test_production_stockroom_tool_dispatches_once_and_continues(l2_url) -> None
 
 
 @pytest.mark.parametrize(
-    ("tool_names", "expected_process_calls", "expected_provider_calls"),
+    ("tool_names", "expected_tool_calls", "expected_provider_calls"),
     [
         (("unknown_tool",), 0, 1),
         (("stockroom_summary", "stockroom_summary"), 1, 2),
     ],
 )
 def test_production_tool_scope_denies_unknown_and_second_dispatch(
-    l2_url, tool_names, expected_process_calls, expected_provider_calls
+    l2_url, tool_names, expected_tool_calls, expected_provider_calls
 ) -> None:
     class ToolSequenceAdapter:
         def __init__(self) -> None:
@@ -557,18 +529,7 @@ def test_production_tool_scope_denies_unknown_and_second_dispatch(
             h.admission.start_contract = StartContract.load()
             run = (await h.admit()).run_id
             initializer = create_initializer({"AISCC_PUBLIC_LIVE_START_DATABASE_URL": h.url})
-            process_calls = 0
-
-            def stockroom_runner(_args, _spec):
-                nonlocal process_calls
-                process_calls += 1
-                body = json.dumps(STOCKROOM_SUMMARY, sort_keys=True, separators=(",", ":"))
-                return StockroomProcessObservation(0, (body + "\n").encode(), b"")
-
-            worker = create_worker(
-                {"AISCC_PUBLIC_LIVE_DATABASE_URL": h.url},
-                stockroom_runner=stockroom_runner,
-            )
+            worker = create_worker({"AISCC_PUBLIC_LIVE_DATABASE_URL": h.url})
             adapter = ToolSequenceAdapter()
             worker.adapter = adapter
             previous = os.environ.get("AISCC_OPENAI_API_KEY")
@@ -590,7 +551,12 @@ def test_production_tool_scope_denies_unknown_and_second_dispatch(
                             {"r": run},
                         )
                     ).all()
-                assert process_calls == expected_process_calls
+                actual_tool_calls = (
+                    worker.last_stockroom_dispatcher.invocation_count
+                    if worker.last_stockroom_dispatcher is not None
+                    else 0
+                )
+                assert actual_tool_calls == expected_tool_calls
                 assert adapter.invocation_count == expected_provider_calls
                 assert operations[-1] == ("TOOL", "DENIED_BEFORE_SIDE_EFFECT")
             finally:

@@ -4,12 +4,9 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
-import pytest
-
 from aiscc.public_live.worker import (
     _execute_production_claim,
     classify_worker_failure,
-    stockroom_daemon_observation,
     stockroom_runtime_observation,
 )
 from aiscc.public_live.worker_authority import (
@@ -138,22 +135,18 @@ def test_worker_loop_reports_only_allowlisted_failure_classification() -> None:
     asyncio.run(check())
 
 
-def test_docker_prerequisite_and_exact_failure_are_fixed_safe_codes(monkeypatch, tmp_path) -> None:
-    monkeypatch.setattr("aiscc.public_live.worker.shutil.which", lambda _name: None)
+def test_fixed_runtime_and_generic_failure_are_secret_safe_codes() -> None:
     prerequisite = stockroom_runtime_observation()
-    daemon = stockroom_daemon_observation(tmp_path / "missing.sock")
     failure = classify_worker_failure(RuntimeError("PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"))
 
     assert prerequisite.stage == "RUNTIME_PREREQUISITE"
-    assert prerequisite.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
-    assert daemon.stage == "RUNTIME_DAEMON"
-    assert daemon.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_REQUIRED"
-    assert failure.stage == "STOCKROOM_COMPOSITION"
-    assert failure.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
+    assert prerequisite.code == "PUBLIC_LIVE_FIXED_STOCKROOM_READY"
+    assert failure.stage == "CLAIM_EXECUTION"
+    assert failure.code == "PUBLIC_WORKER_FAILURE_UNCLASSIFIED"
     assert prerequisite.digest != failure.digest
 
 
-def test_missing_docker_fails_before_execution_service_construction(monkeypatch) -> None:
+def test_production_claim_composes_without_docker_prerequisite(monkeypatch) -> None:
     claim = ClaimRef(
         b"r" * 16,
         b"c" * 16,
@@ -180,21 +173,30 @@ def test_missing_docker_fails_before_execution_service_construction(monkeypatch)
             nonlocal constructed
             constructed += 1
 
+        async def execute(self, **_kwargs):
+            return SimpleNamespace(status="EXECUTION_COMPLETED")
+
     worker = SimpleNamespace(
         authority=SimpleNamespace(repository=ContextRepository()),
-        stockroom_runner=None,
         adapter=SimpleNamespace(invocation_count=0),
         semantic_validator=None,
         last_stockroom_dispatcher=None,
     )
-    monkeypatch.setattr("aiscc.public_live.stockroom_runtime.shutil.which", lambda _name: None)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Docker lookup was reached")
+
+    monkeypatch.setattr("shutil.which", forbidden)
     monkeypatch.setattr("aiscc.public_live.worker.AgentExecutionService", ForbiddenExecutionService)
 
     async def check() -> None:
-        with pytest.raises(RuntimeError, match="^PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED$"):
+        assert (
             await _execute_production_claim(worker, None, ActiveClaim(claim))  # type: ignore[arg-type]
+            == "EXECUTION_TERMINAL"
+        )
 
     asyncio.run(check())
-    assert constructed == 0
+    assert constructed == 1
     assert worker.adapter.invocation_count == 0
-    assert worker.last_stockroom_dispatcher is None
+    assert worker.last_stockroom_dispatcher is not None
+    assert worker.last_stockroom_dispatcher.invocation_count == 0

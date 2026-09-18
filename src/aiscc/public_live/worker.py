@@ -6,10 +6,8 @@ import asyncio
 import hashlib
 import logging
 import os
-import shutil
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -60,31 +58,14 @@ class WorkerObservation:
 
 
 def stockroom_runtime_observation() -> WorkerObservation:
-    code = (
-        "PUBLIC_LIVE_STOCKROOM_DOCKER_PRESENT"
-        if shutil.which("docker") is not None
-        else "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
+    return _worker_observation(
+        "RUNTIME_PREREQUISITE",
+        "PUBLIC_LIVE_FIXED_STOCKROOM_READY",
     )
-    return _worker_observation("RUNTIME_PREREQUISITE", code)
-
-
-def stockroom_daemon_observation(
-    socket_path: Path = Path("/var/run/docker.sock"),
-) -> WorkerObservation:
-    code = (
-        "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_PRESENT"
-        if socket_path.is_socket()
-        else "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_REQUIRED"
-    )
-    return _worker_observation("RUNTIME_DAEMON", code)
 
 
 def classify_worker_failure(error: BaseException) -> WorkerObservation:
-    if type(error) is RuntimeError and error.args == ("PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED",):
-        return _worker_observation(
-            "STOCKROOM_COMPOSITION",
-            "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED",
-        )
+    del error
     return _worker_observation("CLAIM_EXECUTION", "PUBLIC_WORKER_FAILURE_UNCLASSIFIED")
 
 
@@ -128,7 +109,6 @@ class HostedPublicLiveWorker:
     adapter: Any
     authority: DurableWorkerAuthority
     semantic_validator: Callable[[str, Any], MappingProxyType[str, Any]] | None
-    stockroom_runner: Callable[..., Any] | None
     last_stockroom_dispatcher: Any | None
     execute_claim: Callable[[ActiveClaim], Awaitable[str]]
 
@@ -145,7 +125,6 @@ class HostedPublicLiveWorker:
 
     async def run(self, stop: asyncio.Event) -> None:
         _emit_worker_observation(stockroom_runtime_observation())
-        _emit_worker_observation(stockroom_daemon_observation())
         await run_worker_loop(
             self.authority,
             self.execute_claim,
@@ -159,7 +138,6 @@ def create_worker(
     *,
     execute_claim: Callable[[ActiveClaim], Awaitable[str]] | None = None,
     semantic_validator: Callable[[str, Any], MappingProxyType[str, Any]] | None = None,
-    stockroom_runner: Callable[..., Any] | None = None,
 ) -> HostedPublicLiveWorker:
     settings = WorkerSettings.from_environment(environ)
     engine = create_engine(settings.database_url, role="aiscc_public_live_execution")
@@ -173,7 +151,6 @@ def create_worker(
         OpenAIResponsesAdapter(hosted=True),
         authority,
         semantic_validator,
-        stockroom_runner,
         None,
         execute_claim or (lambda claim: _execute_production_claim(worker, sessions, claim)),
     )
@@ -275,11 +252,7 @@ async def _execute_production_claim(
                 tool_registry_version=profile.tool_registry_version,
             )
 
-    dispatcher = stockroom.dispatcher(
-        policy,
-        runner=worker.stockroom_runner,
-        attempt_id=attempt_id_value,
-    )
+    dispatcher = stockroom.dispatcher(policy)
     worker.last_stockroom_dispatcher = dispatcher
     execution = AgentExecutionService(
         policy=policy,

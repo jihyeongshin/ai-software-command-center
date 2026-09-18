@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import MappingProxyType
+from typing import Any
 from urllib.parse import urlsplit
 
 from aiscc.contracts.workflow import RuntimeMode
@@ -10,39 +11,82 @@ from aiscc.providers.models import (
     ProviderCall,
     ProviderInputAuthority,
     ProviderProfile,
+    SideEffectClass,
+    ToolDefinition,
     ToolRegistry,
     canonical_json_bytes,
 )
-from aiscc.providers.stockroom_tool import StockroomToolConfig
-from aiscc.runtime.docker import DockerRunSpec
 
 PRICE_REFERENCE = "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
 POLICY_REFERENCE = "20260916_0950_aiscc-p3-3-public-live-l4-provider-profile-v1-accepted.md"
 ROLE_EFFORT = MappingProxyType({"PRIMARY": "low", "VERIFY": "low", "CORRECT": "medium"})
 
 
-def luna_tool_registry(config: StockroomToolConfig, spec: DockerRunSpec) -> ToolRegistry:
-    """Reuse Stockroom's exact process/resource requirements and sandbox spec."""
-    from aiscc.providers.stockroom_tool import build_stockroom_registry
-
-    if config.registry_version != "2":
-        raise ValueError("LUNA_TOOL_REGISTRY_VERSION_DENIED")
-    baseline = build_stockroom_registry(config, spec)
-    tool = baseline.tools["stockroom_summary"]
-    return ToolRegistry(
-        baseline.registry_id,
-        baseline.version,
-        MappingProxyType(
-            {
-                "stockroom_summary": replace(
-                    tool,
-                    allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
-                    allowed_profiles=frozenset({"public-live-luna-v1"}),
-                    allowed_scenarios=frozenset({"stockroom-s1-normal"}),
-                )
-            }
-        ),
+def luna_tool_registry() -> ToolRegistry:
+    """Exact Public Live registry with no process/filesystem/tool-network authority."""
+    tool = ToolDefinition(
+        tool_id="stockroom_summary",
+        schema_version="1",
+        dispatcher_version="stockroom-summary-v1",
+        description="Return the fixed deterministic Stockroom summary.",
+        input_schema={"type": "object", "additionalProperties": False, "required": []},
+        side_effect_classification=SideEffectClass.READ_ONLY,
+        allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
+        allowed_profiles=frozenset({"public-live-luna-v1"}),
+        allowed_scenarios=frozenset({"stockroom-s1-normal"}),
+        underlying_resource_requirements=(),
+        secret_requirement=None,
+        timeout_seconds=5.0,
+        retry_maximum=1,
+        idempotency_policy="READ_ONLY_NO_RETRY_AFTER_DISPATCH",
+        output_byte_bound=4096,
+        output_schema=_stockroom_output_schema(),
+        enabled=True,
+        issued_at=datetime(2026, 9, 18, tzinfo=UTC),
+        revoked_at=None,
     )
+    return ToolRegistry(
+        "aiscc-stockroom-tools",
+        "2",
+        MappingProxyType({"stockroom_summary": tool}),
+    )
+
+
+def _stockroom_output_schema() -> dict[str, Any]:
+    integer = {"type": "integer", "minimum": 0, "maximum": 1000}
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["items", "total_available"],
+        "properties": {
+            "items": {
+                "type": "array",
+                "minItems": 3,
+                "maxItems": 3,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "sku",
+                        "on_hand",
+                        "reserved",
+                        "reorder_level",
+                        "available",
+                        "needs_reorder",
+                    ],
+                    "properties": {
+                        "sku": {"type": "string", "enum": ["BOX-A", "BOX-B", "BOX-C"]},
+                        "on_hand": integer,
+                        "reserved": integer,
+                        "reorder_level": integer,
+                        "available": integer,
+                        "needs_reorder": {"type": "boolean"},
+                    },
+                },
+            },
+            "total_available": {"type": "integer", "const": 13},
+        },
+    }
 
 
 def luna_profile(base_url: str = "http://127.0.0.1:18085/v1") -> ProviderProfile:
