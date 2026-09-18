@@ -364,6 +364,22 @@ class PublicLiveTransaction:
             )
         )
 
+    async def unknown_reconciliation_candidates(self) -> tuple[dict[str, Any], ...]:
+        value = await self._call(
+            "SELECT public_live_api.unknown_provider_reconciliation_candidates()", {}
+        )
+        if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+            raise RuntimeError("UNKNOWN_RECONCILIATION_CANDIDATES_INVALID")
+        return tuple(value)
+
+    async def reconcile_unknown_provider(self, run_id: bytes) -> dict[str, Any]:
+        value = await self._call(
+            "SELECT public_live_api.reconcile_unknown_provider_run(:r)", {"r": run_id}
+        )
+        if not isinstance(value, dict):
+            raise RuntimeError("UNKNOWN_RECONCILIATION_RESULT_INVALID")
+        return value
+
 
 class PublicLiveRepository:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:

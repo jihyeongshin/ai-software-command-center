@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from types import MappingProxyType
@@ -27,6 +28,11 @@ from aiscc.public_live.hosted_proof import (
     run_operator_proof,
 )
 from aiscc.public_live.initializer import create_initializer
+from aiscc.public_live.luna_profile import (
+    conservative_request_liability_micro,
+    hosted_luna_profile,
+)
+from aiscc.public_live.service import UnknownProviderReconciliationService
 from aiscc.public_live.start_authority import StartContract
 from aiscc.public_live.start_repository import StartRepository
 from aiscc.public_live.worker import create_worker
@@ -327,7 +333,7 @@ def test_durable_post_dispatch_unknown_quarantines_without_resend(l2_url) -> Non
                             "FROM execution_operations o JOIN public_provider_execution e "
                             "ON e.execution_attempt_id=o.execution_attempt_id "
                             "JOIN public_worker_work w USING(run_id) "
-                            "JOIN public_worker_dispatch_pin p USING(operation_id) "
+                            "JOIN public_worker_dispatch_pin p ON p.operation_id=o.operation_id "
                             "JOIN public_worker_claim c ON c.claim_id=p.claim_id WHERE e.run_id=:r"
                         ),
                         {"r": run},
@@ -344,6 +350,140 @@ def test_durable_post_dispatch_unknown_quarantines_without_resend(l2_url) -> Non
                         ),
                         {"c": row[3], "w": row[4], "p": row[5], "f": row[6], "v": row[7]},
                     )
+
+    asyncio.run(check())
+
+
+def test_unknown_p1_operation_reconciles_once_without_resend(l2_url) -> None:
+    async def check() -> None:
+        async with harness(l2_url) as h:
+            run, observation = await prepared(h, FaultPoint.AFTER_DISPATCH)
+            assert observation.provider_receipts == 1
+            assert observation.durable_phase == "OUTCOME_UNKNOWN"
+            assert observation.retry_allowed is False
+            await h.clock((datetime.now(UTC) + timedelta(minutes=3)).isoformat())
+            await h.sql("UPDATE public_control SET enabled=false")
+            service = UnknownProviderReconciliationService(h.reconciler)
+            target = await service.select_exact_target()
+            liability = conservative_request_liability_micro(hosted_luna_profile())
+            assert target.run_id == run
+            assert target.liability_micro == liability
+
+            async with h.admin.connect() as connection:
+                before = (
+                    await connection.execute(
+                        text(
+                            "SELECT c.available,c.held,c.settled,d.available,d.held,d.settled "
+                            "FROM public_campaign c JOIN public_day d USING(campaign_id)"
+                        )
+                    )
+                ).one()
+            result = await service.reconcile_target(target)
+            assert result.reconciled and result.state == "FAILED_TIMEOUT"
+
+            async with h.admin.connect() as connection:
+                row = (
+                    await connection.execute(
+                        text(
+                            "SELECT r.state,z.state,z.settled_cost,s.state,s.run_id IS NULL,"
+                            "b.state,w.recovery_required,w.closed_at IS NOT NULL,"
+                            "p.closed_at IS NOT NULL,p.outcome_event_id=e.event_id,"
+                            "c.released_at IS NOT NULL,o.current_phase,o.outcome "
+                            "FROM public_run r JOIN public_reservation z USING(run_id) "
+                            "JOIN public_outbox b USING(run_id) "
+                            "JOIN public_worker_work w USING(run_id) "
+                            "JOIN public_provider_operation_link l USING(run_id) "
+                            "JOIN execution_operations o USING(operation_id) "
+                            "JOIN operation_events e ON e.operation_id=o.operation_id "
+                            "AND e.target_phase='OUTCOME_UNKNOWN' "
+                            "JOIN public_worker_dispatch_pin p ON p.operation_id=o.operation_id "
+                            "JOIN public_worker_claim c ON c.claim_id=p.claim_id "
+                            "CROSS JOIN public_slot s WHERE r.run_id=:r AND s.slot_id=1"
+                        ),
+                        {"r": run},
+                    )
+                ).one()
+                counts = (
+                    await connection.execute(
+                        text(
+                            "SELECT "
+                            "(SELECT count(*) FROM execution_operations o "
+                            "JOIN public_provider_execution x "
+                            "ON x.execution_attempt_id=o.execution_attempt_id "
+                            "WHERE x.run_id=:r),"
+                            "(SELECT count(*) FROM execution_operations o "
+                            "JOIN public_provider_execution x "
+                            "ON x.execution_attempt_id=o.execution_attempt_id "
+                            "WHERE x.run_id=:r AND o.operation_kind='TOOL'),"
+                            "(SELECT count(*) FROM public_money_event "
+                            "WHERE run_id=:r AND event_kind='SETTLE'),"
+                            "(SELECT count(*) FROM public_worker_claim "
+                            "WHERE run_id=:r AND released_at IS NULL),"
+                            "(SELECT count(*) FROM public_worker_dispatch_pin p "
+                            "JOIN public_worker_claim c USING(claim_id) "
+                            "WHERE c.run_id=:r AND p.closed_at IS NULL)"
+                        ),
+                        {"r": run},
+                    )
+                ).one()
+                after = (
+                    await connection.execute(
+                        text(
+                            "SELECT c.available,c.held,c.settled,d.available,d.held,d.settled "
+                            "FROM public_campaign c JOIN public_day d USING(campaign_id)"
+                        )
+                    )
+                ).one()
+            assert row == (
+                "FAILED_TIMEOUT",
+                "SETTLED",
+                liability,
+                "FREE",
+                True,
+                "CLOSED",
+                True,
+                True,
+                True,
+                True,
+                True,
+                "OUTCOME_UNKNOWN",
+                "TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME",
+            )
+            assert counts == (1, 0, 1, 0, 0)
+            assert after == (
+                before[0] + 200_000 - liability,
+                before[1] - 200_000,
+                before[2] + liability,
+                before[3] + 200_000 - liability,
+                before[4] - 200_000,
+                before[5] + liability,
+            )
+
+            repeated = await service.reconcile_target(target)
+            assert not repeated.reconciled
+            async with h.admin.connect() as connection:
+                unchanged = (
+                    await connection.execute(
+                        text(
+                            "SELECT count(*),min(cost),max(cost) FROM public_money_event "
+                            "WHERE run_id=:r AND event_kind='SETTLE'"
+                        ),
+                        {"r": run},
+                    )
+                ).one()
+            assert unchanged == (1, liability, liability)
+
+    asyncio.run(check())
+
+
+def test_known_paths_are_not_unknown_reconciliation_candidates(l2_url) -> None:
+    async def check() -> None:
+        for fault in (FaultPoint.BEFORE_DISPATCH, FaultPoint.KNOWN_CLOSED_FAILURE):
+            async with harness(l2_url) as h:
+                await prepared(h, fault)
+                await h.clock((datetime.now(UTC) + timedelta(minutes=3)).isoformat())
+                async with h.reconciler.transaction() as tx:
+                    assert await tx.unknown_reconciliation_candidates() == ()
 
     asyncio.run(check())
 

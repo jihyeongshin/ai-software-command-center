@@ -19,6 +19,12 @@ from aiscc.providers.models import (
 
 PRICE_REFERENCE = "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
 POLICY_REFERENCE = "20260916_0950_aiscc-p3-3-public-live-l4-provider-profile-v1-accepted.md"
+INPUT_TOKEN_MAXIMUM = 8_000
+OUTPUT_TOKEN_PER_REQUEST_MAXIMUM = 2_000
+INPUT_PRICE_MICRO_USD_PER_MILLION = 200_000
+CACHE_WRITE_ENVELOPE_NUMERATOR = 5
+CACHE_WRITE_ENVELOPE_DENOMINATOR = 4
+OUTPUT_PRICE_MICRO_USD_PER_MILLION = 1_200_000
 ROLE_EFFORT = MappingProxyType({"PRIMARY": "low", "VERIFY": "low", "CORRECT": "medium"})
 
 
@@ -210,6 +216,34 @@ def bind_call(call: ProviderCall, *, role: str) -> tuple[ProviderCall, int]:
         len(canonical_json_bytes({"input": list(call.input_items), "tools": list(call.tools)}))
         + 1024
     )
-    if inputs > 8000:
+    if inputs > INPUT_TOKEN_MAXIMUM:
         raise ValueError("INPUT_LIMIT")
-    return replace(call, reasoning_effort=ROLE_EFFORT[role], output_token_maximum=2000), inputs
+    return (
+        replace(
+            call,
+            reasoning_effort=ROLE_EFFORT[role],
+            output_token_maximum=OUTPUT_TOKEN_PER_REQUEST_MAXIMUM,
+        ),
+        inputs,
+    )
+
+
+def conservative_request_liability_micro(profile: ProviderProfile) -> int:
+    """Return the accepted Luna V1 one-request ceiling in integer micro-USD."""
+    expected = (
+        hosted_luna_profile()
+        if profile.base_url == "https://api.openai.com/v1"
+        else luna_profile(profile.base_url)
+    )
+    if profile != expected:
+        raise ValueError("LUNA_PROFILE_BINDING_DENIED")
+    input_rate = (
+        INPUT_PRICE_MICRO_USD_PER_MILLION
+        * CACHE_WRITE_ENVELOPE_NUMERATOR
+        // CACHE_WRITE_ENVELOPE_DENOMINATOR
+    )
+    numerator = (
+        INPUT_TOKEN_MAXIMUM * input_rate
+        + OUTPUT_TOKEN_PER_REQUEST_MAXIMUM * OUTPUT_PRICE_MICRO_USD_PER_MILLION
+    )
+    return (numerator + 999_999) // 1_000_000

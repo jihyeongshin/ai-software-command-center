@@ -23,6 +23,10 @@ from aiscc.persistence.public_live import (
     RunIdentity,
 )
 from aiscc.public_live.identity import AdmissionDenied, IdentityPolicy, request_identity
+from aiscc.public_live.luna_profile import (
+    conservative_request_liability_micro,
+    hosted_luna_profile,
+)
 from aiscc.public_live.start_authority import StartContract
 from aiscc.workflow.guards import TrustedGuardFact
 from aiscc.workflow.kernel import WorkflowKernel
@@ -402,3 +406,82 @@ class ReconciliationService:
             elif ctx["state"] != "UNKNOWN_OUTCOME":
                 raise AdmissionDenied("TERMINAL_PROJECTION_REQUIRED")
         return True
+
+
+@dataclass(frozen=True, slots=True)
+class UnknownProviderTarget:
+    run_id: bytes
+    operation_id: str
+    outcome_event_id: str
+    liability_micro: int
+
+
+@dataclass(frozen=True, slots=True)
+class UnknownProviderReconciliation:
+    target: UnknownProviderTarget
+    reconciled: bool
+    state: str
+    evidence_digest: str
+
+
+class UnknownProviderReconciliationService:
+    """Bridge canonical P1-5 UNKNOWN truth into the Public Live projection."""
+
+    def __init__(self, reconciler: PublicLiveRepository) -> None:
+        self.reconciler = reconciler
+
+    async def select_exact_target(self) -> UnknownProviderTarget:
+        async with self.reconciler.transaction() as tx:
+            candidates = await tx.unknown_reconciliation_candidates()
+        if len(candidates) != 1:
+            raise AdmissionDenied("UNKNOWN_SMOKE_TARGET_IDENTITY_AMBIGUOUS")
+        value = candidates[0]
+        try:
+            target = UnknownProviderTarget(
+                bytes.fromhex(value["run_id"]),
+                value["operation_id"],
+                value["outcome_event_id"],
+                value["liability_micro"],
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise AdmissionDenied("UNKNOWN_SMOKE_TARGET_IDENTITY_INVALID") from error
+        expected = conservative_request_liability_micro(hosted_luna_profile())
+        if (
+            len(target.run_id) != 16
+            or not target.operation_id
+            or not target.outcome_event_id
+            or type(target.liability_micro) is not int
+            or target.liability_micro != expected
+            or not 0 < target.liability_micro <= 200_000
+        ):
+            raise AdmissionDenied("UNKNOWN_PROVIDER_LIABILITY_NOT_PROVABLE")
+        return target
+
+    async def reconcile_target(
+        self, target: UnknownProviderTarget
+    ) -> UnknownProviderReconciliation:
+        expected = conservative_request_liability_micro(hosted_luna_profile())
+        if target.liability_micro != expected:
+            raise AdmissionDenied("UNKNOWN_PROVIDER_LIABILITY_NOT_PROVABLE")
+        async with self.reconciler.transaction() as tx:
+            value = await tx.reconcile_unknown_provider(target.run_id)
+        if (
+            value.get("run_id") != target.run_id.hex()
+            or value.get("operation_id") != target.operation_id
+            or value.get("outcome_event_id") != target.outcome_event_id
+            or value.get("liability_micro") != expected
+            or value.get("state") != "FAILED_TIMEOUT"
+            or not isinstance(value.get("evidence_digest"), str)
+            or len(value["evidence_digest"]) != 64
+            or type(value.get("reconciled")) is not bool
+        ):
+            raise AdmissionDenied("UNKNOWN_RECONCILIATION_RESULT_INVALID")
+        return UnknownProviderReconciliation(
+            target,
+            value["reconciled"],
+            value["state"],
+            value["evidence_digest"],
+        )
+
+    async def reconcile_exact(self) -> UnknownProviderReconciliation:
+        return await self.reconcile_target(await self.select_exact_target())

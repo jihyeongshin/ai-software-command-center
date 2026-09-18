@@ -5,7 +5,12 @@ from fake_responses_server import FakeResponsesServer, final_message, response_b
 
 from aiscc.contracts.workflow import RuntimeMode
 from aiscc.providers.openai_responses import OpenAIResponsesAdapter
-from aiscc.public_live.luna_profile import bind_call, luna_profile
+from aiscc.public_live.luna_profile import (
+    bind_call,
+    conservative_request_liability_micro,
+    hosted_luna_profile,
+    luna_profile,
+)
 from tests.unit.providers.test_openai_responses import _call
 
 
@@ -81,3 +86,9 @@ def test_input_tools_and_role_fail_closed():
         bind_call(replace(call(), tools=({"name": "shell"},)), role="PRIMARY")
     with pytest.raises(ValueError, match="LUNA_PROFILE"):
         bind_call(call(), role="user-selected")
+
+
+def test_conservative_liability_is_derived_from_accepted_luna_envelope():
+    assert conservative_request_liability_micro(hosted_luna_profile()) == 4400
+    with pytest.raises(ValueError, match="LUNA_PROFILE"):
+        conservative_request_liability_micro(replace(hosted_luna_profile(), version="2"))
