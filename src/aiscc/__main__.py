@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 
 import uvicorn
@@ -18,6 +19,7 @@ def main() -> None:
     ingress.add_argument("--port", default=8001, type=int)
     worker = subcommands.add_parser("public-live-worker")
     worker.add_argument("--check", action="store_true")
+    subcommands.add_parser("public-live-luna-canary")
     initializer = subcommands.add_parser("public-live-initializer")
     initializer.add_argument("--check", action="store_true")
     proof = subcommands.add_parser("hosted-l5-proof")
@@ -54,6 +56,14 @@ def main() -> None:
                 asyncio.run(value.run(asyncio.Event()))
         finally:
             asyncio.run(value.close())
+    elif args.command == "public-live-luna-canary":
+        from aiscc.public_live.real_luna_canary import blocked_result, run_real_luna_canary
+
+        try:
+            result = run_real_luna_canary()
+        except BaseException as error:
+            result = blocked_result(error)
+        print(json.dumps(dict(result), sort_keys=True, separators=(",", ":")))
     elif args.command == "public-live-initializer":
         from aiscc.public_live.initializer import create_initializer
 
