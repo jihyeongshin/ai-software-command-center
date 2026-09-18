@@ -1,5 +1,18 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-HOSTED-VARIABLE-INHERITANCE-DECISION-REQUIRED-V1
+
+- 2134 accepted scope: Public fixed tool implementation, affected L6 proof, and private worker Docker-free proof remain accepted.
+- Intended 2237 mutation: remove provider-secret and edge-trust bindings from ingress only.
+- Provenance finding: service-local variable inventories contain none of the three relevant bindings, while runtime presence-only checks find `AISCC_OPENAI_API_KEY`, `OPENAI_API_KEY`, and `AISCC_PUBLIC_LIVE_RAILWAY_EDGE_TRUST` on worker, ingress, initializer, and API.
+- Classification: project/environment shared inheritance, not ingress-local residue.
+- Mandatory stop: deleting the inherited provider binding can affect the worker and other services. No variable was deleted, rotated, copied, recreated, or revealed.
+- Required decision: authorize a bounded shared-to-service-local variable migration that preserves the sealed worker key and removes provider/edge authority from ingress, initializer, and API.
+- Current result: `INGRESS_PROVIDER_SECRET_INHERITANCE_REQUIRES_SEPARATE_DECISION`.
+- Final safe state: domains 0, control disabled, claim/provider/operation counts 0, retained 1919 evidence untouched, Public Live not released.
+- Does not authorize: provider key material access, admission enablement, release, failed-run settlement, public domain, provider call, DB mutation, or new Railway resource.
+- Authority: [2237 Cycle](cycles/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-entry-1.cycle.md), [2237 Judgment](../../reports/aiscc/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-judgment-1.md), and the 2237 Executor evidence bundle.
+
 ## AISCC-P3-3-PUBLIC-LIVE-FIXED-TOOL-AMENDMENT-CANDIDATE-V1
 
 - Human decision: `ACCEPT_PUBLIC_FIXED_IN_PROCESS_TOOL`.

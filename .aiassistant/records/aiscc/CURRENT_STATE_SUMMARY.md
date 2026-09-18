@@ -1,5 +1,20 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_2237 hosted variable inheritance blocker)
+
+- Browser-accepted 2134 results remain: Public fixed tool implementation, affected L6 reproof, and private worker Docker-free proof are accepted.
+- The 2237 ingress-only cleanup stopped before mutation because the relevant values are not ingress-local bindings.
+- Railway service-local inventories show no local binding for `AISCC_OPENAI_API_KEY`, `OPENAI_API_KEY`, or `AISCC_PUBLIC_LIVE_RAILWAY_EDGE_TRUST` on worker, ingress, initializer, or API.
+- Actual runtime presence-only checks show all three variables non-empty on all four services. Values were not read, hashed, copied, or exported.
+- This establishes project/environment shared inheritance. Deleting the shared provider binding to clean ingress can affect the worker and other services, so Task 2237 forbids that mutation.
+- Hosted state remains fail-closed: ingress/worker domains 0; `public_control.enabled=false`; public runs 1; retained open work 1 and non-claimable; claimable work, unreleased claims, dispatch pins, execution operations, provider requests, and future-deadline runs all 0.
+- Railway configuration mutations, deployments, provider calls, DB mutations, and 1919 settlement performed by the cleanup phase: 0.
+- Current result: `INGRESS_PROVIDER_SECRET_INHERITANCE_REQUIRES_SEPARATE_DECISION`.
+
+A separate Human/Browser Task must authorize migration from shared variables to explicit service-scoped bindings while preserving the sealed worker provider credential. It must also decide removal of the inherited standard `OPENAI_API_KEY` and edge-trust variables from services that must not receive them. Public admission remains `DISABLED`, Public Live remains `NOT_RELEASED`, and Replay remains unchanged.
+
+Authority: [2237 Cycle](cycles/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-entry-1.cycle.md), [2237 Judgment](../../reports/aiscc/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-judgment-1.md), and [2237 handoff](../../reports/aiscc/20260918_2237_aiscc-browser-command-center-l8-hosted-config-sanitization-rework-handoff-1.md).
+
 ## Current authority (20260918_2134 Public fixed tool amendment candidate)
 
 - Human-approved Public Live runtime amendment: `ACCEPT_PUBLIC_FIXED_IN_PROCESS_TOOL / IMPLEMENTED`.

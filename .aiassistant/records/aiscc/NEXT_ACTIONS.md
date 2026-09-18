@@ -1,5 +1,18 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_2237 shared variable decision required)
+
+1. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress/worker domains absent, and Replay unchanged.
+2. Browser/Human reviews the 2237 inheritance proof and selects an exact service-scoped Railway variable migration.
+3. The future Task must preserve the current sealed worker `AISCC_OPENAI_API_KEY` without revealing/copying it, remove provider-key authority from ingress/initializer/API, remove standard `OPENAI_API_KEY` unless a separately accepted owner requires it, and remove edge trust while ingress is private.
+4. After migration, verify service-local provenance and runtime presence across worker, ingress, initializer, and API; then repeat domain/control/no-send counters.
+5. Keep the retained 1919 failed run untouched. Its mediated `FAILED_NOT_DISPATCHED` settlement remains a separate later authorization.
+6. Any Public Live release retry remains a separate Human/Browser Task after hosted L5 acceptance.
+
+Do not delete the current shared provider variable without a replacement plan that preserves worker availability. Do not read/copy/rotate provider key material, enable admission, expose ingress, call the provider, mutate the DB, or create a Railway resource.
+
+Authority: [2237 Cycle](cycles/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-entry-1.cycle.md), [2237 Judgment](../../reports/aiscc/20260918_2237_aiscc-p3-3-l8-public-fixed-tool-partial-acceptance-hosted-config-rework-judgment-1.md), and the 2237 Executor result.
+
 ## Current sequence (20260918_2134 hosted security residue review)
 
 1. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress domains absent, and Replay unchanged.
