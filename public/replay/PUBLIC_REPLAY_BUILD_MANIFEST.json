@@ -77,9 +77,9 @@
       "sha256": "a79dd0637911d851467dbf249e5f0d15438cacb3a06a6080a34826f0564fb94b"
     },
     {
-      "bytes": 417,
+      "bytes": 477,
       "path": "_headers",
-      "sha256": "db28487405ec9d4a57e1a438195b78b84a00aebb150ebfffbda6a91fbb699864"
+      "sha256": "fd3158e83462fb5db5ed3b17328bc39e5baae132e2e3f62fd01989fe9a1a7b64"
     },
     {
       "bytes": 25456,
@@ -97,9 +97,9 @@
       "sha256": "b04946a2d016679da3b7f2941aaf5ec1372be044f08891282d314c745b6b6389"
     },
     {
-      "bytes": 97,
+      "bytes": 153,
       "path": "live-config.json",
-      "sha256": "db501fc23409b8ff6124ae382de6f3933ec7ba287eff2ae1324c1dd93fe365f7"
+      "sha256": "9a14186fe2179374e25d6c198f34db2d5338cc13307558f8e2c2ef6c9c30d676"
     }
   ],
   "version": 1
