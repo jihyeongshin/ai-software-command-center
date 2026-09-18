@@ -17,7 +17,7 @@ class Element {
   set innerHTML(_) { throw Error("Unsafe HTML insertion"); }
 }
 async function setup(fault = {}) {
-  const ids = Object.fromEntries(["catalog", "catalog-status", "detail", "detail-status", "record", "live", "live-status", "live-start", "live-stop", "live-result"].map(id => [id, new Element("div")]));
+  const ids = Object.fromEntries(["catalog", "catalog-status", "detail", "detail-status", "record", "live", "live-release-note", "live-status", "live-start", "live-stop", "live-result"].map(id => [id, new Element("div")]));
   const listeners = {}; const requests = [];
   const storage = new Map();
   const context = vm.createContext({

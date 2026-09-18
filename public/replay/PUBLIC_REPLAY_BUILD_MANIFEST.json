@@ -82,9 +82,9 @@
       "sha256": "db28487405ec9d4a57e1a438195b78b84a00aebb150ebfffbda6a91fbb699864"
     },
     {
-      "bytes": 24776,
+      "bytes": 25456,
       "path": "assets/app.js",
-      "sha256": "b14224208d03d456cc614127ddf40b4a4525e1c922eb8d8c205c361dded84c5c"
+      "sha256": "8e89e6646c64d4c1b2719f34685b9ac292c7bb2fcfe51055123c698040990ddb"
     },
     {
       "bytes": 4892,
@@ -92,9 +92,9 @@
       "sha256": "22ecf56561844fb196eecde3f3127d49955069a6d95a7308d252fb32ed23cb93"
     },
     {
-      "bytes": 3547,
+      "bytes": 3554,
       "path": "index.html",
-      "sha256": "855b6ff7186912c2c94547ad48f493cde5cde48e1d469a383111af041ea09d29"
+      "sha256": "b04946a2d016679da3b7f2941aaf5ec1372be044f08891282d314c745b6b6389"
     },
     {
       "bytes": 97,

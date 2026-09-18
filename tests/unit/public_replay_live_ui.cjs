@@ -47,11 +47,13 @@ function storageObject(map) {
   };
 }
 
-async function setup({config = enabledConfig, apiHandler = async () => { throw Error("unexpected API request"); }, storage = new Map()} = {}) {
+async function setup({config = enabledConfig, configStatus = 200, apiHandler = async () => { throw Error("unexpected API request"); }, storage = new Map()} = {}) {
   const ids = Object.fromEntries([
     "catalog", "catalog-status", "detail", "detail-status", "record",
-    "live", "live-status", "live-start", "live-stop", "live-result"
+    "live", "live-release-note", "live-status", "live-start", "live-stop", "live-result"
   ].map(id => [id, new Element(id === "live-start" || id === "live-stop" ? "button" : "div")]));
+  ids["live-release-note"].textContent = "Checking Live release configuration…";
+  ids["live-start"].textContent = "Checking Live availability…";
   const windowListeners = {}; const calls = []; const logs = []; const timers = new Map();
   let timerSequence = 0; let localStorageTouches = 0;
   const location = {hash:"", href:"https://aiscc-replay.pages.dev/"};
@@ -75,7 +77,7 @@ async function setup({config = enabledConfig, apiHandler = async () => { throw E
     clearTimeout:id => timers.delete(id),
     fetch:async (url, options) => {
       calls.push({url, options});
-      if (url === "live-config.json") return response(200, config);
+      if (url === "live-config.json") return response(configStatus, config);
       if (url.startsWith("data/")) {
         const data = JSON.parse(fs.readFileSync(path.join(root, "public/replay", url), "utf8"));
         return response(200, data);
@@ -102,13 +104,22 @@ async function setup({config = enabledConfig, apiHandler = async () => { throw E
   const disabled = await setup({config:disabledConfig});
   assert.equal(disabled.ids["live-start"].disabled, true);
   assert.match(disabled.ids["live-status"].textContent, /not enabled/);
+  assert.match(disabled.ids["live-release-note"].textContent, /not enabled/);
   assert.equal(disabled.calls.some(call => call.url.startsWith(apiOrigin)), false);
   await disabled.select("#scenario=stockroom-s1-normal");
   assert.match(disabled.ids["detail-status"].textContent, /loaded/);
   const invalidConfig = await setup({config:{schema:"AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1", enabled:true, api_origin:"https://invalid.example/path"}});
   assert.equal(invalidConfig.ids["live-start"].disabled, true);
   assert.match(invalidConfig.ids["live-status"].textContent, /failed closed/);
+  assert.match(invalidConfig.ids["live-release-note"].textContent, /unavailable.*missing or invalid/);
   assert.equal(invalidConfig.calls.some(call => call.url.startsWith("https://invalid.example")), false);
+  await invalidConfig.select("#scenario=stockroom-s3-policy-conflict");
+  assert.match(invalidConfig.ids["detail-status"].textContent, /loaded/);
+  const missingConfig = await setup({configStatus:404, config:disabledConfig});
+  assert.match(missingConfig.ids["live-release-note"].textContent, /unavailable.*missing or invalid/);
+  assert.equal(missingConfig.calls.some(call => call.url.startsWith(apiOrigin)), false);
+  await missingConfig.select("#scenario=stockroom-s4-human-owned-claim");
+  assert.match(missingConfig.ids["detail-status"].textContent, /loaded/);
 
   // Exact POST, 201 sessionStorage, exact GET capability header and safe rendering.
   const sharedStorage = new Map();
@@ -119,6 +130,12 @@ async function setup({config = enabledConfig, apiHandler = async () => { throw E
     });
     return response(200, projection());
   }});
+  const configuredVisibleText = Object.values(active.ids).map(element => element.textContent).join(" ");
+  assert.equal(active.ids["live-start"].disabled, false);
+  assert.match(active.ids["live-release-note"].textContent, /configured for this release/);
+  assert.doesNotMatch(configuredVisibleText, /Live (?:Demo )?is not enabled/i);
+  await active.select("#scenario=stockroom-s1-normal");
+  assert.match(active.ids["detail-status"].textContent, /loaded/);
   await active.clickStart();
   const post = active.calls.find(call => call.options.method === "POST");
   assert.equal(post.url, apiOrigin + "/v1/public-live/runs");
@@ -220,7 +237,8 @@ async function setup({config = enabledConfig, apiHandler = async () => { throw E
   assert.equal(expired.calls.some(call => call.url.startsWith(apiOrigin)), false);
 
   console.log(JSON.stringify({
-    result:"PASS", disabled_no_api:true, exact_post:true, session_storage_201:true,
+    result:"PASS", release_label_truthful:true, missing_invalid_fail_closed:true,
+    replay_all_config_states:true, disabled_no_api:true, exact_post:true, session_storage_201:true,
     same_tab_resume:true, independent_session_no_recovery:true, capability_non_disclosure:true,
     no_local_storage:true, replay_202_no_recovery:true, uncertain_same_key_retry:true,
     bounded_polling_reads:boundedGets, polling_interval_ms:3000, terminal_stop:true,

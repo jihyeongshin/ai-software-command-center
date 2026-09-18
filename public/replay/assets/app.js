@@ -159,6 +159,9 @@ function liveStatus(message, isError = false) {
   status.textContent = message;
   status.className = isError ? "error" : "";
 }
+function liveReleaseNote(message) {
+  document.getElementById("live-release-note").textContent = message;
+}
 function liveButton(enabled, label) {
   const button = document.getElementById("live-start");
   button.disabled = !enabled;
@@ -427,12 +430,21 @@ async function initializeLive() {
   if (!config || !config.enabled) {
     removeLiveSession();
     liveRuntime.config = config;
-    liveButton(false, "Live is not enabled");
-    liveStatus(config ? "Live is not enabled in this release. Recorded Run Replay remains available." : "Live configuration is missing or invalid, so Live failed closed. Recorded Run Replay remains available.");
+    if (config) {
+      liveReleaseNote("Live is not enabled in this release. Recorded Run Replay remains available.");
+      liveButton(false, "Live is not enabled");
+      liveStatus("Live is not enabled in this release. Recorded Run Replay remains available.");
+    } else {
+      liveReleaseNote("Live is unavailable because release configuration is missing or invalid. Recorded Run Replay remains available.");
+      liveButton(false, "Live unavailable");
+      liveStatus("Live configuration is missing or invalid, so Live failed closed. Recorded Run Replay remains available.");
+    }
     return;
   }
   liveRuntime.config = config;
+  liveReleaseNote("Bounded Live is configured for this release. Recorded Run Replay remains available.");
   if (!storageAvailable()) {
+    liveReleaseNote("Bounded Live is configured, but unavailable in this browser session. Recorded Run Replay remains available.");
     liveButton(false, "Live unavailable");
     liveStatus("Same-tab session storage is unavailable. Live remains disabled; Replay remains usable.", true);
     return;
