@@ -1,5 +1,21 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_2344 retained 1919 smoke settlement candidate)
+
+- Canonical entering baseline: `81148b72613b42f228e66cabab55085438e9fe51`.
+- Browser authority accepts the 2312 shared-variable isolation and affected hosted L5 closure; affected L6 remains accepted.
+- Exact retained target uniqueness: one Public Live run, `115bdd70a7c411a517868d65c1717a63`.
+- Before closure it was expired and `ADMITTED`, with one `HELD` 200000 micro-USD reservation; unreleased claims, open dispatch pins, Public dispatch rows, execution operations, provider requests, and claimable work were all zero.
+- The task-owned operator adapter invoked canonical `ReconciliationService.close(..., target="FAILED_NOT_DISPATCHED")`. Closure admission used the existing `aiscc_public_live_reconciler` authority; context/projection used the existing runtime authority. No login, grant, migration, or raw-table DML was added.
+- Result: run `FAILED_NOT_DISPATCHED`; reservation `SETTLED / settled_cost=0`; slot `FREE`; outbox `CLOSED`; exactly one closure observation and one SETTLE money event.
+- Verified campaign/day ledger deltas: available `+200000`, held `-200000`, settled `0`. Canonical provider cost: `0 micro-USD`.
+- Identical second close returned `false`; no second event, ledger mutation, or state regression occurred.
+- Historical worker-work lineage remains present and non-claimable. Provider requests, execution operations, Public dispatch rows, unreleased claims, and open pins remain zero.
+- Final hosted safety: `public_control.enabled=false`; ingress/worker domains 0; accepted worker-only provider-secret isolation reused unchanged; Public admission `DISABLED`; Public Live `NOT_RELEASED`; Replay unchanged.
+- Candidate result: `RETAINED_1919_SETTLED / FAILED_NOT_DISPATCHED / RELEASE_READINESS_ENTRY_CANDIDATE / BROWSER_REVIEW_REQUIRED`.
+
+Authority: [2344 Cycle](cycles/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-accepted-failed-smoke-settlement-entry-1.cycle.md), [2344 Judgment](../../reports/aiscc/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-final-acceptance-judgment-1.md), [2344 handoff](../../reports/aiscc/20260918_2344_aiscc-browser-command-center-l8-failed-smoke-settlement-handoff-1.md), and the 2344 Executor evidence bundle.
+
 ## Current authority (20260918_2312 shared variable migration candidate)
 
 - Canonical entering baseline: `3832fff7751c387b8e559cc273cf30836238d48d`.

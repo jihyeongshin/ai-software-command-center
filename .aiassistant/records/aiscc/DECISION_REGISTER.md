@@ -1,5 +1,19 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-RETAINED-1919-SETTLEMENT-CANDIDATE-V1
+
+- Human/Browser authority: settle only the unique retained 1919 smoke after re-proving definitely-not-dispatched evidence.
+- Exact target: `115bdd70a7c411a517868d65c1717a63`; uniqueness `1/1`.
+- Closure predicates: deadline expired; reservation `HELD / 200000`; unreleased claims 0; open pins 0; Public dispatch rows 0; execution operations 0; provider requests 0; claimable work false.
+- Mediated execution: canonical `ReconciliationService.close()` with a task-owned, non-public closure authority adapter and the existing runtime/reconciler DB authorities. No raw-table DML, new login, grant, or migration.
+- Canonical calculation: zero dispatch markers produced `0 micro-USD`; no value was forced outside the service contract.
+- Durable result: `FAILED_NOT_DISPATCHED`, reservation `SETTLED / 0`, slot `FREE`, outbox `CLOSED`, one closure observation, one SETTLE event, and exact available/held refund conservation.
+- Idempotency: identical second close returned `false`; event counts and ledgers remained unchanged.
+- Preserved lineage and safety: worker-work retained/non-claimable; control disabled; domains 0; provider calls 0; provider-secret isolation unchanged; Replay unchanged.
+- Result candidate: `RETAINED_1919_SETTLED / FAILED_NOT_DISPATCHED / RELEASE_READINESS_ENTRY_CANDIDATE / BROWSER_REVIEW_REQUIRED`.
+- Does not authorize Public admission, Public Live release, a new run, provider call, public domain, edge trust, Cloudflare mutation, or a different settlement.
+- Authority: [2344 Cycle](cycles/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-accepted-failed-smoke-settlement-entry-1.cycle.md), [2344 Judgment](../../reports/aiscc/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-final-acceptance-judgment-1.md), and the 2344 Executor evidence bundle.
+
 ## AISCC-P3-3-PUBLIC-LIVE-SHARED-VARIABLE-MIGRATION-CANDIDATE-V1
 
 - Human authority: `SHARED_VARIABLE_MIGRATION_AUTHORIZED` under the 2312 Cycle/Judgment.

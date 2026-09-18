@@ -1,5 +1,17 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_2344 retained settlement candidate)
+
+1. Browser Command Center reviews the exact 2344 target identity, closure proof, ledger conservation, reconciler authority, and idempotency evidence.
+2. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress/worker domains absent, and Replay unchanged during review.
+3. Preserve the historical worker-work row as non-claimable lineage; do not delete or retry it.
+4. If Browser accepts the settlement candidate, enter a fresh release-readiness decision under a separate explicit Human/Browser Task.
+5. Any Public Live release or re-release remains a later Human decision and must start from a fresh safe-state preflight.
+
+Do not create another public run, call the provider, enable admission, expose ingress, alter edge trust, mutate Cloudflare, or perform another settlement under this candidate.
+
+Authority: [2344 Cycle](cycles/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-accepted-failed-smoke-settlement-entry-1.cycle.md), [2344 Judgment](../../reports/aiscc/20260918_2344_aiscc-p3-3-l8-shared-variable-migration-final-acceptance-judgment-1.md), [2344 handoff](../../reports/aiscc/20260918_2344_aiscc-browser-command-center-l8-failed-smoke-settlement-handoff-1.md), and the 2344 Executor result.
+
 ## Current sequence (20260918_2312 hosted variable isolation candidate)
 
 1. Browser Command Center reviews the 2312 shared-variable provenance and affected hosted L5 reproof candidate.
