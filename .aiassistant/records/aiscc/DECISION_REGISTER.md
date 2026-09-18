@@ -1,5 +1,18 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-WORKER-RUNTIME-DECISION-REQUIRED-V1
+
+- 1919 release disposition: `RELEASE_ROLLED_BACK_TO_REPLAY_ONLY / ACCEPTED_SAFE_ROLLBACK`.
+- Current release state: Public admission `DISABLED`; Public Live `NOT_RELEASED`; Replay public and unchanged.
+- Confirmed root cause: the production Railway worker reports allowlisted fixed codes for both missing `docker` executable and missing `/var/run/docker.sock`. The failure occurs during Stockroom dispatcher construction, before `AgentExecutionService`, operation creation, secret resolution, dispatch pin, or provider send.
+- Narrow implementation decision: `NOT_AVAILABLE_WITHIN_ACCEPTED_SECURITY_CONTRACT`.
+- Decision required: choose a private worker runtime that supplies the accepted local Docker isolation, approve a new isolation/runtime design, or keep Replay-only.
+- Rejected implicit fix: installing or locating only a Docker CLI does not provide the missing trusted daemon and does not satisfy the accepted process/network/filesystem boundary.
+- Failed smoke recovery: the existing mediated close operation can settle a proven definitely-not-sent run as `FAILED_NOT_DISPATCHED`; it was not invoked because this Task has no hosted DB mutation authority.
+- Current result: `HOSTED_STOCKROOM_RUNTIME_DECISION_REQUIRED`.
+- Authority: [2036 Cycle](cycles/20260918_2036_aiscc-p3-3-l8-release-rollback-accepted-worker-predispatch-rework-entry-1.cycle.md), [2036 Judgment](../../reports/aiscc/20260918_2036_aiscc-p3-3-l8-release-rollback-acceptance-worker-predispatch-rework-judgment-1.md), and the 2036 Executor proof bundle.
+- Does not authorize: admission enablement, new public runs, provider calls, failed-run settlement, Railway resources/config changes beyond the completed private observability deployment, ingress exposure, or Cloudflare Live deployment.
+
 ## AISCC-P3-3-PUBLIC-LIVE-L5-TERMINAL-ACCEPTED-L6-CANDIDATE-V1
 
 - L5 decision: `ACCEPTED / CLOSED` by Browser Command Center under the attached 0822 Cycle/Judgment.

@@ -248,6 +248,7 @@ async def run_worker_loop(
     stop: asyncio.Event,
     *,
     renewal_interval_seconds: float = 5.0,
+    observe_failure: Callable[[BaseException], None] | None = None,
 ) -> None:
     await authority.repository.verify_runtime_identity()
     await authority.register()
@@ -283,7 +284,10 @@ async def run_worker_loop(
                 else "LIVE_UNAVAILABLE"
             )
             await authority.repository.release(claim, reason)
-        except Exception:
+        except Exception as error:
+            if observe_failure is not None:
+                with suppress(Exception):
+                    observe_failure(error)
             await _wait(stop, db_delay)
             db_delay = min(db_delay * 2, 10)
 

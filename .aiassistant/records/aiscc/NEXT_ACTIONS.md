@@ -1,5 +1,19 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_2036 worker runtime decision required)
+
+1. Keep Public Replay public and unchanged; keep Public admission `DISABLED` and Public Live `NOT_RELEASED`.
+2. Browser/Human chooses one bounded disposition:
+   - provide a private worker runtime that supports the already accepted local Docker daemon/image/isolation contract;
+   - issue a new security/runtime design Task for a different isolation substrate;
+   - retain Replay-only and stop the Live path.
+3. If desired, separately authorize the existing mediated `FAILED_NOT_DISPATCHED` closure for the retained 1919 smoke after trusted definitely-not-sent closure proof. Do not mutate the failed evidence in the runtime-decision Task.
+4. Only after a runtime decision and local/hosted proof may Browser issue a new release-readiness or re-release Task.
+
+Do not install an untrusted daemon, mount an uncontrolled Docker socket, replace the Stockroom tool with a fake result, create a new public run, call the provider, or expose ingress as a workaround. The current technical result is `HOSTED_STOCKROOM_RUNTIME_DECISION_REQUIRED`.
+
+Authority: [2036 Cycle](cycles/20260918_2036_aiscc-p3-3-l8-release-rollback-accepted-worker-predispatch-rework-entry-1.cycle.md), [2036 Judgment](../../reports/aiscc/20260918_2036_aiscc-p3-3-l8-release-rollback-acceptance-worker-predispatch-rework-judgment-1.md), and the confirmed hosted worker prerequisite proof.
+
 ## Current sequence (20260918_0822 L6 terminal candidate)
 
 1. Treat L5 as `ACCEPTED / CLOSED` under the attached 0822 Browser Cycle/Judgment.

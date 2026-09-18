@@ -260,6 +260,58 @@ def test_production_claim_executor_runs_primary_verify_correct(l2_url) -> None:
     asyncio.run(check())
 
 
+def test_missing_docker_fails_before_operation_with_exact_worker_login(l2_url, monkeypatch) -> None:
+    async def check():
+        async with harness(l2_url) as h:
+            h.admission.start_contract = StartContract.load()
+            run = (await h.admit()).run_id
+            worker_password = secrets.token_urlsafe(24)
+            async with h.admin.begin() as connection:
+                await connection.execute(
+                    text(f"ALTER ROLE aiscc_live_worker_login PASSWORD '{worker_password}'")
+                )
+            worker_url = (
+                make_url(h.url)
+                .set(username="aiscc_live_worker_login", password=worker_password)
+                .render_as_string(hide_password=False)
+            )
+            initializer = create_initializer({"AISCC_PUBLIC_LIVE_START_DATABASE_URL": h.url})
+            worker = create_worker({"AISCC_PUBLIC_LIVE_DATABASE_URL": worker_url})
+            monkeypatch.setattr(
+                "aiscc.public_live.stockroom_runtime.shutil.which", lambda _name: None
+            )
+            try:
+                assert await initializer.step()
+                await worker.authority.repository.verify_runtime_identity()
+                await worker.authority.register()
+                claim = await worker.authority.claim_next_work()
+                assert claim is not None
+                with pytest.raises(RuntimeError, match="^PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED$"):
+                    await worker.execute_claim(ActiveClaim(claim))
+                async with h.admin.connect() as connection:
+                    operations = await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM execution_operations o "
+                            "JOIN public_provider_execution e ON e.execution_attempt_id="
+                            "o.execution_attempt_id WHERE e.run_id=:r"
+                        ),
+                        {"r": run},
+                    )
+                    dispatches = await connection.scalar(
+                        text("SELECT count(*) FROM public_provider_request WHERE run_id=:r"),
+                        {"r": run},
+                    )
+                assert operations == 0
+                assert dispatches == 0
+                assert worker.adapter.invocation_count == 0
+                assert worker.last_stockroom_dispatcher is None
+            finally:
+                await initializer.close()
+                await worker.close()
+
+    asyncio.run(check())
+
+
 def test_durable_pre_dispatch_definitely_not_sent_and_zero_receipts(l2_url) -> None:
     async def check():
         async with harness(l2_url) as h:

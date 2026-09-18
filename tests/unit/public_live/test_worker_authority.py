@@ -2,7 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
+import pytest
+
+from aiscc.public_live.worker import (
+    _execute_production_claim,
+    classify_worker_failure,
+    stockroom_daemon_observation,
+    stockroom_runtime_observation,
+)
 from aiscc.public_live.worker_authority import (
     ActiveClaim,
     ClaimRef,
@@ -91,3 +100,101 @@ def test_supervised_claim_renews_and_lost_renewal_closes_new_use() -> None:
             raise AssertionError("lost renewal retained side-effect authority")
 
     asyncio.run(check())
+
+
+def test_worker_loop_reports_only_allowlisted_failure_classification() -> None:
+    class FailingRepository(Repository):
+        async def verify_runtime_identity(self) -> None:
+            return None
+
+        async def recover_expired(self, _worker: WorkerRef) -> dict[str, int]:
+            return {"recovered": 0, "quarantined": 0}
+
+    async def check() -> None:
+        repository = FailingRepository()
+        authority = DurableWorkerAuthority(repository)  # type: ignore[arg-type]
+        stop = asyncio.Event()
+        observations = []
+
+        async def execute(_active: ActiveClaim) -> str:
+            stop.set()
+            raise RuntimeError("secret-bearing-error-must-not-escape")
+
+        from aiscc.public_live.worker_authority import run_worker_loop
+
+        await run_worker_loop(
+            authority,
+            execute,
+            stop,
+            renewal_interval_seconds=0.001,
+            observe_failure=lambda error: observations.append(classify_worker_failure(error)),
+        )
+        assert len(observations) == 1
+        assert observations[0].stage == "CLAIM_EXECUTION"
+        assert observations[0].code == "PUBLIC_WORKER_FAILURE_UNCLASSIFIED"
+        assert len(observations[0].digest) == 64
+        assert "secret" not in repr(observations[0])
+
+    asyncio.run(check())
+
+
+def test_docker_prerequisite_and_exact_failure_are_fixed_safe_codes(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("aiscc.public_live.worker.shutil.which", lambda _name: None)
+    prerequisite = stockroom_runtime_observation()
+    daemon = stockroom_daemon_observation(tmp_path / "missing.sock")
+    failure = classify_worker_failure(RuntimeError("PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"))
+
+    assert prerequisite.stage == "RUNTIME_PREREQUISITE"
+    assert prerequisite.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
+    assert daemon.stage == "RUNTIME_DAEMON"
+    assert daemon.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_REQUIRED"
+    assert failure.stage == "STOCKROOM_COMPOSITION"
+    assert failure.code == "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
+    assert prerequisite.digest != failure.digest
+
+
+def test_missing_docker_fails_before_execution_service_construction(monkeypatch) -> None:
+    claim = ClaimRef(
+        b"r" * 16,
+        b"c" * 16,
+        b"w" * 16,
+        b"p" * 16,
+        1,
+        1,
+        datetime.now(UTC) + timedelta(seconds=15),
+    )
+
+    class ContextRepository:
+        async def context(self, _claim: ClaimRef) -> dict[str, object]:
+            return {
+                "state_version": 2,
+                "execution_version": 1,
+                "work_run_id": "work-run-fixed",
+                "execution_attempt_id": "attempt-fixed",
+            }
+
+    constructed = 0
+
+    class ForbiddenExecutionService:
+        def __init__(self, **_kwargs) -> None:
+            nonlocal constructed
+            constructed += 1
+
+    worker = SimpleNamespace(
+        authority=SimpleNamespace(repository=ContextRepository()),
+        stockroom_runner=None,
+        adapter=SimpleNamespace(invocation_count=0),
+        semantic_validator=None,
+        last_stockroom_dispatcher=None,
+    )
+    monkeypatch.setattr("aiscc.public_live.stockroom_runtime.shutil.which", lambda _name: None)
+    monkeypatch.setattr("aiscc.public_live.worker.AgentExecutionService", ForbiddenExecutionService)
+
+    async def check() -> None:
+        with pytest.raises(RuntimeError, match="^PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED$"):
+            await _execute_production_claim(worker, None, ActiveClaim(claim))  # type: ignore[arg-type]
+
+    asyncio.run(check())
+    assert constructed == 0
+    assert worker.adapter.invocation_count == 0
+    assert worker.last_stockroom_dispatcher is None

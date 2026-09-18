@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import logging
 import os
+import shutil
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -41,6 +45,61 @@ from aiscc.public_live.worker_authority import (
     run_worker_loop,
 )
 from aiscc.security.policy import SecurityPolicy
+
+_LOGGER = logging.getLogger("aiscc.public_live.worker")
+_OBSERVATION_DOMAIN = "AISCC-PUBLIC-WORKER-OBSERVATION-V1"
+
+
+@dataclass(frozen=True, slots=True)
+class WorkerObservation:
+    """Secret-safe, allowlisted worker diagnostic suitable for hosted logs."""
+
+    stage: str
+    code: str
+    digest: str
+
+
+def stockroom_runtime_observation() -> WorkerObservation:
+    code = (
+        "PUBLIC_LIVE_STOCKROOM_DOCKER_PRESENT"
+        if shutil.which("docker") is not None
+        else "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED"
+    )
+    return _worker_observation("RUNTIME_PREREQUISITE", code)
+
+
+def stockroom_daemon_observation(
+    socket_path: Path = Path("/var/run/docker.sock"),
+) -> WorkerObservation:
+    code = (
+        "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_PRESENT"
+        if socket_path.is_socket()
+        else "PUBLIC_LIVE_STOCKROOM_DOCKER_SOCKET_REQUIRED"
+    )
+    return _worker_observation("RUNTIME_DAEMON", code)
+
+
+def classify_worker_failure(error: BaseException) -> WorkerObservation:
+    if type(error) is RuntimeError and error.args == ("PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED",):
+        return _worker_observation(
+            "STOCKROOM_COMPOSITION",
+            "PUBLIC_LIVE_STOCKROOM_DOCKER_REQUIRED",
+        )
+    return _worker_observation("CLAIM_EXECUTION", "PUBLIC_WORKER_FAILURE_UNCLASSIFIED")
+
+
+def _worker_observation(stage: str, code: str) -> WorkerObservation:
+    payload = "\0".join((_OBSERVATION_DOMAIN, stage, code)).encode("ascii")
+    return WorkerObservation(stage, code, hashlib.sha256(payload).hexdigest())
+
+
+def _emit_worker_observation(observation: WorkerObservation) -> None:
+    _LOGGER.warning(
+        "public_live_worker stage=%s code=%s digest=%s",
+        observation.stage,
+        observation.code,
+        observation.digest,
+    )
 
 
 @dataclass(frozen=True)
@@ -85,7 +144,14 @@ class HostedPublicLiveWorker:
             raise RuntimeError("PUBLIC_WORKER_COMPOSITION_INVALID")
 
     async def run(self, stop: asyncio.Event) -> None:
-        await run_worker_loop(self.authority, self.execute_claim, stop)
+        _emit_worker_observation(stockroom_runtime_observation())
+        _emit_worker_observation(stockroom_daemon_observation())
+        await run_worker_loop(
+            self.authority,
+            self.execute_claim,
+            stop,
+            observe_failure=lambda error: _emit_worker_observation(classify_worker_failure(error)),
+        )
 
 
 def create_worker(

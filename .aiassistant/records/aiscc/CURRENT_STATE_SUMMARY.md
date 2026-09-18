@@ -1,5 +1,20 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_2036 release rollback / worker runtime decision)
+
+- Competition submission and Public Replay: `PUBLIC / RETAINED / UNCHANGED`.
+- 1919 Public Live release attempt: `RELEASE_ROLLED_BACK_TO_REPLAY_ONLY`; the rollback and retained evidence are Browser-accepted.
+- Public Live: `NOT_RELEASED`; Public admission: `DISABLED`; ingress public domain and edge trust: absent.
+- L8: `OPEN / REWORK_BLOCKED_ON_HOSTED_STOCKROOM_RUNTIME_DECISION`.
+- Confirmed worker failure: the Railway production worker has neither a `docker` executable nor `/var/run/docker.sock`, while the accepted `StockroomDockerRunner` requires that exact local Docker isolation path before `AgentExecutionService.execute()` can create the first operation.
+- Failed smoke remains `ADMITTED` with one `HELD` 200000 micro-USD reservation and slot 1 `OCCUPIED` at generation 1; execution operations, dispatch pins, Public Live dispatch rows, and provider requests remain zero.
+- Exact existing recovery authority: trusted `ReconciliationService.close(..., target="FAILED_NOT_DISPATCHED")` after authoritative closure proof; execution requires a separate Task and was not performed.
+- Result boundary: `HOSTED_STOCKROOM_RUNTIME_DECISION_REQUIRED`. Installing only a Docker CLI cannot satisfy the missing daemon/isolation boundary.
+
+The next Human/Browser decision must choose a compatible private worker runtime, accept a separately designed isolation substrate, or retain Replay-only. No Public Live re-release, new public run, provider call, accounting recovery, or security-boundary weakening is authorized by this projection.
+
+Authority: [2036 rollback acceptance/rework Cycle](cycles/20260918_2036_aiscc-p3-3-l8-release-rollback-accepted-worker-predispatch-rework-entry-1.cycle.md), [2036 Browser Judgment](../../reports/aiscc/20260918_2036_aiscc-p3-3-l8-release-rollback-acceptance-worker-predispatch-rework-judgment-1.md), and [2036 handoff](../../reports/aiscc/20260918_2036_aiscc-browser-command-center-l8-release-rollback-worker-predispatch-rework-handoff-1.md).
+
 ## Current authority (20260918_0822 L5 terminal acceptance / L6 candidate)
 
 - Competition submission: `COMPLETED / HUMAN_PROVIDED`.
