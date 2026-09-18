@@ -18,7 +18,14 @@ MEMBERS = (
     "stockroom-s3-policy-conflict.json",
     "stockroom-s4-human-owned-claim.json",
 )
-ASSETS = ("index.html", "404.html", "assets/app.js", "assets/styles.css", "_headers")
+ASSETS = (
+    "index.html",
+    "404.html",
+    "assets/app.js",
+    "assets/styles.css",
+    "live-config.json",
+    "_headers",
+)
 
 
 def sha(data: bytes) -> str:

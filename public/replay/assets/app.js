@@ -1,6 +1,6 @@
 "use strict";
 
-// Only these immutable same-origin data files are ever fetched.
+// Only these immutable same-origin Replay data files are ever fetched.
 const SCENARIOS = Object.freeze({
   "stockroom-s1-normal": ["01", "Evidence admitted", "stockroom-s1-normal.json"],
   "stockroom-s2-missing-evidence": ["02", "Missing evidence", "stockroom-s2-missing-evidence.json"],
@@ -8,8 +8,28 @@ const SCENARIOS = Object.freeze({
   "stockroom-s4-human-owned-claim": ["04", "Human decision pending", "stockroom-s4-human-owned-claim.json"]
 });
 const ABSENT = "Not recorded in this public artifact";
+const LIVE_SCENARIO_ID = "stockroom-s1-normal";
+const LIVE_SCENARIO_VERSION = "1.0.0";
+const LIVE_CONFIG_SCHEMA = "AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1";
+const LIVE_SESSION_SCHEMA = "AISCC-PUBLIC-LIVE-BROWSER-SESSION-V1";
+const LIVE_SESSION_KEY = "aiscc.public-live.session.v1";
+const LIVE_ROOT = "/v1/public-live/runs";
+const LIVE_POLL_INTERVAL_MS = 3000;
+const LIVE_MAX_POLLS = 40;
+const TERMINAL_LIVE_STATES = new Set([
+  "GOVERNANCE_PENDING", "UNKNOWN_OUTCOME", "COMPLETED", "FAILED_NOT_DISPATCHED",
+  "FAILED_PROVIDER", "FAILED_TIMEOUT", "FAILED_SAFETY"
+]);
 let catalogIndex = null;
 let selectionVersion = 0;
+const liveRuntime = {
+  config: null,
+  session: null,
+  pollTimer: null,
+  expiryTimer: null,
+  polls: 0,
+  stopped: true
+};
 
 function node(tag, text, className) {
   const el = document.createElement(tag);
@@ -32,6 +52,11 @@ function panel(title, summary, data) {
   if (data !== undefined) raw(el, "Inspect recorded fields", data);
   return el;
 }
+function hasExactKeys(data, keys) {
+  return data && typeof data === "object" && !Array.isArray(data) &&
+    Object.keys(data).sort().join("\n") === [...keys].sort().join("\n");
+}
+
 async function readJSON(filename) {
   const allowed = ["REPLAY_CORPUS_INDEX.json", ...Object.values(SCENARIOS).map(v => v[2])];
   if (!allowed.includes(filename)) throw new Error("Unknown scenario selector.");
@@ -122,11 +147,317 @@ async function selectScenario() {
   } catch (error) { if (version === selectionVersion) { status.textContent = error.message + " No execution was started."; status.className = "error"; } }
   finally { if (version === selectionVersion) document.getElementById("detail").setAttribute("aria-busy", "false"); }
 }
-async function initialize() {
+async function initializeReplay() {
   const status = document.getElementById("catalog-status");
   try { const data = await readJSON("REPLAY_CORPUS_INDEX.json"); validateIndex(data); catalogIndex = data; renderCatalog(data); status.textContent = "Four historical scenarios. Titles describe the recorded outcomes."; }
   catch (error) { status.textContent = error.message + " No execution was started."; status.className = "error"; }
   await selectScenario();
 }
+
+function liveStatus(message, isError = false) {
+  const status = document.getElementById("live-status");
+  status.textContent = message;
+  status.className = isError ? "error" : "";
+}
+function liveButton(enabled, label) {
+  const button = document.getElementById("live-start");
+  button.disabled = !enabled;
+  button.textContent = label;
+}
+function clearLiveResult() { document.getElementById("live-result").replaceChildren(); }
+function stopPolling(message) {
+  if (liveRuntime.pollTimer !== null) clearTimeout(liveRuntime.pollTimer);
+  liveRuntime.pollTimer = null;
+  liveRuntime.stopped = true;
+  document.getElementById("live-stop").hidden = true;
+  if (message) liveStatus(message);
+}
+function clearExpiryTimer() {
+  if (liveRuntime.expiryTimer !== null) clearTimeout(liveRuntime.expiryTimer);
+  liveRuntime.expiryTimer = null;
+}
+function removeLiveSession() {
+  try { sessionStorage.removeItem(LIVE_SESSION_KEY); } catch {}
+  liveRuntime.session = null;
+}
+function saveLiveSession(session) {
+  sessionStorage.setItem(LIVE_SESSION_KEY, JSON.stringify(session));
+  liveRuntime.session = session;
+}
+function validIdempotencyKey(input) { return typeof input === "string" && /^[0-9a-f]{32}$/.test(input); }
+function validRunId(input) { return typeof input === "string" && /^[A-Za-z0-9_-]{22}$/.test(input); }
+function validCapability(input) { return typeof input === "string" && /^[A-Za-z0-9_-]{43}$/.test(input); }
+function validTimestamp(input) { return typeof input === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(input) && Number.isFinite(Date.parse(input)); }
+function validBaseSession(session) {
+  return session && session.schema === LIVE_SESSION_SCHEMA &&
+    session.api_origin === liveRuntime.config.apiOrigin &&
+    session.scenario_id === LIVE_SCENARIO_ID && session.scenario_version === LIVE_SCENARIO_VERSION;
+}
+function loadLiveSession() {
+  let parsed;
+  try {
+    const stored = sessionStorage.getItem(LIVE_SESSION_KEY);
+    if (!stored) return null;
+    parsed = JSON.parse(stored);
+  } catch { removeLiveSession(); return null; }
+  if (!validBaseSession(parsed) || !["admission_pending", "active", "capability_unavailable", "closed"].includes(parsed.phase)) {
+    removeLiveSession(); return null;
+  }
+  if (parsed.phase === "admission_pending" && !validIdempotencyKey(parsed.idempotency_key)) {
+    removeLiveSession(); return null;
+  }
+  if (parsed.phase === "active" && (!validRunId(parsed.run_id) || !validCapability(parsed.read_capability) || !validTimestamp(parsed.read_expires_at))) {
+    removeLiveSession(); return null;
+  }
+  if (parsed.phase === "capability_unavailable" && !validRunId(parsed.run_id)) {
+    removeLiveSession(); return null;
+  }
+  return parsed;
+}
+function expireLiveSession() {
+  stopPolling();
+  clearExpiryTimer();
+  removeLiveSession();
+  clearLiveResult();
+  liveButton(true, "Start bounded Live");
+  liveStatus("The same-tab read capability expired and was discarded. No replacement run was started.");
+}
+function scheduleExpiry(session) {
+  clearExpiryTimer();
+  const remaining = Date.parse(session.read_expires_at) - Date.now();
+  if (remaining <= 0) { expireLiveSession(); return false; }
+  liveRuntime.expiryTimer = setTimeout(expireLiveSession, remaining);
+  return true;
+}
+function storageAvailable() {
+  const probe = LIVE_SESSION_KEY + ".probe";
+  try { sessionStorage.setItem(probe, "1"); sessionStorage.removeItem(probe); return true; }
+  catch { return false; }
+}
+function randomIdempotencyKey() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, "0")).join("");
+}
+function newPendingSession() {
+  return {
+    schema: LIVE_SESSION_SCHEMA,
+    phase: "admission_pending",
+    api_origin: liveRuntime.config.apiOrigin,
+    scenario_id: LIVE_SCENARIO_ID,
+    scenario_version: LIVE_SCENARIO_VERSION,
+    idempotency_key: randomIdempotencyKey()
+  };
+}
+function validateLiveConfig(data) {
+  if (!hasExactKeys(data, ["schema", "enabled", "api_origin"]) || data.schema !== LIVE_CONFIG_SCHEMA || typeof data.enabled !== "boolean") return null;
+  if (!data.enabled) return data.api_origin === null ? Object.freeze({enabled: false, apiOrigin: null}) : null;
+  if (typeof data.api_origin !== "string") return null;
+  let parsed;
+  try { parsed = new URL(data.api_origin); } catch { return null; }
+  if (parsed.protocol !== "https:" || parsed.origin !== data.api_origin || parsed.pathname !== "/" || parsed.search || parsed.hash || parsed.username || parsed.password) return null;
+  return Object.freeze({enabled: true, apiOrigin: parsed.origin});
+}
+async function readLiveConfig() {
+  let response;
+  try { response = await fetch("live-config.json", {method: "GET", credentials: "omit", redirect: "error", cache: "no-store"}); }
+  catch { return null; }
+  if (!response.ok) return null;
+  try { return validateLiveConfig(await response.json()); } catch { return null; }
+}
+function validateReceipt201(data) {
+  return hasExactKeys(data, ["run_id", "state", "read_capability", "read_expires_at", "replayed"]) &&
+    validRunId(data.run_id) && data.state === "ADMITTED" && validCapability(data.read_capability) &&
+    validTimestamp(data.read_expires_at) && Date.parse(data.read_expires_at) > Date.now() && data.replayed === false;
+}
+function validateReceipt202(data) {
+  return hasExactKeys(data, ["run_id", "replayed"]) && validRunId(data.run_id) && data.replayed === true;
+}
+function validateProjection(data, runId) {
+  if (!hasExactKeys(data, ["run_id", "state", "reason_code", "admitted_at", "updated_at", "deadline_at", "mode", "scenario_id", "scenario_version", "result"]) ||
+      data.run_id !== runId || typeof data.state !== "string" || data.state.length > 64 ||
+      (data.reason_code !== null && (typeof data.reason_code !== "string" || data.reason_code.length > 64)) ||
+      !validTimestamp(data.admitted_at) || !validTimestamp(data.updated_at) || !validTimestamp(data.deadline_at) ||
+      data.mode !== "PUBLIC_BOUNDED_LIVE" || data.scenario_id !== LIVE_SCENARIO_ID || data.scenario_version !== LIVE_SCENARIO_VERSION) return false;
+  if (data.result === null) return true;
+  return hasExactKeys(data.result, ["workflow_state", "summary_text", "evidence_status"]) &&
+    typeof data.result.workflow_state === "string" && data.result.workflow_state.length <= 64 &&
+    typeof data.result.summary_text === "string" && data.result.summary_text.length <= 4000 &&
+    ["PENDING", "ADMITTED", "UNAVAILABLE"].includes(data.result.evidence_status);
+}
+function renderLiveProjection(data) {
+  const result = document.getElementById("live-result"); result.replaceChildren(); result.className = "live-result";
+  result.append(node("h4", "Server status"));
+  for (const [label, content] of [["Run", data.run_id], ["Run state", data.state], ["Reason", data.reason_code],
+    ["Admitted at", data.admitted_at], ["Updated at", data.updated_at], ["Deadline", data.deadline_at],
+    ["Mode", data.mode], ["Scenario / version", data.scenario_id + " / " + data.scenario_version]]) fact(result, label, content);
+  if (data.result !== null) {
+    result.append(node("h4", "Bounded public result"));
+    fact(result, "Server workflow state", data.result.workflow_state);
+    fact(result, "Evidence status", data.result.evidence_status);
+    result.append(node("p", data.result.summary_text));
+  } else {
+    result.append(node("p", "No bounded public result is available yet."));
+  }
+}
+async function safeResponseJSON(response) {
+  try { return await response.json(); } catch { return null; }
+}
+function scheduleNextPoll() {
+  if (!liveRuntime.stopped) liveRuntime.pollTimer = setTimeout(pollLive, LIVE_POLL_INTERVAL_MS);
+}
+async function pollLive() {
+  liveRuntime.pollTimer = null;
+  const session = liveRuntime.session;
+  if (!session || session.phase !== "active" || liveRuntime.stopped) return;
+  if (Date.parse(session.read_expires_at) <= Date.now()) { expireLiveSession(); return; }
+  if (liveRuntime.polls >= LIVE_MAX_POLLS) {
+    stopPolling("Automatic status updates paused after the bounded polling window. Refresh this tab to resume while the capability remains valid.");
+    return;
+  }
+  liveRuntime.polls += 1;
+  let response;
+  document.getElementById("live").setAttribute("aria-busy", "true");
+  try {
+    response = await fetch(liveRuntime.config.apiOrigin + LIVE_ROOT + "/" + session.run_id, {
+      method: "GET",
+      headers: {"X-Run-Read-Capability": session.read_capability},
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store"
+    });
+  } catch {
+    stopPolling("Live status is unavailable. The Recorded Replay remains usable.");
+    document.getElementById("live").setAttribute("aria-busy", "false");
+    return;
+  }
+  const data = await safeResponseJSON(response);
+  document.getElementById("live").setAttribute("aria-busy", "false");
+  if (!response.ok || !validateProjection(data, session.run_id)) {
+    if (response.status === 404) { clearExpiryTimer(); removeLiveSession(); }
+    stopPolling("Live status is unavailable or no longer readable. The Recorded Replay remains usable.");
+    return;
+  }
+  renderLiveProjection(data);
+  liveStatus("Live status loaded from the bounded public projection. This is not a Human acceptance decision.");
+  if (TERMINAL_LIVE_STATES.has(data.state)) {
+    stopPolling("Live reached server state " + data.state + ". Automatic status updates stopped. This is not a Human acceptance decision.");
+    return;
+  }
+  scheduleNextPoll();
+}
+async function resumeActiveSession(session) {
+  if (!scheduleExpiry(session)) return;
+  liveRuntime.session = session;
+  liveRuntime.polls = 0;
+  liveRuntime.stopped = false;
+  liveButton(false, "Live session active");
+  document.getElementById("live-stop").hidden = false;
+  liveStatus("Resuming this tab's bounded Live status with its session-only read capability.");
+  await pollLive();
+}
+function uncertainAdmission(session, message) {
+  saveLiveSession(session);
+  liveButton(true, "Retry same admission request");
+  liveStatus(message + " A retry will reuse this tab's same idempotency key; no replacement run was created.", true);
+}
+async function startLive() {
+  if (!liveRuntime.config?.enabled) return;
+  let session = liveRuntime.session;
+  if (!session) {
+    session = newPendingSession();
+    try { saveLiveSession(session); }
+    catch { liveButton(false, "Live unavailable"); liveStatus("Same-tab session storage is unavailable. Live remains disabled; Replay remains usable.", true); return; }
+  }
+  if (session.phase !== "admission_pending") return;
+  liveButton(false, "Submitting bounded request…");
+  liveStatus("Submitting the fixed stockroom-s1-normal / 1.0.0 request.");
+  let response;
+  try {
+    response = await fetch(liveRuntime.config.apiOrigin + LIVE_ROOT, {
+      method: "POST",
+      headers: {"Content-Type": "application/json", "Idempotency-Key": session.idempotency_key},
+      body: JSON.stringify({scenario_id: LIVE_SCENARIO_ID, scenario_version: LIVE_SCENARIO_VERSION}),
+      credentials: "omit",
+      redirect: "error",
+      cache: "no-store"
+    });
+  } catch {
+    uncertainAdmission(session, "The admission response was not received.");
+    return;
+  }
+  const data = await safeResponseJSON(response);
+  if (response.status === 201 && validateReceipt201(data)) {
+    const active = {
+      schema: LIVE_SESSION_SCHEMA, phase: "active", api_origin: liveRuntime.config.apiOrigin,
+      scenario_id: LIVE_SCENARIO_ID, scenario_version: LIVE_SCENARIO_VERSION,
+      run_id: data.run_id, read_capability: data.read_capability, read_expires_at: data.read_expires_at
+    };
+    try { saveLiveSession(active); }
+    catch { liveButton(false, "Live unavailable"); liveStatus("The read capability could not be kept in same-tab session storage. Status recovery is unavailable.", true); return; }
+    await resumeActiveSession(active);
+    return;
+  }
+  if (response.status === 202 && validateReceipt202(data)) {
+    const unavailable = {
+      schema: LIVE_SESSION_SCHEMA, phase: "capability_unavailable", api_origin: liveRuntime.config.apiOrigin,
+      scenario_id: LIVE_SCENARIO_ID, scenario_version: LIVE_SCENARIO_VERSION, run_id: data.run_id
+    };
+    saveLiveSession(unavailable);
+    liveButton(false, "Capability unavailable");
+    liveStatus("The server confirmed a prior admission, but this tab never received its one-time read capability. Status recovery is unavailable and no replacement run was created.", true);
+    return;
+  }
+  const retryable = data?.error?.retryable === true && (response.status === 429 || response.status === 503);
+  if (response.status === 500 || retryable) {
+    uncertainAdmission(session, "The admission outcome is uncertain.");
+    return;
+  }
+  const closed = {
+    schema: LIVE_SESSION_SCHEMA, phase: "closed", api_origin: liveRuntime.config.apiOrigin,
+    scenario_id: LIVE_SCENARIO_ID, scenario_version: LIVE_SCENARIO_VERSION,
+    error_code: typeof data?.error?.code === "string" ? data.error.code.slice(0, 64) : "SAFE_ERROR"
+  };
+  saveLiveSession(closed);
+  liveButton(false, "Live unavailable");
+  liveStatus("Live admission was denied or unavailable. No replacement run was started; the Recorded Replay remains usable.", true);
+}
+async function initializeLive() {
+  const config = await readLiveConfig();
+  if (!config || !config.enabled) {
+    removeLiveSession();
+    liveRuntime.config = config;
+    liveButton(false, "Live is not enabled");
+    liveStatus(config ? "Live is not enabled in this release. Recorded Run Replay remains available." : "Live configuration is missing or invalid, so Live failed closed. Recorded Run Replay remains available.");
+    return;
+  }
+  liveRuntime.config = config;
+  if (!storageAvailable()) {
+    liveButton(false, "Live unavailable");
+    liveStatus("Same-tab session storage is unavailable. Live remains disabled; Replay remains usable.", true);
+    return;
+  }
+  const session = loadLiveSession();
+  liveRuntime.session = session;
+  if (!session) {
+    liveButton(true, "Start bounded Live");
+    liveStatus("Live is configured for one fixed scenario. Starting creates one bounded public run.");
+  } else if (session.phase === "admission_pending") {
+    liveButton(true, "Retry same admission request");
+    liveStatus("A prior admission response was uncertain. Retry will reuse this tab's same idempotency key.");
+  } else if (session.phase === "active") {
+    await resumeActiveSession(session);
+  } else if (session.phase === "capability_unavailable") {
+    liveButton(false, "Capability unavailable");
+    liveStatus("A prior run exists, but this tab has no read capability. Status recovery is unavailable and no replacement run was created.", true);
+  } else {
+    liveButton(false, "Live unavailable");
+    liveStatus("This tab's Live attempt is closed. No replacement run was started; Replay remains usable.", true);
+  }
+}
+
 window.addEventListener("hashchange", selectScenario);
-initialize();
+window.addEventListener("pagehide", () => stopPolling());
+document.getElementById("live-start").addEventListener("click", startLive);
+document.getElementById("live-stop").addEventListener("click", () => stopPolling("Automatic status updates stopped locally. Refresh this tab to resume while the capability remains valid."));
+Promise.all([initializeReplay(), initializeLive()]);

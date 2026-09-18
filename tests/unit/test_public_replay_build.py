@@ -1,6 +1,7 @@
 """Fault-focused checks for immutable, deterministic public Replay generation."""
 
 import importlib.util
+import json
 import shutil
 from pathlib import Path
 
@@ -61,3 +62,29 @@ def test_copied_data_drift_and_unexpected_file_fail(isolated):
     (isolated / "public/replay/unexpected.txt").write_text("not allowed")
     with pytest.raises(ValueError, match="UNEXPECTED_PUBLIC_FILE"):
         BUILDER.build(isolated)
+
+
+def test_live_candidate_is_disabled_and_csp_stays_exact(isolated):
+    config = json.loads((isolated / "public/replay/live-config.json").read_text("utf-8"))
+    assert config == {
+        "api_origin": None,
+        "enabled": False,
+        "schema": "AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1",
+    }
+    headers = (isolated / "public/replay/_headers").read_text("utf-8")
+    csp = next(line.strip() for line in headers.splitlines() if "Content-Security-Policy:" in line)
+    assert "connect-src 'self'" in csp
+    assert "*" not in csp
+    assert "https:" not in csp
+    assert "unsafe-inline" not in csp
+    assert "unsafe-eval" not in csp
+
+
+def test_frontend_uses_session_storage_without_capability_debug_channels(isolated):
+    app = (isolated / "public/replay/assets/app.js").read_text("utf-8")
+    assert "sessionStorage" in app
+    assert "localStorage" not in app
+    assert "document.cookie" not in app
+    assert "console." not in app
+    assert "innerHTML" not in app
+    assert 'credentials: "omit"' in app

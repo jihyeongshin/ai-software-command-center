@@ -42,7 +42,19 @@ details { margin-top:14px; }
 summary { cursor:pointer; color:var(--accent); font-size:.88rem; }
 pre { white-space:pre-wrap; overflow-wrap:anywhere; background:#f3f5f1; padding:14px; font:12px/1.6 ui-monospace,monospace; max-height:440px; overflow:auto; }
 .error { border-left:3px solid #a12c23; padding:16px; background:#fff0ed; }
+.live { margin:44px 0 56px; }
+.live-grid { display:grid; grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:16px; }
+.live-scenario,.live-session { background:#fff; padding:24px; border:1px solid var(--line); border-radius:8px; min-width:0; }
+.live-scenario h3,.live-session h3 { margin:12px 0; }
+.live-scenario p,.live-session p { color:var(--muted); }
+.live-actions { display:flex; flex-wrap:wrap; gap:10px; margin:18px 0; }
+button { border:1px solid var(--accent); border-radius:5px; background:var(--accent); color:#fff; padding:10px 14px; font:inherit; font-weight:700; cursor:pointer; }
+button:disabled { border-color:var(--line); background:#e5e9e5; color:var(--muted); cursor:not-allowed; }
+button:not(:disabled):focus-visible { outline:3px solid #ab5c0a; outline-offset:4px; }
+#live-stop { background:#fff; color:var(--accent); }
+.live-result { border-top:1px solid var(--line); margin-top:18px; padding-top:18px; }
+.live-result h4 { margin:0 0 12px; }
 footer { border-top:1px solid var(--line); padding-top:24px; padding-bottom:40px; font-size:.85rem; color:var(--muted); }
 footer a { margin-right:22px; }
 @media(max-width:1050px) { .catalog { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-@media(max-width:650px) { .masthead { flex-wrap:wrap; gap:10px; } .tag { margin-left:0; } .catalog,.chain,.facts { grid-template-columns:1fr; } .section-heading { align-items:flex-start; flex-direction:column; gap:0; } .intro { padding-top:35px; } }
+@media(max-width:650px) { .masthead { flex-wrap:wrap; gap:10px; } .tag { margin-left:0; } .catalog,.chain,.facts,.live-grid { grid-template-columns:1fr; } .section-heading { align-items:flex-start; flex-direction:column; gap:0; } .intro { padding-top:35px; } }

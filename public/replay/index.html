@@ -28,6 +28,28 @@
       <p id="detail-status" role="status">Choose a scenario above.</p>
       <div id="record"></div>
     </section>
+    <section id="live" class="live" aria-labelledby="live-heading" aria-busy="false">
+      <div class="section-heading"><h2 id="live-heading">Bounded Live</h2><span>One fixed synthetic scenario · Release controlled</span></div>
+      <p>Live is a separate, bounded workflow. It never changes a Recorded Replay or turns a provider result into Human acceptance.</p>
+      <div class="live-grid">
+        <div class="live-scenario">
+          <span class="badge">Fixed public scenario</span>
+          <h3>Stockroom normal path</h3>
+          <dl><dt>Scenario</dt><dd>stockroom-s1-normal</dd></dl>
+          <dl><dt>Version</dt><dd>1.0.0</dd></dl>
+          <p>No task, repository, prompt, provider, model, endpoint, tool or secret input is accepted.</p>
+        </div>
+        <div class="live-session">
+          <h3>Live session</h3>
+          <p id="live-status" role="status">Checking release configuration…</p>
+          <div class="live-actions">
+            <button id="live-start" type="button" disabled>Live is not enabled</button>
+            <button id="live-stop" type="button" hidden>Stop status updates</button>
+          </div>
+          <div id="live-result" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
     <noscript><p class="notice">Enable JavaScript to inspect recordings. The stored corpus is also available as <a href="data/REPLAY_CORPUS_INDEX.json">JSON</a>. No AI runs while viewing it.</p></noscript>
   </main>
   <footer><p>Historical records preserve their original outcomes. An Agent claim is not admitted evidence, and a recorded outcome is not a new Human decision.</p><a href="health.json">Static release identity</a><a href="PUBLIC_REPLAY_BUILD_MANIFEST.json">Build provenance</a></footer>

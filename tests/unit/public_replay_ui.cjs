@@ -6,23 +6,29 @@ const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../..");
 const script = fs.readFileSync(path.join(root, "public/replay/assets/app.js"), "utf8");
 class Element {
-  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.attrs = {}; this._text = ""; }
+  constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; this.attrs = {}; this.listeners = {}; this._text = ""; this.disabled = false; this.hidden = false; }
   set textContent(text) { this._text = String(text); this.children = []; }
   get textContent() { return this._text + this.children.map(c => c.textContent).join(" "); }
   append(...children) { this.children.push(...children); }
   replaceChildren(...children) { this._text = ""; this.children = children; }
   setAttribute(name, value) { this.attrs[name] = value; }
   removeAttribute(name) { delete this.attrs[name]; }
+  addEventListener(name, fn) { this.listeners[name] = fn; }
   set innerHTML(_) { throw Error("Unsafe HTML insertion"); }
 }
 async function setup(fault = {}) {
-  const ids = Object.fromEntries(["catalog", "catalog-status", "detail", "detail-status", "record"].map(id => [id, new Element("div")]));
+  const ids = Object.fromEntries(["catalog", "catalog-status", "detail", "detail-status", "record", "live", "live-status", "live-start", "live-stop", "live-result"].map(id => [id, new Element("div")]));
   const listeners = {}; const requests = [];
+  const storage = new Map();
   const context = vm.createContext({
     document: { createElement: tag => new Element(tag), getElementById: id => ids[id], querySelectorAll: () => ids.catalog.children },
     location: {hash: ""}, window: {addEventListener: (name, fn) => { listeners[name] = fn; }},
+    sessionStorage: {getItem:key => storage.get(key) ?? null, setItem:(key, value) => storage.set(key, String(value)), removeItem:key => storage.delete(key)},
+    crypto: {getRandomValues: bytes => bytes.fill(7)},
+    setTimeout: () => 1, clearTimeout: () => {}, URL,
     fetch: async (url, options) => {
       requests.push(url); assert.equal(options.method, "GET"); assert.equal(options.credentials, "omit"); assert.equal(options.redirect, "error");
+      if (url === "live-config.json") return {ok:true, json:async () => ({schema:"AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1", enabled:false, api_origin:null})};
       assert.match(url, /^data\/(REPLAY_CORPUS_INDEX|stockroom-s[1-4]-[a-z-]+)\.json$/);
       const name = url.slice(5);
       if (fault.missing === name) return {ok:false};
