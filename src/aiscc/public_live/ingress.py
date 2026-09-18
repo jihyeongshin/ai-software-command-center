@@ -14,12 +14,21 @@ from aiscc.persistence import create_engine, create_session_factory
 from aiscc.persistence.public_live import PublicLiveRepository
 from aiscc.persistence.public_live_limits import PublicLiveIngressLimits
 from aiscc.public_live.edge_identity import RailwayEdgeIdentityAuthority
-from aiscc.public_live.http import PublicLiveApp
+from aiscc.public_live.http import LocalAdmissionBinding, PublicLiveApp
+from aiscc.public_live.identity import IdentityPolicy
+from aiscc.public_live.luna_profile import hosted_luna_profile
+from aiscc.public_live.service import AdmissionService
+from aiscc.public_live.start_authority import StartContract
 
 LIVE_DATABASE_VARIABLE = "AISCC_PUBLIC_LIVE_DATABASE_URL"
 PUBLIC_ORIGIN_VARIABLE = "PUBLIC_LIVE_API_ORIGIN"
 EDGE_PROOF_VARIABLE = "AISCC_PUBLIC_LIVE_RAILWAY_EDGE_TRUST"
 SOURCE_KEY_VARIABLE = "AISCC_PUBLIC_LIVE_SOURCE_HMAC_KEY"
+CAMPAIGN_ID = "public-live-v1"
+HMAC_VERSION = "v1"
+ADMISSION_BRIDGE_NETWORKS = ("127.0.0.1/32",)
+ADMISSION_BRIDGE_PEER = "127.0.0.1"
+ADMISSION_BRIDGE_PROOF = "HOSTED_RAILWAY_EDGE_TO_LOCAL_ADMISSION_V1"
 INGRESS_LOGIN = "aiscc_live_ingress_login"
 INGRESS_CAPABILITY = "aiscc_public_live_ingress"
 FORBIDDEN_CAPABILITIES = (
@@ -121,18 +130,68 @@ async def verify_runtime_identity(engine: AsyncEngine) -> None:
         raise RuntimeError("PUBLIC_INGRESS_RUNTIME_IDENTITY_DENIED")
 
 
+def compose_admission(repository: PublicLiveRepository, source_key: bytes) -> LocalAdmissionBinding:
+    """Bind accepted server-owned pins to the existing atomic admission owner."""
+    contract = StartContract.load()
+    profile = hosted_luna_profile()
+    pins = (
+        contract.payload.get("scenario_id"),
+        contract.payload.get("scenario_version"),
+        contract.payload.get("repository_identity"),
+        contract.payload.get("repository_version"),
+        contract.payload.get("provider_profile_id"),
+        contract.payload.get("provider_profile_version"),
+        contract.payload.get("tool_registry_id"),
+        contract.payload.get("tool_registry_version"),
+    )
+    expected = (
+        profile.public_scenario_identity,
+        profile.public_scenario_version,
+        profile.public_repository_identity,
+        profile.public_repository_version,
+        profile.profile_id,
+        profile.version,
+        profile.tool_registry_id,
+        profile.tool_registry_version,
+    )
+    try:
+        policy_digest = bytes.fromhex(contract.digest)
+        content_digest = bytes.fromhex(profile.public_repository_version)
+    except ValueError:
+        raise RuntimeError("PUBLIC_INGRESS_ADMISSION_PINS_DENIED") from None
+    if pins != expected or len(policy_digest) != 32 or len(content_digest) != 32:
+        raise RuntimeError("PUBLIC_INGRESS_ADMISSION_PINS_DENIED")
+    identity = IdentityPolicy(
+        ADMISSION_BRIDGE_NETWORKS,
+        ADMISSION_BRIDGE_PROOF,
+        CAMPAIGN_ID,
+        HMAC_VERSION,
+        source_key,
+    )
+    service = AdmissionService(
+        repository,
+        identity,
+        policy_digest=policy_digest,
+        content_digest=content_digest,
+        start_contract=contract,
+    )
+    return LocalAdmissionBinding(service, ADMISSION_BRIDGE_PEER)
+
+
 def create_app() -> HostedPublicLiveIngress:
     settings = IngressSettings.from_environment()
     engine = create_engine(settings.database_url)
     repository = PublicLiveRepository(create_session_factory(engine))
     source = RailwayEdgeIdentityAuthority(
         public_origin=settings.public_origin,
-        campaign="public-live-v1",
-        key_version="v1",
+        campaign=CAMPAIGN_ID,
+        key_version=HMAC_VERSION,
         secret=settings.source_key,
         overwrite_proof_accepted=settings.overwrite_proof_accepted,
     )
-    # admission=None is intentional and release-safe. A later release task must
-    # explicitly bind admission after hosted edge proof and L6 acceptance.
-    application = PublicLiveApp(source, PublicLiveIngressLimits(repository), None)
+    application = PublicLiveApp(
+        source,
+        PublicLiveIngressLimits(repository),
+        compose_admission(repository, settings.source_key),
+    )
     return HostedPublicLiveIngress(application, engine)

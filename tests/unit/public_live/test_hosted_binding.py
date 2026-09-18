@@ -12,8 +12,18 @@ from aiscc.persistence.public_live_limits import LimitResult
 from aiscc.public_live.edge_identity import RailwayEdgeIdentityAuthority
 from aiscc.public_live.hosted_proof import FaultPoint, HostedProofSettings, expectation
 from aiscc.public_live.http import PublicLiveApp
-from aiscc.public_live.ingress import IngressSettings
+from aiscc.public_live.ingress import (
+    ADMISSION_BRIDGE_NETWORKS,
+    ADMISSION_BRIDGE_PEER,
+    ADMISSION_BRIDGE_PROOF,
+    CAMPAIGN_ID,
+    HMAC_VERSION,
+    IngressSettings,
+)
+from aiscc.public_live.ingress import create_app as create_ingress_app
+from aiscc.public_live.start_authority import StartContract
 from aiscc.public_live.worker import WorkerSettings, create_worker
+from aiscc.scenarios.models import RESOURCE_VERSION
 from tests.public_live_http_helpers import call
 
 
@@ -102,6 +112,41 @@ def test_ingress_and_worker_database_and_secret_boundaries() -> None:
     assert worker.adapter.invocation_count == 0
     assert callable(worker.execute_claim)
     asyncio.run(worker.close())
+
+
+def test_production_ingress_composes_frozen_atomic_admission(monkeypatch) -> None:
+    source_key = b"k" * 32
+    monkeypatch.setenv(
+        "AISCC_PUBLIC_LIVE_DATABASE_URL",
+        "postgresql+asyncpg://live@db/live",
+    )
+    monkeypatch.setenv("PUBLIC_LIVE_API_ORIGIN", "https://public-live.up.railway.app")
+    monkeypatch.setenv("AISCC_PUBLIC_LIVE_SOURCE_HMAC_KEY", source_key.hex())
+    monkeypatch.delenv("AISCC_PUBLIC_LIVE_RAILWAY_EDGE_TRUST", raising=False)
+    monkeypatch.delenv("AISCC_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AISCC_DATABASE_URL", raising=False)
+
+    hosted = create_ingress_app()
+    try:
+        application = hosted.application
+        admission = application.admission
+        assert admission is not None
+        assert application.source is not None and application.limits is not None
+        assert application.source.campaign == CAMPAIGN_ID
+        assert application.source.key_version == HMAC_VERSION
+        assert application.source.overwrite_proof_accepted is False
+        assert admission.trusted_peer == ADMISSION_BRIDGE_PEER
+        assert admission.service.identity.edge_cidrs == ADMISSION_BRIDGE_NETWORKS
+        assert admission.service.identity.overwrite_proof_ref == ADMISSION_BRIDGE_PROOF
+        assert admission.service.identity.campaign_id == CAMPAIGN_ID
+        assert admission.service.identity.key_version == HMAC_VERSION
+        contract = StartContract.load()
+        assert admission.service.start_contract == contract
+        assert admission.service.policy_digest == bytes.fromhex(contract.digest)
+        assert admission.service.content_digest == bytes.fromhex(RESOURCE_VERSION)
+    finally:
+        asyncio.run(hosted.engine.dispose())
 
 
 def test_operator_proof_is_private_synthetic_and_fail_closed() -> None:
