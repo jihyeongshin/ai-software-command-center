@@ -1,5 +1,20 @@
 # AISCC Current State Summary
 
+## Current authority (20260918_2312 shared variable migration candidate)
+
+- Canonical entering baseline: `3832fff7751c387b8e559cc273cf30836238d48d`.
+- The Human-authorized shared-to-service-local migration preflight found all three project/environment shared bindings already absent before any Executor mutation: `AISCC_OPENAI_API_KEY`, `OPENAI_API_KEY`, and `AISCC_PUBLIC_LIVE_RAILWAY_EDGE_TRUST`.
+- The worker's independent `AISCC_OPENAI_API_KEY` remains `PRESENT / SEALED / SERVICE-LOCAL`, with zero variable references. `HostedOpenAISecretResolver` continues to own that exact variable.
+- Effective runtime presence is now exact: only the worker receives `AISCC_OPENAI_API_KEY`; the standard key and edge trust are absent on the worker; ingress, initializer, and API receive none of the three variables.
+- Because the authorized terminal configuration already existed, this execution performed zero Railway variable deletes and triggered no new deployment. All four existing deployments remain `SUCCESS`.
+- Hosted fail-closed state: ingress/worker domains 0; `public_control.enabled=false`; public runs 1; active future-deadline runs 0; retained open work 1 and non-claimable; unreleased claims, dispatch pins, execution operations, provider requests, and public dispatch rows all 0.
+- The retained 1919 failed smoke remains expired, `ADMITTED`, untouched, and non-claimable. It was not settled or retried.
+- Worker startup evidence still reports `PUBLIC_LIVE_FIXED_STOCKROOM_READY`; no Docker prerequisite, work claim, provider request, or real OpenAI call was introduced.
+- Current result: `SHARED_VARIABLE_MIGRATION_COMPLETE / AFFECTED_L5_HOSTED_REPROOF_CANDIDATE / BROWSER_REVIEW_REQUIRED`.
+- Public admission remains `DISABLED`; Public Live remains `NOT_RELEASED`; Replay remains unchanged.
+
+Authority: [2312 Cycle](cycles/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-accepted-migration-entry-1.cycle.md), [2312 Judgment](../../reports/aiscc/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-acceptance-migration-judgment-1.md), and the 2312 Executor evidence bundle.
+
 ## Current authority (20260918_2237 hosted variable inheritance blocker)
 
 - Browser-accepted 2134 results remain: Public fixed tool implementation, affected L6 reproof, and private worker Docker-free proof are accepted.

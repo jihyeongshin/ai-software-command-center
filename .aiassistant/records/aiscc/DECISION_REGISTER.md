@@ -1,5 +1,18 @@
 # AISCC Decision Register
 
+## AISCC-P3-3-PUBLIC-LIVE-SHARED-VARIABLE-MIGRATION-CANDIDATE-V1
+
+- Human authority: `SHARED_VARIABLE_MIGRATION_AUTHORIZED` under the 2312 Cycle/Judgment.
+- Pre-mutation discovery: the exact three project/environment shared bindings were already absent. The Executor therefore made no redundant Railway variable mutation.
+- Worker preservation proof: the accepted `AISCC_OPENAI_API_KEY` is an independent sealed service-local binding with zero references and remains the exact `HostedOpenAISecretResolver` owner variable.
+- Source owner audit: Public Live worker is the sole accepted owner of `AISCC_OPENAI_API_KEY`; no accepted component owns shared `OPENAI_API_KEY`; edge trust is ingress-only and must remain absent while ingress has no domain.
+- Effective runtime proof: worker receives only the accepted AISCC key; ingress, initializer, and API receive none of the three variables.
+- Hosted no-send proof: control disabled; domains 0; claimable work, unreleased claims, dispatch pins, execution operations, provider requests, public dispatch rows, and active future-deadline runs all 0.
+- Retained 1919 evidence remains unchanged and non-claimable; settlement and retry were not performed.
+- Result candidate: `SHARED_VARIABLE_MIGRATION_COMPLETE / AFFECTED_L5_HOSTED_REPROOF_CANDIDATE / BROWSER_REVIEW_REQUIRED`.
+- This candidate does not authorize Public admission, Public Live release, provider calls, failed-run settlement, DB mutation, public domains, or new Railway resources.
+- Authority: [2312 Cycle](cycles/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-accepted-migration-entry-1.cycle.md), [2312 Judgment](../../reports/aiscc/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-acceptance-migration-judgment-1.md), and the 2312 Executor evidence bundle.
+
 ## AISCC-P3-3-PUBLIC-LIVE-HOSTED-VARIABLE-INHERITANCE-DECISION-REQUIRED-V1
 
 - 2134 accepted scope: Public fixed tool implementation, affected L6 proof, and private worker Docker-free proof remain accepted.

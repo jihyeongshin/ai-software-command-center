@@ -1,5 +1,17 @@
 # AISCC Next Actions
 
+## Current sequence (20260918_2312 hosted variable isolation candidate)
+
+1. Browser Command Center reviews the 2312 shared-variable provenance and affected hosted L5 reproof candidate.
+2. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress/worker domains absent, and Replay unchanged during review.
+3. Preserve the worker-only sealed service-local `AISCC_OPENAI_API_KEY`; do not recreate, copy, rotate, or broaden it.
+4. If Browser accepts this candidate, handle the retained 1919 definitely-not-sent settlement only under a separate exact Task.
+5. Perform fresh release readiness and any re-release only under later explicit Human/Browser authority.
+
+Do not enable admission, expose ingress, call the provider, settle or retry the failed run, mutate the hosted DB, or create a Railway resource under this candidate.
+
+Authority: [2312 Cycle](cycles/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-accepted-migration-entry-1.cycle.md), [2312 Judgment](../../reports/aiscc/20260918_2312_aiscc-p3-3-l8-shared-variable-inheritance-blocker-acceptance-migration-judgment-1.md), and the 2312 Executor result.
+
 ## Current sequence (20260918_2237 shared variable decision required)
 
 1. Keep Public admission `DISABLED`, Public Live `NOT_RELEASED`, ingress/worker domains absent, and Replay unchanged.
