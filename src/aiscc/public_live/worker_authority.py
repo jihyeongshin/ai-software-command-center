@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import secrets
-from collections.abc import Awaitable, Callable
-from contextlib import suppress
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import text
@@ -38,11 +38,23 @@ class ActiveClaim:
     ref: ClaimRef
     renewal_failed: bool = False
     dispatch_started: bool = False
+    _version_guard: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
 
     def current(self) -> ClaimRef:
         if self.renewal_failed:
             raise RuntimeError("WORKER_CLAIM_RENEWAL_LOST")
         return self.ref
+
+    @asynccontextmanager
+    async def exact_version(self) -> AsyncIterator[ClaimRef]:
+        """Hold one claim version across one short mediated DB authority call."""
+        async with self._version_guard:
+            yield self.current()
+
+    async def renew(self, repository: WorkerRepository) -> None:
+        """Advance the mutable claim reference under the exact-version guard."""
+        async with self._version_guard:
+            self.ref = await repository.renew(self.current())
 
 
 class WorkerRepository:
@@ -311,7 +323,7 @@ async def _renew_claim(
         if finished.is_set():
             return
         try:
-            active.ref = await repository.renew(active.ref)
+            await active.renew(repository)
         except Exception:
             active.renewal_failed = True
             return

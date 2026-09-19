@@ -163,8 +163,8 @@ async def _execute_production_claim(
     active: ActiveClaim,
 ) -> str:
     """Execute one exact claimed Public Live aggregate through canonical P1-5."""
-    claim = active.current()
-    context = await worker.authority.repository.context(claim)
+    async with active.exact_version() as claim:
+        context = await worker.authority.repository.context(claim)
     state_version = context.get("state_version")
     execution_version = context.get("execution_version")
     work_run_id = context.get("work_run_id")

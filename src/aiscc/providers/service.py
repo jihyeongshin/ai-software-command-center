@@ -426,14 +426,14 @@ class AgentExecutionService:
             if public_claim is not None:
                 if public_worker_repository is None or semantic_plan is None:
                     raise AuthorityConflictError("public claim executor authority is incomplete")
-                claim_ref = public_claim.current()
-                await public_worker_repository.link_and_bind_operation(
-                    claim_ref,
-                    ordinal=ordinal,
-                    operation_id=operation_id,
-                    role=semantic_plan.role,
-                    retry_of=semantic_plan.retry_of_operation_id,
-                )
+                async with public_claim.exact_version() as claim_ref:
+                    await public_worker_repository.link_and_bind_operation(
+                        claim_ref,
+                        ordinal=ordinal,
+                        operation_id=operation_id,
+                        role=semantic_plan.role,
+                        retry_of=semantic_plan.retry_of_operation_id,
+                    )
             from aiscc.public_live.luna_profile import hosted_luna_profile
 
             hosted = profile == hosted_luna_profile()
@@ -573,18 +573,28 @@ class AgentExecutionService:
                     )
                 if lease is None:
                     raise ValueError("SECRET_LEASE_REQUIRED")
-                fresh = await repository.start_dispatch_if_fresh(
-                    operation_id=operation_id,
-                    expected_state_version=current.state_version,
-                    expected_execution_version=reservation.execution_version,
-                    refs={"secret_lease_id": lease.lease_id},
-                    claim_ref=public_claim.current() if public_claim is not None else None,
-                )
+                if public_claim is None:
+                    fresh = await repository.start_dispatch_if_fresh(
+                        operation_id=operation_id,
+                        expected_state_version=current.state_version,
+                        expected_execution_version=reservation.execution_version,
+                        refs={"secret_lease_id": lease.lease_id},
+                        claim_ref=None,
+                    )
+                else:
+                    async with public_claim.exact_version() as claim_ref:
+                        fresh = await repository.start_dispatch_if_fresh(
+                            operation_id=operation_id,
+                            expected_state_version=current.state_version,
+                            expected_execution_version=reservation.execution_version,
+                            refs={"secret_lease_id": lease.lease_id},
+                            claim_ref=claim_ref,
+                        )
+                        if fresh:
+                            public_claim.dispatch_started = True
                 if not fresh:
                     self._secret_resolver.close(lease)
                     return DurableExecutionResult("EXECUTION_FAILED")
-                if public_claim is not None:
-                    public_claim.dispatch_started = True
             except (AuthorityConflictError, ValueError) as exc:
                 if lease is not None:
                     self._secret_resolver.close(lease)

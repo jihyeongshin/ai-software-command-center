@@ -485,3 +485,105 @@ class UnknownProviderReconciliationService:
 
     async def reconcile_exact(self) -> UnknownProviderReconciliation:
         return await self.reconcile_target(await self.select_exact_target())
+
+
+@dataclass(frozen=True, slots=True)
+class KnownFailedExecutionTarget:
+    run_id: bytes
+    completed_provider_operation_id: str
+    completed_provider_event_id: str
+    tool_operation_id: str
+    tool_event_id: str
+    cancelled_provider_operation_id: str
+    cancelled_provider_event_id: str
+    liability_micro: int
+
+
+@dataclass(frozen=True, slots=True)
+class KnownFailedExecutionReconciliation:
+    target: KnownFailedExecutionTarget
+    reconciled: bool
+    state: str
+    evidence_digest: str
+
+
+class KnownFailedExecutionReconciliationService:
+    """Settle one exact failed P1-5 execution without changing physical truth."""
+
+    def __init__(self, reconciler: PublicLiveRepository) -> None:
+        self.reconciler = reconciler
+
+    async def select_exact_target(self) -> KnownFailedExecutionTarget:
+        async with self.reconciler.transaction() as tx:
+            candidates = await tx.known_failed_reconciliation_candidates()
+        if len(candidates) != 1:
+            raise AdmissionDenied("THIRD_SMOKE_KNOWN_OUTCOME_TARGET_AMBIGUOUS")
+        value = candidates[0]
+        try:
+            target = KnownFailedExecutionTarget(
+                bytes.fromhex(value["run_id"]),
+                value["completed_provider_operation_id"],
+                value["completed_provider_event_id"],
+                value["tool_operation_id"],
+                value["tool_event_id"],
+                value["cancelled_provider_operation_id"],
+                value["cancelled_provider_event_id"],
+                value["liability_micro"],
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise AdmissionDenied("THIRD_SMOKE_KNOWN_OUTCOME_TARGET_INVALID") from error
+        expected = conservative_request_liability_micro(hosted_luna_profile())
+        identities = (
+            target.completed_provider_operation_id,
+            target.completed_provider_event_id,
+            target.tool_operation_id,
+            target.tool_event_id,
+            target.cancelled_provider_operation_id,
+            target.cancelled_provider_event_id,
+        )
+        if (
+            len(target.run_id) != 16
+            or not all(isinstance(value, str) and value for value in identities)
+            or len(set(identities[::2])) != 3
+            or type(target.liability_micro) is not int
+            or target.liability_micro != expected
+            or not 0 < target.liability_micro <= 200_000
+        ):
+            raise AdmissionDenied("KNOWN_OUTCOME_LIABILITY_NOT_PROVABLE")
+        return target
+
+    async def reconcile_target(
+        self, target: KnownFailedExecutionTarget
+    ) -> KnownFailedExecutionReconciliation:
+        expected = conservative_request_liability_micro(hosted_luna_profile())
+        if target.liability_micro != expected:
+            raise AdmissionDenied("KNOWN_OUTCOME_LIABILITY_NOT_PROVABLE")
+        async with self.reconciler.transaction() as tx:
+            value = await tx.reconcile_known_failed_execution(target.run_id)
+        expected_identity = {
+            "run_id": target.run_id.hex(),
+            "completed_provider_operation_id": target.completed_provider_operation_id,
+            "completed_provider_event_id": target.completed_provider_event_id,
+            "tool_operation_id": target.tool_operation_id,
+            "tool_event_id": target.tool_event_id,
+            "cancelled_provider_operation_id": target.cancelled_provider_operation_id,
+            "cancelled_provider_event_id": target.cancelled_provider_event_id,
+            "liability_micro": expected,
+        }
+        if (
+            any(value.get(key) != item for key, item in expected_identity.items())
+            or value.get("state") != "FAILED_SAFETY"
+            or not isinstance(value.get("evidence_digest"), str)
+            or len(value["evidence_digest"]) != 64
+            or type(value.get("reconciled")) is not bool
+        ):
+            raise AdmissionDenied("KNOWN_FAILED_RECONCILIATION_RESULT_INVALID")
+        return KnownFailedExecutionReconciliation(
+            target,
+            value["reconciled"],
+            value["state"],
+            value["evidence_digest"],
+        )
+
+    async def reconcile_exact(self) -> KnownFailedExecutionReconciliation:
+        return await self.reconcile_target(await self.select_exact_target())

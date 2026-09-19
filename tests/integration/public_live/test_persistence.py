@@ -625,14 +625,11 @@ def test_migration_paths_and_owner_preservation():
         finally:
             await engine.dispose()
 
-    async def assert_unknown_acl(url):
+    async def assert_reconciliation_acl(url, signatures):
         engine = create_engine(url)
         try:
             async with engine.connect() as conn:
-                for signature in [
-                    "public_live_api.unknown_provider_reconciliation_candidates()",
-                    "public_live_api.reconcile_unknown_provider_run(bytea)",
-                ]:
+                for signature in signatures:
                     assert await conn.scalar(
                         text("SELECT to_regprocedure(:signature) IS NOT NULL"),
                         {"signature": signature},
@@ -663,7 +660,7 @@ def test_migration_paths_and_owner_preservation():
                 assert rev == "20260914_0012"
             migrate(url, "head")
             after, _, rev = asyncio.run(snapshot(url, expect_defaults=True))
-            assert rev == "20260919_0025" and after == before
+            assert rev == "20260919_0026" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))
 
@@ -684,6 +681,32 @@ def test_migration_paths_and_owner_preservation():
         assert owner_after == owner_before
         assert public_after == public_before
         assert authority_after == authority_before
-        asyncio.run(assert_unknown_acl(url))
+        asyncio.run(
+            assert_reconciliation_acl(
+                url,
+                [
+                    "public_live_api.unknown_provider_reconciliation_candidates()",
+                    "public_live_api.reconcile_unknown_provider_run(bytea)",
+                ],
+            )
+        )
+        migrate(url, "20260919_0026")
+        owner_final, public_final, rev = asyncio.run(snapshot(url))
+        authority_final = asyncio.run(authority_snapshot(url))
+        assert rev == "20260919_0026"
+        assert owner_final == owner_after
+        assert public_final == public_after
+        assert authority_final == authority_after
+        asyncio.run(
+            assert_reconciliation_acl(
+                url,
+                [
+                    "public_live_api.unknown_provider_reconciliation_candidates()",
+                    "public_live_api.reconcile_unknown_provider_run(bytea)",
+                    "public_live_api.known_failed_execution_reconciliation_candidates()",
+                    "public_live_api.reconcile_known_failed_execution_run(bytea)",
+                ],
+            )
+        )
     finally:
         asyncio.run(admin('DROP DATABASE "' + name + '"'))
