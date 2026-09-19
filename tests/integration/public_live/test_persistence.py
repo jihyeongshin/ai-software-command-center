@@ -66,9 +66,43 @@ async def fixture(session):
     return tx, run
 
 
-def scenario(action):
+def scenario(action, database_url=None):
+    owned_database = None
+    if database_url is None:
+        base = make_url(os.environ["AISCC_TEST_DATABASE_URL"])
+        assert base.host == "127.0.0.1"
+        owned_database = "aiscc_l1_scenario_" + uuid4().hex
+        database_url = base.set(database=owned_database).render_as_string(hide_password=False)
+
+        async def admin(command):
+            engine = create_engine(base.render_as_string(hide_password=False))
+            try:
+                async with engine.connect() as connection:
+                    connection = await connection.execution_options(isolation_level="AUTOCOMMIT")
+                    await connection.execute(text(command))
+            finally:
+                await engine.dispose()
+
+        asyncio.run(admin('CREATE DATABASE "' + owned_database + '"'))
+        result = subprocess.run(
+            [
+                str(Path.cwd() / ".venv/Scripts/python.exe"),
+                "-B",
+                "-m",
+                "alembic",
+                "upgrade",
+                "head",
+            ],
+            env=os.environ | {"AISCC_DATABASE_URL": database_url, "PYTHONDONTWRITEBYTECODE": "1"},
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            asyncio.run(admin('DROP DATABASE "' + owned_database + '"'))
+        assert result.returncode == 0, result.stderr.replace(database_url, "<TEST_DB>")
+
     async def run():
-        engine = create_engine(os.environ["AISCC_TEST_DATABASE_URL"])
+        engine = create_engine(database_url)
         try:
             async with create_session_factory(engine)() as session:
                 transaction = await session.begin()
@@ -79,10 +113,14 @@ def scenario(action):
         finally:
             await engine.dispose()
 
-    asyncio.run(run())
+    try:
+        asyncio.run(run())
+    finally:
+        if owned_database is not None:
+            asyncio.run(admin('DROP DATABASE "' + owned_database + '"'))
 
 
-def test_initialization():
+def test_initialization(l2_url):
     async def check(s):
         assert (
             await s.execute(text("SELECT enabled,active_campaign FROM public_control"))
@@ -118,11 +156,11 @@ def test_initialization():
         }.issubset(names)
         assert len(names) == 29
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
 @pytest.mark.parametrize("kind", ["key", "read", "run", "slot", "third"])
-def test_identity_and_slot_uniqueness(kind):
+def test_identity_and_slot_uniqueness(kind, l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
@@ -155,7 +193,7 @@ def test_identity_and_slot_uniqueness(kind):
             == 200000
         )
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
 @pytest.mark.parametrize(
@@ -172,17 +210,17 @@ def test_identity_and_slot_uniqueness(kind):
         "UPDATE public_campaign SET hmac_version='changed' WHERE campaign_id=:c",
     ],
 )
-def test_money_append_only_and_fixed_slots(sql):
+def test_money_append_only_and_fixed_slots(sql, l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
         async with denied(s):
             await s.execute(text(sql), {"r": run.run_id, "c": run.campaign_id})
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_disabled_gate_and_transaction_rollback():
+def test_disabled_gate_and_transaction_rollback(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await s.execute(text("UPDATE public_control SET enabled=false"))
@@ -210,10 +248,10 @@ def test_disabled_gate_and_transaction_rollback():
             == 0
         )
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_clock_regression_utc_and_safe_replay_clock():
+def test_clock_regression_utc_and_safe_replay_clock(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
@@ -245,10 +283,10 @@ def test_clock_regression_utc_and_safe_replay_clock():
                 )
             )
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_dispatch_constraints_and_generation():
+def test_dispatch_constraints_and_generation(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
@@ -282,10 +320,10 @@ def test_dispatch_constraints_and_generation():
             == 120000
         )
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_observation_identity_settlement_and_quarantine():
+def test_observation_identity_settlement_and_quarantine(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
@@ -338,10 +376,10 @@ def test_observation_identity_settlement_and_quarantine():
             == 1
         )
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_runtime_permissions_and_above_bound_incident():
+def test_runtime_permissions_and_above_bound_incident(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await s.execute(text("SET LOCAL ROLE aiscc_public_live_runtime"))
@@ -363,12 +401,12 @@ def test_runtime_permissions_and_above_bound_incident():
         assert await s.scalar(text("SELECT incident FROM public_control")) == "ABOVE_BOUND_USAGE"
         assert await s.scalar(text("SELECT state FROM public_slot WHERE slot_id=1")) == "SUSPECT"
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
-def test_two_connection_control_lock_serialization():
+def test_two_connection_control_lock_serialization(l2_url):
     async def check():
-        engine = create_engine(os.environ["AISCC_TEST_DATABASE_URL"])
+        engine = create_engine(l2_url)
         sessions = create_session_factory(engine)
         repo = PublicLiveRepository(sessions)
         attempted = asyncio.Event()
@@ -404,7 +442,7 @@ def test_two_connection_control_lock_serialization():
     asyncio.run(check())
 
 
-def test_trusted_reconciliation_known_cost_and_denials():
+def test_trusted_reconciliation_known_cost_and_denials(l2_url):
     async def check(s):
         tx, run = await fixture(s)
         await tx.persist_run(run)
@@ -451,7 +489,7 @@ def test_trusted_reconciliation_known_cost_and_denials():
             )
         ).one() == (14990000, 0, 10000)
 
-    scenario(check)
+    scenario(check, l2_url)
 
 
 def test_migration_paths_and_owner_preservation():
@@ -484,17 +522,29 @@ def test_migration_paths_and_owner_preservation():
         finally:
             await engine.dispose()
 
-    async def snapshot(url, seed=False):
+    async def snapshot(url, seed_owner=False, seed_public=False, expect_defaults=False):
         engine = create_engine(url)
         try:
             async with engine.begin() as conn:
-                if seed:
+                if seed_owner:
                     await conn.execute(
                         text(
                             "INSERT INTO work_runs VALUES('l1-owner-history',"
                             "'p','t','1','READY',1,'OWNER_SELF_DOGFOOD',"
                             "'2026-09-01T00:00:00Z','2026-09-01T00:00:00Z')"
                         )
+                    )
+                if seed_public:
+                    await conn.execute(
+                        text(
+                            "INSERT INTO public_campaign "
+                            "(campaign_id,starts_at,ends_at,available,hmac_version,scenario_id,"
+                            "scenario_version,content_digest,policy_digest) VALUES "
+                            "('migration-0024-existing',clock_timestamp()-interval '1 hour',"
+                            "clock_timestamp()+interval '1 day',15000000,'test',"
+                            "'stockroom-s1-normal','1.0.0',:digest,:digest)"
+                        ),
+                        {"digest": DIGEST},
                     )
                 owner = (
                     (
@@ -506,7 +556,34 @@ def test_migration_paths_and_owner_preservation():
                     .all()
                 )
                 rev = await conn.scalar(text("SELECT version_num FROM alembic_version"))
-                if rev == "20260919_0024":
+                public_rows = None
+                if await conn.scalar(text("SELECT to_regclass('public.public_control')")):
+                    public_rows = {
+                        "control": (
+                            await conn.execute(
+                                text("SELECT to_jsonb(c) FROM public_control c ORDER BY id")
+                            )
+                        )
+                        .scalars()
+                        .all(),
+                        "slots": (
+                            await conn.execute(
+                                text("SELECT to_jsonb(s) FROM public_slot s ORDER BY slot_id")
+                            )
+                        )
+                        .scalars()
+                        .all(),
+                        "campaigns": (
+                            await conn.execute(
+                                text(
+                                    "SELECT to_jsonb(c) FROM public_campaign c ORDER BY campaign_id"
+                                )
+                            )
+                        )
+                        .scalars()
+                        .all(),
+                    }
+                if expect_defaults:
                     assert (
                         await conn.execute(
                             text("SELECT enabled,active_campaign FROM public_control")
@@ -518,7 +595,59 @@ def test_migration_paths_and_owner_preservation():
                         )
                     ).all() == [(1, "FREE", None), (2, "FREE", None)]
                     assert await conn.scalar(text("SELECT count(*) FROM public_campaign")) == 0
-                return owner, rev
+                return owner, public_rows, rev
+        finally:
+            await engine.dispose()
+
+    async def authority_snapshot(url):
+        engine = create_engine(url)
+        try:
+            async with engine.connect() as conn:
+                roles = (
+                    await conn.execute(
+                        text(
+                            "SELECT rolname,rolcanlogin FROM pg_roles "
+                            "WHERE rolname LIKE 'aiscc_%' ORDER BY rolname"
+                        )
+                    )
+                ).all()
+                grants = (
+                    await conn.execute(
+                        text(
+                            "SELECT grantee,table_schema,table_name,privilege_type "
+                            "FROM information_schema.role_table_grants "
+                            "WHERE grantee LIKE 'aiscc_%' "
+                            "ORDER BY grantee,table_schema,table_name,privilege_type"
+                        )
+                    )
+                ).all()
+                return roles, grants
+        finally:
+            await engine.dispose()
+
+    async def assert_unknown_acl(url):
+        engine = create_engine(url)
+        try:
+            async with engine.connect() as conn:
+                for signature in [
+                    "public_live_api.unknown_provider_reconciliation_candidates()",
+                    "public_live_api.reconcile_unknown_provider_run(bytea)",
+                ]:
+                    assert await conn.scalar(
+                        text("SELECT to_regprocedure(:signature) IS NOT NULL"),
+                        {"signature": signature},
+                    )
+                    assert not await conn.scalar(
+                        text("SELECT has_function_privilege('public',:signature,'EXECUTE')"),
+                        {"signature": signature},
+                    )
+                    assert await conn.scalar(
+                        text(
+                            "SELECT has_function_privilege("
+                            "'aiscc_public_live_reconciler',:signature,'EXECUTE')"
+                        ),
+                        {"signature": signature},
+                    )
         finally:
             await engine.dispose()
 
@@ -530,10 +659,31 @@ def test_migration_paths_and_owner_preservation():
             before = []
             if upgrade:
                 migrate(url, "20260914_0012")
-                before, rev = asyncio.run(snapshot(url, seed=True))
+                before, _, rev = asyncio.run(snapshot(url, seed_owner=True))
                 assert rev == "20260914_0012"
             migrate(url, "head")
-            after, rev = asyncio.run(snapshot(url))
-            assert rev == "20260919_0024" and after == before
+            after, _, rev = asyncio.run(snapshot(url, expect_defaults=True))
+            assert rev == "20260919_0025" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))
+
+    name = "aiscc_l1_migration_" + uuid4().hex
+    url = parsed.set(database=name).render_as_string(hide_password=False)
+    asyncio.run(admin('CREATE DATABASE "' + name + '"'))
+    try:
+        migrate(url, "20260919_0024")
+        owner_before, public_before, rev = asyncio.run(
+            snapshot(url, seed_owner=True, seed_public=True)
+        )
+        authority_before = asyncio.run(authority_snapshot(url))
+        assert rev == "20260919_0024"
+        migrate(url, "20260919_0025")
+        owner_after, public_after, rev = asyncio.run(snapshot(url))
+        authority_after = asyncio.run(authority_snapshot(url))
+        assert rev == "20260919_0025"
+        assert owner_after == owner_before
+        assert public_after == public_before
+        assert authority_after == authority_before
+        asyncio.run(assert_unknown_acl(url))
+    finally:
+        asyncio.run(admin('DROP DATABASE "' + name + '"'))
