@@ -5,3 +5,4 @@ public/replay/assets/*.js text eol=lf
 public/replay/assets/*.css text eol=lf
 public/replay/data/*.json text eol=lf
 .aiassistant/reports/aiscc/replay/stockroom/v1/*.json text eol=lf
+scripts/build_public_replay.py text eol=lf

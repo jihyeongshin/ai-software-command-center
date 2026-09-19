@@ -115,3 +115,6 @@ def test_authored_public_assets_are_canonical_lf_and_match_manifest(isolated):
             "sha256": BUILDER.sha(data),
             "bytes": len(data),
         }
+    generator = (isolated / "scripts/build_public_replay.py").read_bytes()
+    assert b"\r\n" not in generator
+    assert manifest["generator_sha256"] == BUILDER.sha(generator)
