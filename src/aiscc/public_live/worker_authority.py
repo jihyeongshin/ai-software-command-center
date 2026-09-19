@@ -238,8 +238,10 @@ class DurableWorkerAuthority:
         recover = getattr(self.repository, "recover_expired", None)
         if recover is not None:
             await recover(self.worker)
-        self.sequence += 1
-        return await self.repository.claim(self.worker, self.sequence)
+        candidate = self.sequence + 1
+        claim = await self.repository.claim(self.worker, candidate)
+        self.sequence = candidate
+        return claim
 
 
 async def run_worker_loop(
