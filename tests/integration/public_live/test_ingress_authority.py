@@ -23,6 +23,7 @@ EXPECTED_FUNCTIONS = (
     "admit_checked_and_start(a jsonb, p jsonb)",
     "clock_lock()",
     "ingress_flood_consume_retained(c text, v text, s bytea)",
+    "inspectable_execution_projection(r bytea)",
     "lock_run(r bytea)",
     "read_consume_retained(r bytea)",
     "read_key(c text, k bytea)",
@@ -240,7 +241,7 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
         try:
             async with admin.begin() as connection:
                 assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260919_0027"
+                    "20260919_0028"
                 )
                 await connection.execute(
                     text(

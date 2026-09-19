@@ -77,19 +77,19 @@
       "sha256": "a79dd0637911d851467dbf249e5f0d15438cacb3a06a6080a34826f0564fb94b"
     },
     {
-      "bytes": 483,
+      "bytes": 484,
       "path": "_headers",
-      "sha256": "382c96ce54a0362e1021947e8630e00ed8d82f06d686e8955f637fb822f0eeff"
+      "sha256": "03bf8a6632044cd3a90bfd0955552e66088c16d35c4dae165daca78c8f077fdb"
     },
     {
-      "bytes": 25456,
+      "bytes": 30599,
       "path": "assets/app.js",
-      "sha256": "8e89e6646c64d4c1b2719f34685b9ac292c7bb2fcfe51055123c698040990ddb"
+      "sha256": "c82d0cc600999822d9bcb2b258e669de6a677437ce9d7154f26d4bec8930ded8"
     },
     {
-      "bytes": 4892,
+      "bytes": 5831,
       "path": "assets/styles.css",
-      "sha256": "22ecf56561844fb196eecde3f3127d49955069a6d95a7308d252fb32ed23cb93"
+      "sha256": "4f9ca8c6323b10e3dfa92269bbbca9af367ffa4ca16a302c4a933364a8251e85"
     },
     {
       "bytes": 3554,
@@ -97,9 +97,9 @@
       "sha256": "b04946a2d016679da3b7f2941aaf5ec1372be044f08891282d314c745b6b6389"
     },
     {
-      "bytes": 156,
+      "bytes": 158,
       "path": "live-config.json",
-      "sha256": "b6460a754e60ac87f9b0dfe31550810b9abd01bd658021b5be9105f7759b2522"
+      "sha256": "7a7eb1e52abed38ac68659cb738a9c507243c1ac8e50623c02d6faab471b5199"
     }
   ],
   "version": 1

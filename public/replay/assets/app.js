@@ -276,6 +276,47 @@ function validateReceipt201(data) {
 function validateReceipt202(data) {
   return hasExactKeys(data, ["run_id", "replayed"]) && validRunId(data.run_id) && data.replayed === true;
 }
+function validBoundedText(value, maximum) {
+  return typeof value === "string" && value.length > 0 && value.length <= maximum;
+}
+function validateStockroom(data) {
+  if (!hasExactKeys(data, ["items", "total_available"]) || data.total_available !== 13 ||
+      !Array.isArray(data.items) || data.items.length !== 3) return false;
+  const expected = [["BOX-A", 12, 2, 10, false], ["BOX-B", 5, 5, 0, true], ["BOX-C", 4, 1, 3, true]];
+  return data.items.every((item, index) => hasExactKeys(item,
+    ["sku", "on_hand", "reserved", "available", "needs_reorder"]) &&
+    [item.sku, item.on_hand, item.reserved, item.available, item.needs_reorder]
+      .every((value, field) => value === expected[index][field]));
+}
+function validateTraceStep(step, index) {
+  if (!step || step.ordinal !== index + 2 || !["PROVIDER", "TOOL", "EXECUTION", "PUBLIC_PROJECTION"].includes(step.kind)) return false;
+  if (step.kind === "PROVIDER") return hasExactKeys(step,
+    ["ordinal", "kind", "role", "status", "action", "tool_name", "retry"]) &&
+    ["PRIMARY", "VERIFY", "CORRECT"].includes(step.role) &&
+    ["COMPLETED", "IN_PROGRESS", "DEFINITELY_NOT_SENT", "OUTCOME_UNKNOWN"].includes(step.status) &&
+    ["APPROVED_TOOL_REQUESTED", "BOUNDED_SUMMARY_PRODUCED", "PROVIDER_STEP_RECORDED", "DEFINITELY_NOT_SENT", "OUTCOME_UNKNOWN"].includes(step.action) &&
+    (step.tool_name === null || step.tool_name === "stockroom_summary") && typeof step.retry === "boolean";
+  if (step.kind === "TOOL") return hasExactKeys(step, ["ordinal", "kind", "tool_name", "status"]) &&
+    step.tool_name === "stockroom_summary" && ["COMPLETED", "IN_PROGRESS", "OUTCOME_UNKNOWN"].includes(step.status);
+  if (step.kind === "EXECUTION") return hasExactKeys(step, ["ordinal", "kind", "status"]) &&
+    ["NOT_STARTED", "RUNNING", "EXECUTOR_COMPLETED", "EXECUTION_FAILED"].includes(step.status);
+  return hasExactKeys(step, ["ordinal", "kind", "state", "reservation", "slot", "outbox", "work"]) &&
+    validBoundedText(step.state, 64) && ["HELD", "SETTLED", "INCIDENT"].includes(step.reservation) &&
+    ["FREE", "OCCUPIED", "SUSPECT"].includes(step.slot) && ["PENDING", "BOUND", "CLOSED"].includes(step.outbox) &&
+    validBoundedText(step.work, 64);
+}
+function validateInspectableResult(result) {
+  return hasExactKeys(result, ["schema", "workflow_state", "evidence_status", "summary_text", "instruction", "trace", "stockroom", "human_boundary"]) &&
+    result.schema === "AISCC-PUBLIC-LIVE-INSPECTABLE-RESULT-V1" &&
+    ["NOT_STARTED", "RUNNING", "EXECUTOR_COMPLETED", "EXECUTION_FAILED"].includes(result.workflow_state) &&
+    result.evidence_status === "ADMITTED" && validBoundedText(result.summary_text, 4000) &&
+    hasExactKeys(result.instruction, ["authority", "text"]) && result.instruction.authority === "SERVER_OWNED" &&
+    result.instruction.text === "Produce the bounded Stockroom summary." && Array.isArray(result.trace) &&
+    result.trace.length >= 2 && result.trace.length <= 8 && result.trace.every(validateTraceStep) &&
+    (result.stockroom === null || validateStockroom(result.stockroom)) &&
+    hasExactKeys(result.human_boundary, ["state", "statement"]) && result.human_boundary.state === "NOT_PERFORMED" &&
+    result.human_boundary.statement === "Successful AI execution does not become Human acceptance automatically.";
+}
 function validateProjection(data, runId) {
   if (!hasExactKeys(data, ["run_id", "state", "reason_code", "admitted_at", "updated_at", "deadline_at", "mode", "scenario_id", "scenario_version", "result"]) ||
       data.run_id !== runId || typeof data.state !== "string" || data.state.length > 64 ||
@@ -283,10 +324,28 @@ function validateProjection(data, runId) {
       !validTimestamp(data.admitted_at) || !validTimestamp(data.updated_at) || !validTimestamp(data.deadline_at) ||
       data.mode !== "PUBLIC_BOUNDED_LIVE" || data.scenario_id !== LIVE_SCENARIO_ID || data.scenario_version !== LIVE_SCENARIO_VERSION) return false;
   if (data.result === null) return true;
-  return hasExactKeys(data.result, ["workflow_state", "summary_text", "evidence_status"]) &&
-    typeof data.result.workflow_state === "string" && data.result.workflow_state.length <= 64 &&
-    typeof data.result.summary_text === "string" && data.result.summary_text.length <= 4000 &&
-    ["PENDING", "ADMITTED", "UNAVAILABLE"].includes(data.result.evidence_status);
+  return validateInspectableResult(data.result);
+}
+function traceCard(step) {
+  const card = node("article", undefined, "trace-card");
+  card.append(node("span", String(step.ordinal).padStart(2, "0") + " · " + step.kind, "trace-step"));
+  if (step.kind === "PROVIDER") {
+    card.append(node("h5", step.role + (step.retry ? " · RETRY" : "")), node("p", step.action.replaceAll("_", " ")));
+    if (step.tool_name) card.append(node("p", "Approved tool: " + step.tool_name));
+  } else if (step.kind === "TOOL") {
+    card.append(node("h5", step.tool_name));
+  } else if (step.kind === "EXECUTION") card.append(node("h5", step.status));
+  else card.append(node("h5", step.state), node("p", "Reservation " + step.reservation + " · Slot " + step.slot + " · Outbox " + step.outbox + " · Work " + step.work));
+  if (step.kind !== "EXECUTION" && step.kind !== "PUBLIC_PROJECTION") card.append(node("span", step.status, "trace-status"));
+  return card;
+}
+function stockroomTable(stockroom) {
+  const table = node("table", undefined, "stockroom-table");
+  const head = node("tr"); ["SKU", "On hand", "Reserved", "Available", "Reorder"].forEach(label => head.append(node("th", label)));
+  const thead = node("thead"); thead.append(head); const tbody = node("tbody");
+  for (const item of stockroom.items) { const row = node("tr");
+    [item.sku, item.on_hand, item.reserved, item.available, item.needs_reorder ? "Yes" : "No"].forEach(value => row.append(node("td", value))); tbody.append(row); }
+  table.append(thead, tbody); return table;
 }
 function renderLiveProjection(data) {
   const result = document.getElementById("live-result"); result.replaceChildren(); result.className = "live-result";
@@ -295,12 +354,19 @@ function renderLiveProjection(data) {
     ["Admitted at", data.admitted_at], ["Updated at", data.updated_at], ["Deadline", data.deadline_at],
     ["Mode", data.mode], ["Scenario / version", data.scenario_id + " / " + data.scenario_version]]) fact(result, label, content);
   if (data.result !== null) {
-    result.append(node("h4", "Bounded public result"));
-    fact(result, "Server workflow state", data.result.workflow_state);
-    fact(result, "Evidence status", data.result.evidence_status);
-    result.append(node("p", data.result.summary_text));
+    result.append(node("h4", "Live execution trace"), node("p", data.result.summary_text));
+    const trace = node("div", undefined, "trace-list");
+    const instruction = node("article", undefined, "trace-card");
+    instruction.append(node("span", "01 · INSTRUCTION", "trace-step"), node("h5", data.result.instruction.text), node("span", "COMPLETED · " + data.result.instruction.authority, "trace-status"));
+    trace.append(instruction);
+    for (const step of data.result.trace) { const card = traceCard(step);
+      if (step.kind === "TOOL" && data.result.stockroom !== null) card.append(stockroomTable(data.result.stockroom)); trace.append(card); }
+    result.append(trace);
+    const boundary = node("section", undefined, "human-boundary");
+    boundary.append(node("strong", "Human decision · " + data.result.human_boundary.state), node("p", data.result.human_boundary.statement));
+    result.append(boundary);
   } else {
-    result.append(node("p", "No bounded public result is available yet."));
+    result.append(node("p", "Waiting for durable execution evidence."));
   }
 }
 async function safeResponseJSON(response) {

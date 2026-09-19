@@ -660,7 +660,7 @@ def test_migration_paths_and_owner_preservation():
                 assert rev == "20260914_0012"
             migrate(url, "head")
             after, _, rev = asyncio.run(snapshot(url, expect_defaults=True))
-            assert rev == "20260919_0027" and after == before
+            assert rev == "20260919_0028" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))
 

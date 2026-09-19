@@ -195,6 +195,30 @@ def test_manual_success_reproduces_gap_then_finalizer_closes_idempotently(l2_url
                     "RUNNING",
                     0,
                 )
+                async with h.admin.connect() as connection:
+                    projection = await connection.scalar(
+                        text("SELECT public_live_api.inspectable_execution_projection(:r)"),
+                        {"r": run},
+                    )
+                assert projection["schema"] == "AISCC-PUBLIC-LIVE-INSPECTABLE-RESULT-V1"
+                assert projection["workflow_state"] == "EXECUTOR_COMPLETED"
+                assert [step["kind"] for step in projection["trace"]] == [
+                    "PROVIDER",
+                    "TOOL",
+                    "PROVIDER",
+                    "EXECUTION",
+                    "PUBLIC_PROJECTION",
+                ]
+                assert projection["stockroom"]["total_available"] == 13
+                assert [item["sku"] for item in projection["stockroom"]["items"]] == [
+                    "BOX-A",
+                    "BOX-B",
+                    "BOX-C",
+                ]
+                serialized = str(projection).lower()
+                assert "body_bytes" not in serialized
+                assert "provider_request" not in serialized
+                assert "reasoning" not in serialized
             finally:
                 if previous is None:
                     os.environ.pop("AISCC_OPENAI_API_KEY", None)
@@ -326,7 +350,7 @@ def test_success_finalizer_acl_and_migration_head_are_exact(l2_url: str) -> None
     async def check() -> None:
         async with harness(l2_url) as h, h.admin.connect() as connection:
             head = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-            assert head == "20260919_0027"
+            assert head == "20260919_0028"
             for signature in (
                 "public_live_api.successful_execution_reconciliation_candidates()",
                 "public_live_api.complete_successful_execution_run(bytea)",

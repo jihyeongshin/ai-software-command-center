@@ -88,3 +88,16 @@ def test_frontend_uses_session_storage_without_capability_debug_channels(isolate
     assert "console." not in app
     assert "innerHTML" not in app
     assert 'credentials: "omit"' in app
+
+
+def test_live_trace_frontend_requires_the_exact_safe_projection_contract(isolated):
+    app = (isolated / "public/replay/assets/app.js").read_text("utf-8")
+    assert "AISCC-PUBLIC-LIVE-INSPECTABLE-RESULT-V1" in app
+    assert 'result.instruction.text === "Produce the bounded Stockroom summary."' in app
+    assert 'result.human_boundary.state === "NOT_PERFORMED"' in app
+    assert '["PRIMARY", "VERIFY", "CORRECT"]' in app
+    assert '["BOX-A", 12, 2, 10, false]' in app
+    assert "raw provider" not in app.lower()
+    assert "private_provider" not in app
+    assert 'node("h4", "Live execution trace")' in app
+    assert '"Waiting for durable execution evidence."' in app

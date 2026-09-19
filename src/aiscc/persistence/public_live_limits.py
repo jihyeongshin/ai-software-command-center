@@ -84,6 +84,10 @@ class PublicLiveLimits:
                         "SELECT public_live_api.read_consume_retained(:r)", {"r": run_id}
                     )
                 )
+                safe_result = await tx._call(
+                    "SELECT public_live_api.inspectable_execution_projection(:r)",
+                    {"r": run_id},
+                )
                 projection = {
                     "state": row["state"],
                     "reason_code": row["state"] if row["state"].startswith("FAILED_") else None,
@@ -93,7 +97,7 @@ class PublicLiveLimits:
                     "mode": "PUBLIC_BOUNDED_LIVE",
                     "scenario_id": "stockroom-s1-normal",
                     "scenario_version": "1.0.0",
-                    "result": None,
+                    "result": safe_result,
                 }
             return result, projection
         except ReadNotFound:
