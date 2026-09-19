@@ -587,3 +587,102 @@ class KnownFailedExecutionReconciliationService:
 
     async def reconcile_exact(self) -> KnownFailedExecutionReconciliation:
         return await self.reconcile_target(await self.select_exact_target())
+
+
+@dataclass(frozen=True, slots=True)
+class SuccessfulExecutionTarget:
+    run_id: bytes
+    execution_attempt_id: str
+    provider_request_count: int
+    physical_provider_send_count: int
+    tool_operation_count: int
+    liability_micro: int
+
+
+@dataclass(frozen=True, slots=True)
+class SuccessfulExecutionReconciliation:
+    target: SuccessfulExecutionTarget
+    reconciled: bool
+    state: str
+    evidence_digest: str
+
+
+class SuccessfulExecutionReconciliationService:
+    """Close only the Public Live projection for durable P1-5 success."""
+
+    def __init__(self, repository: PublicLiveRepository) -> None:
+        self.repository = repository
+
+    @staticmethod
+    def _integer(value: object) -> int:
+        if type(value) is not int:
+            raise ValueError("integer evidence required")
+        return value
+
+    @staticmethod
+    def _target(value: dict[str, object]) -> SuccessfulExecutionTarget:
+        try:
+            target = SuccessfulExecutionTarget(
+                bytes.fromhex(str(value["run_id"])),
+                str(value["execution_attempt_id"]),
+                SuccessfulExecutionReconciliationService._integer(value["provider_request_count"]),
+                SuccessfulExecutionReconciliationService._integer(
+                    value["physical_provider_send_count"]
+                ),
+                SuccessfulExecutionReconciliationService._integer(value["tool_operation_count"]),
+                SuccessfulExecutionReconciliationService._integer(value["liability_micro"]),
+            )
+        except (KeyError, TypeError, ValueError) as error:
+            raise AdmissionDenied("SUCCESS_EXECUTION_TARGET_INVALID") from error
+        one_send = conservative_request_liability_micro(hosted_luna_profile())
+        if (
+            len(target.run_id) != 16
+            or not target.execution_attempt_id
+            or not 1 <= target.provider_request_count <= 4
+            or not 1 <= target.physical_provider_send_count <= target.provider_request_count
+            or target.tool_operation_count not in {0, 1}
+            or target.liability_micro != target.physical_provider_send_count * one_send
+            or not 0 < target.liability_micro <= 200_000
+        ):
+            raise AdmissionDenied("SUCCESS_EXECUTION_LIABILITY_NOT_PROVABLE")
+        return target
+
+    async def candidates(self) -> tuple[SuccessfulExecutionTarget, ...]:
+        values = await self.repository.successful_execution_reconciliation_candidates()
+        return tuple(self._target(value) for value in values)
+
+    async def select_exact_target(self) -> SuccessfulExecutionTarget:
+        candidates = await self.candidates()
+        if len(candidates) != 1:
+            raise AdmissionDenied("SUCCESS_EXECUTION_TARGET_AMBIGUOUS")
+        return candidates[0]
+
+    async def reconcile_run(self, run_id: bytes) -> SuccessfulExecutionReconciliation:
+        value = await self.repository.complete_successful_execution(run_id)
+        target = self._target(value)
+        if (
+            target.run_id != run_id
+            or value.get("state") != "COMPLETED"
+            or not isinstance(value.get("evidence_digest"), str)
+            or len(str(value["evidence_digest"])) != 64
+            or type(value.get("reconciled")) is not bool
+        ):
+            raise AdmissionDenied("SUCCESS_RECONCILIATION_RESULT_INVALID")
+        return SuccessfulExecutionReconciliation(
+            target,
+            bool(value["reconciled"]),
+            str(value["state"]),
+            str(value["evidence_digest"]),
+        )
+
+    async def reconcile_target(
+        self, target: SuccessfulExecutionTarget
+    ) -> SuccessfulExecutionReconciliation:
+        result = await self.reconcile_run(target.run_id)
+        if result.target != target:
+            raise AdmissionDenied("SUCCESS_RECONCILIATION_TARGET_CHANGED")
+        return result
+
+    async def reconcile_pending(self) -> None:
+        for target in await self.candidates():
+            await self.reconcile_target(target)

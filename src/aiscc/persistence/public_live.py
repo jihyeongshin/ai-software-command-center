@@ -401,6 +401,27 @@ class PublicLiveRepository:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
 
+    async def successful_execution_reconciliation_candidates(
+        self,
+    ) -> tuple[dict[str, Any], ...]:
+        async with self._sessions() as session:
+            value = await session.scalar(
+                text("SELECT public_live_api.successful_execution_reconciliation_candidates()")
+            )
+        if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+            raise RuntimeError("SUCCESS_RECONCILIATION_CANDIDATES_INVALID")
+        return tuple(value)
+
+    async def complete_successful_execution(self, run_id: bytes) -> dict[str, Any]:
+        async with self._sessions() as session, session.begin():
+            value = await session.scalar(
+                text("SELECT public_live_api.complete_successful_execution_run(:r)"),
+                {"r": run_id},
+            )
+        if not isinstance(value, dict):
+            raise RuntimeError("SUCCESS_RECONCILIATION_RESULT_INVALID")
+        return value
+
     @asynccontextmanager
     async def transaction(self) -> AsyncIterator[PublicLiveTransaction]:
         async with self._sessions() as session, session.begin():

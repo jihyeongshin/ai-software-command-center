@@ -381,7 +381,7 @@ def test_known_failed_reconciler_acl_and_migration_head(l2_url) -> None:
                         )
                     )
                 ).one()
-            assert head == "20260919_0026"
+            assert head == "20260919_0027"
             assert privileges == (True, False, False)
 
     asyncio.run(check())

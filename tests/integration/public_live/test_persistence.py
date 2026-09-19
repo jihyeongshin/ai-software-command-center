@@ -660,7 +660,7 @@ def test_migration_paths_and_owner_preservation():
                 assert rev == "20260914_0012"
             migrate(url, "head")
             after, _, rev = asyncio.run(snapshot(url, expect_defaults=True))
-            assert rev == "20260919_0026" and after == before
+            assert rev == "20260919_0027" and after == before
         finally:
             asyncio.run(admin('DROP DATABASE "' + name + '"'))
 
@@ -705,6 +705,26 @@ def test_migration_paths_and_owner_preservation():
                     "public_live_api.reconcile_unknown_provider_run(bytea)",
                     "public_live_api.known_failed_execution_reconciliation_candidates()",
                     "public_live_api.reconcile_known_failed_execution_run(bytea)",
+                ],
+            )
+        )
+        migrate(url, "20260919_0027")
+        owner_success, public_success, rev = asyncio.run(snapshot(url))
+        authority_success = asyncio.run(authority_snapshot(url))
+        assert rev == "20260919_0027"
+        assert owner_success == owner_final
+        assert public_success == public_final
+        assert authority_success == authority_final
+        asyncio.run(
+            assert_reconciliation_acl(
+                url,
+                [
+                    "public_live_api.unknown_provider_reconciliation_candidates()",
+                    "public_live_api.reconcile_unknown_provider_run(bytea)",
+                    "public_live_api.known_failed_execution_reconciliation_candidates()",
+                    "public_live_api.reconcile_known_failed_execution_run(bytea)",
+                    "public_live_api.successful_execution_reconciliation_candidates()",
+                    "public_live_api.complete_successful_execution_run(bytea)",
                 ],
             )
         )

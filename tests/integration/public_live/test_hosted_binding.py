@@ -32,7 +32,10 @@ from aiscc.public_live.luna_profile import (
     conservative_request_liability_micro,
     hosted_luna_profile,
 )
-from aiscc.public_live.service import UnknownProviderReconciliationService
+from aiscc.public_live.service import (
+    SuccessfulExecutionReconciliationService,
+    UnknownProviderReconciliationService,
+)
 from aiscc.public_live.start_authority import StartContract
 from aiscc.public_live.start_repository import StartRepository
 from aiscc.public_live.worker import create_worker
@@ -241,6 +244,14 @@ def test_production_claim_executor_runs_primary_verify_correct(l2_url) -> None:
                         "low",
                         "medium",
                     ]
+                await worker.authority.repository.release(active.current(), "EXECUTION_TERMINAL")
+                success = SuccessfulExecutionReconciliationService(h.reconciler)
+                target = await success.select_exact_target()
+                assert target.run_id == run
+                assert target.provider_request_count == target.physical_provider_send_count == 3
+                assert target.tool_operation_count == 0
+                assert target.liability_micro == 13_200
+                assert (await success.reconcile_target(target)).state == "COMPLETED"
                 async with h.admin.connect() as connection:
                     links = (
                         await connection.execute(

@@ -35,9 +35,11 @@ from aiscc.public_live.context_authority import PublicLiveContextResourceAuthori
 from aiscc.public_live.luna_profile import hosted_luna_profile
 from aiscc.public_live.provider_authority import luna_permission_profiles
 from aiscc.public_live.provider_pipeline import PipelineStore
+from aiscc.public_live.service import SuccessfulExecutionReconciliationService
 from aiscc.public_live.stockroom_runtime import compose_public_stockroom
 from aiscc.public_live.worker_authority import (
     ActiveClaim,
+    ClaimRef,
     DurableWorkerAuthority,
     WorkerRepository,
     run_worker_loop,
@@ -111,6 +113,7 @@ class HostedPublicLiveWorker:
     semantic_validator: Callable[[str, Any], MappingProxyType[str, Any]] | None
     last_stockroom_dispatcher: Any | None
     execute_claim: Callable[[ActiveClaim], Awaitable[str]]
+    success_finalizer: SuccessfulExecutionReconciliationService
 
     @property
     def profile(self) -> ProviderProfile:
@@ -130,7 +133,13 @@ class HostedPublicLiveWorker:
             self.execute_claim,
             stop,
             observe_failure=lambda error: _emit_worker_observation(classify_worker_failure(error)),
+            recover_completed=self.success_finalizer.reconcile_pending,
+            after_release=self._finalize_after_release,
         )
+
+    async def _finalize_after_release(self, claim: ClaimRef, reason: str) -> None:
+        if reason == "EXECUTION_TERMINAL":
+            await self.success_finalizer.reconcile_run(claim.run_id)
 
 
 def create_worker(
@@ -153,6 +162,7 @@ def create_worker(
         semantic_validator,
         None,
         execute_claim or (lambda claim: _execute_production_claim(worker, sessions, claim)),
+        SuccessfulExecutionReconciliationService(repository),
     )
     return worker
 

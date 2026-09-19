@@ -263,12 +263,16 @@ async def run_worker_loop(
     *,
     renewal_interval_seconds: float = 5.0,
     observe_failure: Callable[[BaseException], None] | None = None,
+    recover_completed: Callable[[], Awaitable[None]] | None = None,
+    after_release: Callable[[ClaimRef, str], Awaitable[None]] | None = None,
 ) -> None:
     await authority.repository.verify_runtime_identity()
     await authority.register()
     empty_delay, db_delay = 1, 1
     while not stop.is_set():
         try:
+            if recover_completed is not None:
+                await recover_completed()
             claim = await authority.claim_next_work()
             db_delay = 1
             if claim is None:
@@ -298,6 +302,8 @@ async def run_worker_loop(
                 else "LIVE_UNAVAILABLE"
             )
             await authority.repository.release(claim, reason)
+            if after_release is not None:
+                await after_release(claim, reason)
         except Exception as error:
             if observe_failure is not None:
                 with suppress(Exception):

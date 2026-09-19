@@ -240,7 +240,7 @@ def test_fresh_head_ingress_authority_and_startup_identity(l2_url: str) -> None:
         try:
             async with admin.begin() as connection:
                 assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                    "20260918_0023"
+                    "20260919_0027"
                 )
                 await connection.execute(
                     text(
