@@ -10,6 +10,7 @@ from aiscc.public_live.luna_profile import (
     conservative_request_liability_micro,
     hosted_luna_profile,
     luna_profile,
+    luna_tool_registry,
 )
 from tests.unit.providers.test_openai_responses import _call
 
@@ -86,6 +87,35 @@ def test_input_tools_and_role_fail_closed():
         bind_call(replace(call(), tools=({"name": "shell"},)), role="PRIMARY")
     with pytest.raises(ValueError, match="LUNA_PROFILE"):
         bind_call(call(), role="user-selected")
+
+
+def test_public_tool_schema_is_one_exact_zero_argument_strict_shape():
+    definition = luna_tool_registry().tools["stockroom_summary"]
+    expected = {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": False,
+    }
+    assert definition.input_schema == expected
+    tool = {
+        "type": "function",
+        "name": definition.tool_id,
+        "description": definition.description,
+        "parameters": definition.input_schema,
+        "strict": True,
+    }
+    bound, _ = bind_call(replace(call(), tools=(tool,)), role="PRIMARY")
+    assert bound.tools == (tool,)
+
+    legacy = dict(tool)
+    legacy["parameters"] = {
+        "type": "object",
+        "required": [],
+        "additionalProperties": False,
+    }
+    with pytest.raises(ValueError, match="TOOL_SCOPE_DENIED"):
+        bind_call(replace(call(), tools=(legacy,)), role="PRIMARY")
 
 
 def test_conservative_liability_is_derived_from_accepted_luna_envelope():

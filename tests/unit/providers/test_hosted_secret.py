@@ -7,7 +7,7 @@ import pytest
 
 from aiscc.providers.hosted_secret import SECRET_VARIABLE, HostedOpenAISecretResolver
 from aiscc.providers.openai_responses import OpenAIResponsesAdapter
-from aiscc.public_live.luna_profile import bind_call, hosted_luna_profile
+from aiscc.public_live.luna_profile import bind_call, hosted_luna_profile, luna_tool_registry
 from aiscc.runtime.child_environment import child_environment
 from aiscc.runtime.process import BoundedProcessRunner
 from tests.fixtures.providers.luna_capabilities import execution_for
@@ -15,8 +15,22 @@ from tests.unit.providers.test_luna_profile import call
 
 
 def prepared():
+    definition = luna_tool_registry().tools["stockroom_summary"]
+    tool = {
+        "type": "function",
+        "name": definition.tool_id,
+        "description": definition.description,
+        "parameters": definition.input_schema,
+        "strict": True,
+    }
     return bind_call(
-        replace(call(), profile=hosted_luna_profile(), principal="owner", state_version=2),
+        replace(
+            call(),
+            profile=hosted_luna_profile(),
+            principal="owner",
+            state_version=2,
+            tools=(tool,),
+        ),
         role="PRIMARY",
     )[0]
 
@@ -67,6 +81,39 @@ def test_hosted_mediated_sdk_binding_and_no_serialization(monkeypatch, capsys):
     assert observed[0]["background"] is False
     assert observed[0]["parallel_tool_calls"] is False
     assert observed[0]["truncation"] == "disabled"
+    assert set(observed[0]) == {
+        "model",
+        "input",
+        "tools",
+        "background",
+        "stream",
+        "store",
+        "parallel_tool_calls",
+        "truncation",
+        "include",
+        "max_output_tokens",
+        "reasoning",
+        "service_tier",
+    }
+    assert observed[0]["model"] == "gpt-5.6-luna"
+    assert observed[0]["reasoning"] == {"effort": "low"}
+    assert observed[0]["service_tier"] == "default"
+    assert observed[0]["max_output_tokens"] == 2000
+    assert observed[0]["include"] == ["reasoning.encrypted_content"]
+    assert observed[0]["tools"] == [
+        {
+            "type": "function",
+            "name": "stockroom_summary",
+            "description": "Return the fixed deterministic Stockroom summary.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        }
+    ]
     assert sentinel not in repr((request, result, selector, service.counters, adapter.last_request))
     assert sentinel not in str(capsys.readouterr())
     # Same consumed capabilities cannot yield a second resolution/send.

@@ -35,7 +35,12 @@ def luna_tool_registry() -> ToolRegistry:
         schema_version="1",
         dispatcher_version="stockroom-summary-v1",
         description="Return the fixed deterministic Stockroom summary.",
-        input_schema={"type": "object", "additionalProperties": False, "required": []},
+        input_schema={
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
         side_effect_classification=SideEffectClass.READ_ONLY,
         allowed_modes=frozenset({RuntimeMode.PUBLIC_BOUNDED_LIVE}),
         allowed_profiles=frozenset({"public-live-luna-v1"}),
@@ -204,10 +209,12 @@ def bind_call(call: ProviderCall, *, role: str) -> tuple[ProviderCall, int]:
             or tool.get("type") != "function"
             or tool.get("strict") is not True
             or tool.get("parameters")
-            not in (
-                {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
-                {"type": "object", "required": [], "additionalProperties": False},
-            )
+            != {
+                "type": "object",
+                "properties": {},
+                "required": [],
+                "additionalProperties": False,
+            }
         ):
             raise ValueError("TOOL_SCOPE_DENIED")
     if len(call.tools) > 1:
