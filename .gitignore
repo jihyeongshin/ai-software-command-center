@@ -3,3 +3,4 @@
 .aiassistant/tasks/active/
 .aiassistant/reports/target/
 .aiassistant/project-sources/bundles/
+.wrangler/cache/
