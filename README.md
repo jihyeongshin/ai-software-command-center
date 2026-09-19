@@ -446,3 +446,10 @@ Recommended review path:
 Competition prototype / public bounded release.
 
 The repository intentionally keeps product code and governance/provenance records together so the software and the evidence about how it was developed can be inspected from the same project.
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
+
+You are welcome to study, use, modify, and build on the implementation.
+If any part of AISCC is useful as a reference for your own work, please feel free to take inspiration from it.
