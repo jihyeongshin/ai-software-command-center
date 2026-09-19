@@ -101,3 +101,17 @@ def test_live_trace_frontend_requires_the_exact_safe_projection_contract(isolate
     assert "private_provider" not in app
     assert 'node("h4", "Live execution trace")' in app
     assert '"Waiting for durable execution evidence."' in app
+
+
+def test_authored_public_assets_are_canonical_lf_and_match_manifest(isolated):
+    replay = isolated / "public/replay"
+    manifest = json.loads((replay / "PUBLIC_REPLAY_BUILD_MANIFEST.json").read_text("utf-8"))
+    entries = {entry["path"]: entry for entry in manifest["static_assets"]}
+    for relative in BUILDER.ASSETS:
+        data = (replay / relative).read_bytes()
+        assert b"\r\n" not in data
+        assert entries[relative] == {
+            "path": relative,
+            "sha256": BUILDER.sha(data),
+            "bytes": len(data),
+        }
