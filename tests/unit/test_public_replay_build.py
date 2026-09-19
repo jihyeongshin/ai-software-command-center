@@ -64,18 +64,18 @@ def test_copied_data_drift_and_unexpected_file_fail(isolated):
         BUILDER.build(isolated)
 
 
-def test_live_candidate_is_disabled_and_csp_stays_exact(isolated):
+def test_live_release_origin_and_csp_stay_exact(isolated):
     config = json.loads((isolated / "public/replay/live-config.json").read_text("utf-8"))
     assert config == {
-        "api_origin": None,
-        "enabled": False,
+        "api_origin": "https://aiscc-public-live-ingress-production.up.railway.app",
+        "enabled": True,
         "schema": "AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1",
     }
     headers = (isolated / "public/replay/_headers").read_text("utf-8")
     csp = next(line.strip() for line in headers.splitlines() if "Content-Security-Policy:" in line)
-    assert "connect-src 'self'" in csp
+    assert "connect-src 'self' https://aiscc-public-live-ingress-production.up.railway.app" in csp
     assert "*" not in csp
-    assert "https:" not in csp
+    assert csp.count("https://") == 1
     assert "unsafe-inline" not in csp
     assert "unsafe-eval" not in csp
 
