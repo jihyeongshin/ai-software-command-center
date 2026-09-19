@@ -1,5 +1,5 @@
 {
-  "api_origin": null,
-  "enabled": false,
+  "api_origin": "https://aiscc-public-live-ingress-production.up.railway.app",
+  "enabled": true,
   "schema": "AISCC-PUBLIC-LIVE-FRONTEND-CONFIG-V1"
 }
