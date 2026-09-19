@@ -54,6 +54,16 @@ from aiscc.security.capability import CapabilityConsumeRequest
 from aiscc.security.policy import SecurityPolicy
 from aiscc.workflow.models import AuthorityConflictError
 
+_PROVIDER_UNKNOWN_DIAGNOSTICS = frozenset(
+    {
+        "MALFORMED_RESPONSE_BODY",
+        "PROVIDER_HTTP_ERROR_RESPONSE",
+        "PROVIDER_NONTERMINAL_STATUS",
+        "TRANSPORT_OUTCOME_UNKNOWN",
+        "UNKNOWN_RESPONSE_STATUS",
+    }
+)
+
 
 @dataclass(slots=True)
 class ExecutionCounters:
@@ -590,12 +600,12 @@ class AgentExecutionService:
                 if secret is None:
                     raise RuntimeError("SECRET_MATERIAL_UNAVAILABLE")
                 result = self._adapter.call(call, secret=secret)
-            except Exception as exc:
+            except Exception:
                 await repository.advance_operation(
                     operation_id,
                     ExecutionOperationPhase.OUTCOME_UNKNOWN,
                     ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME,
-                    refs={"sanitized_error": type(exc).__name__},
+                    refs={"provider_diagnostic": "PROVIDER_DISPATCH_EXCEPTION"},
                 )
                 failed_current, failed_attempt = await repository.load_authority(
                     work_run_id=work_run_id,
@@ -624,11 +634,21 @@ class AgentExecutionService:
                 if result.outcome is ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME
                 else ExecutionOperationPhase.OUTCOME_KNOWN
             )
+            result_refs: dict[str, object] = {
+                "result_hash": result.result_hash,
+                "provider_status": result.status,
+            }
+            if result.outcome is ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME:
+                result_refs["provider_diagnostic"] = (
+                    result.sanitized_error
+                    if result.sanitized_error in _PROVIDER_UNKNOWN_DIAGNOSTICS
+                    else "PROVIDER_UNKNOWN_UNCLASSIFIED"
+                )
             await repository.advance_operation(
                 operation_id,
                 target_phase,
                 result.outcome,
-                refs={"result_hash": result.result_hash, "provider_status": result.status},
+                refs=result_refs,
             )
             refreshed, refreshed_attempt = await repository.load_authority(
                 work_run_id=work_run_id,

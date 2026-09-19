@@ -4,7 +4,14 @@ import hashlib
 from types import MappingProxyType
 from typing import Any
 
-from openai import APIConnectionError, APITimeoutError, DefaultHttpxClient, OpenAI, Timeout
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    DefaultHttpxClient,
+    OpenAI,
+    Timeout,
+)
 
 from aiscc.providers.models import (
     ExecutionOperationOutcome,
@@ -96,7 +103,26 @@ class OpenAIResponsesAdapter:
                 (),
                 sanitized_error="TRANSPORT_OUTCOME_UNKNOWN",
             )
-        raw_body = raw_response.http_response.json()
+        except APIStatusError:
+            return _result(
+                call.operation_id,
+                "http_error",
+                ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME,
+                None,
+                (),
+                sanitized_error="PROVIDER_HTTP_ERROR_RESPONSE",
+            )
+        try:
+            raw_body = raw_response.http_response.json()
+        except (TypeError, ValueError):
+            return _result(
+                call.operation_id,
+                "unknown",
+                ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME,
+                None,
+                (),
+                sanitized_error="MALFORMED_RESPONSE_BODY",
+            )
         if not isinstance(raw_body, dict):
             return _result(
                 call.operation_id,
@@ -131,6 +157,7 @@ class OpenAIResponsesAdapter:
                 body.get("id"),
                 items,
                 usage=_usage(body),
+                sanitized_error="PROVIDER_NONTERMINAL_STATUS",
             )
         if status == "failed":
             return _result(

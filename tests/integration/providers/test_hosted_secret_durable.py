@@ -45,7 +45,8 @@ from tests.integration.providers.test_execution_persistence import (
 
 @pytest.mark.postgres
 @pytest.mark.parametrize(
-    "case", ["missing", "blank", "positive", "crash", "freshness", "uncertain"]
+    "case",
+    ["missing", "blank", "positive", "crash", "freshness", "uncertain", "returned_unknown"],
 )
 def test_hosted_durable_boundary(case, monkeypatch, capsys):
     engine = create_engine(os.environ["AISCC_TEST_DATABASE_URL"])
@@ -68,11 +69,12 @@ def test_hosted_durable_boundary(case, monkeypatch, capsys):
             sdk_calls.append(request)
             if case == "uncertain":
                 raise RuntimeError("synthetic transport uncertainty")
+            status = "queued" if case == "returned_unknown" else "completed"
             return SimpleNamespace(
                 http_response=SimpleNamespace(
                     json=lambda: {
                         "id": "fake",
-                        "status": "completed",
+                        "status": status,
                         "output": [
                             {
                                 "type": "message",
@@ -349,9 +351,23 @@ def test_hosted_durable_boundary(case, monkeypatch, capsys):
         elif case == "freshness":
             assert phase == "OUTCOME_KNOWN" and outcome == "CANCELLED"
             assert counters.provider_calls == 1 and not sdk_calls
-        elif case == "uncertain":
+        elif case in {"uncertain", "returned_unknown"}:
             assert (phase, outcome) == ("OUTCOME_UNKNOWN", "TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME")
             assert counters.provider_calls == 1 and len(sdk_calls) == 1
+            unknown_refs = [refs for target, refs in events if target == "OUTCOME_UNKNOWN"]
+            assert len(unknown_refs) == 1
+            expected = (
+                "PROVIDER_DISPATCH_EXCEPTION"
+                if case == "uncertain"
+                else "PROVIDER_NONTERMINAL_STATUS"
+            )
+            assert unknown_refs[0].get("provider_diagnostic") == expected
+            expected_keys = (
+                {"provider_diagnostic"}
+                if case == "uncertain"
+                else {"provider_diagnostic", "provider_status", "result_hash"}
+            )
+            assert set(unknown_refs[0]) == expected_keys
         else:
             assert phase == "OUTCOME_KNOWN" and outcome == "PROVIDER_COMPLETED"
             assert result.status == "EXECUTOR_COMPLETED" and len(sdk_calls) == 1

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
+import httpx2 as httpx
 import pytest
 from fake_responses_server import (
     FakeResponsesServer,
     final_message,
     response_body,
 )
+from openai import APIConnectionError, APITimeoutError, BadRequestError
 
 from aiscc.contracts.workflow import RuntimeMode, WorkflowState
 from aiscc.providers.models import (
@@ -101,6 +104,54 @@ def test_exact_response_status_mapping(status: str, outcome: ExecutionOperationO
         server.enqueue(response_body(status))
         result = OpenAIResponsesAdapter().call(_call(), secret="synthetic-local-only")
     assert result.outcome is outcome
+    if status in {"queued", "in_progress"}:
+        assert result.sanitized_error == "PROVIDER_NONTERMINAL_STATUS"
+
+
+def test_unknown_response_and_malformed_body_have_fixed_safe_diagnostics() -> None:
+    unknown = response_body("future-provider-status")
+    with FakeResponsesServer() as server:
+        server.enqueue(unknown)
+        unknown_result = OpenAIResponsesAdapter().call(_call(), secret="synthetic-local-only")
+    assert unknown_result.outcome is ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME
+    assert unknown_result.sanitized_error == "UNKNOWN_RESPONSE_STATUS"
+
+    with FakeResponsesServer() as server:
+        server.enqueue([])  # type: ignore[arg-type]
+        malformed = OpenAIResponsesAdapter().call(_call(), secret="synthetic-local-only")
+    assert malformed.outcome is ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME
+    assert malformed.sanitized_error == "MALFORMED_RESPONSE_BODY"
+
+
+@pytest.mark.parametrize("kind", ["timeout", "connection", "bad_request"])
+def test_sdk_failures_have_fixed_safe_diagnostics(monkeypatch, kind: str) -> None:
+    request = httpx.Request("POST", "http://127.0.0.1:18085/v1/responses")
+    if kind == "timeout":
+        failure = APITimeoutError(request)
+        expected = "TRANSPORT_OUTCOME_UNKNOWN"
+    elif kind == "connection":
+        failure = APIConnectionError(request=request)
+        expected = "TRANSPORT_OUTCOME_UNKNOWN"
+    else:
+        failure = BadRequestError(
+            "synthetic safe bad request",
+            response=httpx.Response(400, request=request),
+            body=None,
+        )
+        expected = "PROVIDER_HTTP_ERROR_RESPONSE"
+
+    def sdk(**_kwargs):
+        def create(**_request):
+            raise failure
+
+        return SimpleNamespace(
+            responses=SimpleNamespace(with_raw_response=SimpleNamespace(create=create))
+        )
+
+    monkeypatch.setattr("aiscc.providers.openai_responses.OpenAI", sdk)
+    result = OpenAIResponsesAdapter().call(_call(), secret="synthetic-local-only")
+    assert result.outcome is ExecutionOperationOutcome.TIMEOUT_OR_TRANSPORT_UNKNOWN_OUTCOME
+    assert result.sanitized_error == expected
 
 
 def test_function_call_and_private_continuation_call_id_binding() -> None:
